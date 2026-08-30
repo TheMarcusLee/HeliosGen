@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { randomUUID, createHash } from "crypto";
+import { DATA_DIR } from "./paths";
 
-const DATA_DIR = join(process.cwd(), "data");
 const DB_FILE  = join(DATA_DIR, "guest-db.json");
 
 interface Generation {
