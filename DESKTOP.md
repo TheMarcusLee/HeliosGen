@@ -98,6 +98,23 @@ spctl -a -vvv "src-tauri/target/release/bundle/macos/HeliosGen.app"   # → acce
 xcrun stapler validate "src-tauri/target/release/bundle/dmg/HeliosGen_0.1.0_aarch64.dmg"
 ```
 
+## Importing web-app data (Supabase + R2 → local)
+
+```bash
+nvm use 22
+node scripts/desktop/import-from-cloud.mjs --email you@example.com   # --dry to preview
+```
+
+Pulls one user's `generations`, `user_uploads`, `folders`, `folder_items`,
+`user_settings`, and `spaces` from Supabase and downloads every referenced R2
+media file into the app data dir. Writes/merges `guest-db.json` +
+`guest-spaces.json` (safe to re-run); media downloads are resumable. Creds come
+from `.env.local`. Media can be several GB.
+
+Guest-mode workflow persistence: `lib/guest/spaces.ts` + `app/api/guest-spaces`
+back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
+(`41730`) so the webview's `localStorage` also survives across launches.
+
 ## Status / remaining work
 
 - [x] Phase 0 — branch + Tauri scaffold
