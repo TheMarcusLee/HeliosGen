@@ -63,7 +63,8 @@ open "src-tauri/target/release/bundle/macos/HeliosGen.app"
 ```
 
 - macOS: produces `HeliosGen.app` and (with `CI=true`, which the script sets)
-  `HeliosGen_<ver>_aarch64.dmg`. The `.app` is ~270 MB (bundled Node runtime).
+  `HeliosGen_<ver>_aarch64.dmg`. The `.app` is ~440 MB (bundled Node runtime +
+  prod `node_modules`).
 - The app is **unsigned** — on first launch macOS Gatekeeper blocks it.
   Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/HeliosGen.app"`.
 - Data lives in `~/Library/Application Support/cash.sdd.helios.desktop/`
@@ -88,10 +89,11 @@ To just run the compiled binary without bundling:
 - [ ] Phase 3 — send reference images to kie.ai without a tunnel (data URI /
       kie upload endpoint). Text-to-image/video works now; image *inputs* don't.
 - [ ] Phase 4 — code signing, notarization, auto-update
-- [ ] Bundle size — the clean `npm install --omit=dev` ships the full prod tree
-      (~530 MB `node_modules`, ~750 MB `.app`). Switch to the traced
-      `.next/standalone/node_modules` + a truncated-package repair pass to get
-      back to ~270 MB, or prune build-only transitive deps.
+- [ ] Bundle size — down to ~330 MB stage / ~440 MB `.app` after moving `shadcn`
+      to devDeps and pruning `@next/swc` + off-platform sharp binaries. The
+      remaining bulk is the bundled Node runtime (~108 MB) and the prod
+      `node_modules` (~310 MB, mostly `@aws-sdk`, `@supabase`, `@base-ui`).
+      Further trimming needs code changes (lazy-load `@aws-sdk` in `lib/r2.ts`).
 
 Text-to-image and text-to-video generation work fully offline now. Generation
 *from* an uploaded/reference image still needs Phase 3 (or a tunnel), and Veo
