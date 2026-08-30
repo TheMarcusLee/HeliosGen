@@ -35,6 +35,7 @@ process.on("SIGTERM", shutdown);
 launch("next", "node", [join(ROOT, "node_modules", "next", "dist", "bin", "next"), "dev"], {
   GUEST_MODE: "true",
   NEXT_PUBLIC_GUEST_MODE: "true",
+  NODE_OPTIONS: "--disable-warning=ExperimentalWarning", // node:sqlite
 });
 
 const tauriBin = join(

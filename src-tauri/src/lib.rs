@@ -114,6 +114,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .sidecar("node")?
         .current_dir(server_dir)
         .args([
+            "--disable-warning=ExperimentalWarning".to_string(), // node:sqlite
             "-r".to_string(),
             "./sidecar-guard.js".to_string(),
             server_entry.to_string_lossy().to_string(),

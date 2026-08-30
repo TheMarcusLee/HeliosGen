@@ -1,19 +1,9 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
-import { DATA_DIR } from "./paths";
+import { db } from "./sqlite";
 
 /**
- * Guest-mode persistence for workflow "spaces" (node canvases).
- *
- * The hosted app keeps these in the browser + a Supabase `spaces` table. The
- * desktop app has no login, and its webview localStorage is not a safe home
- * (cleared if the loopback port ever changes), so guest mode syncs them to a
- * JSON file in the app-data dir instead — same idea as guest-db.json.
+ * Guest-mode persistence for workflow "spaces" (node canvases). SQLite-backed
+ * (see ./sqlite); the hosted app uses the Supabase `spaces` table instead.
  */
-const FILE = join(DATA_DIR, "guest-spaces.json");
-
-// Shape mirrors the `Space` interface in lib/store.ts (kept loose on purpose —
-// this layer just stores whatever the client round-trips).
 export interface GuestSpace {
   id: string;
   name: string;
@@ -27,16 +17,33 @@ export interface GuestSpace {
 }
 
 export function getSpaces(): GuestSpace[] {
-  if (!existsSync(FILE)) return [];
-  try {
-    const parsed = JSON.parse(readFileSync(FILE, "utf8"));
-    return Array.isArray(parsed) ? parsed : (parsed.spaces ?? []);
-  } catch {
-    return [];
-  }
+  const rows = db().prepare("SELECT data FROM spaces ORDER BY updated_at ASC").all() as {
+    data: string;
+  }[];
+  return rows
+    .map((r) => {
+      try {
+        return JSON.parse(r.data) as GuestSpace;
+      } catch {
+        return null;
+      }
+    })
+    .filter((s): s is GuestSpace => s !== null);
 }
 
 export function saveSpaces(spaces: GuestSpace[]): void {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(FILE, JSON.stringify(spaces, null, 2), "utf8");
+  const d = db();
+  d.exec("BEGIN");
+  const keep = new Set(spaces.map((s) => s.id));
+  const upsert = d.prepare(`
+    INSERT INTO spaces (id, name, data, updated_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, data = excluded.data, updated_at = excluded.updated_at
+  `);
+  for (const s of spaces) {
+    upsert.run(s.id, s.name ?? "Untitled", JSON.stringify(s), Number(s.updatedAt ?? s.createdAt ?? Date.now()));
+  }
+  const existing = d.prepare("SELECT id FROM spaces").all() as { id: string }[];
+  const del = d.prepare("DELETE FROM spaces WHERE id = ?");
+  for (const { id } of existing) if (!keep.has(id)) del.run(id);
+  d.exec("COMMIT");
 }
