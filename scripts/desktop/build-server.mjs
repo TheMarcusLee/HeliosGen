@@ -6,7 +6,17 @@
 // Invoked automatically by `tauri build` via `beforeBuildCommand`.
 
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, chmodSync, copyFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  chmodSync,
+  copyFileSync,
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+} from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -82,18 +92,51 @@ if (existsSync(join(ROOT, "public"))) {
 // leaves many packages as a bare package.json. Rather than chase truncations,
 // throw away the traced node_modules and do a clean production install from the
 // app's own manifest, giving a flat, symlink-free, self-contained tree.
+// nft is unreliable with pnpm (leaves packages truncated), so install the prod
+// tree cleanly with npm instead. The repo is pnpm-managed with a stale
+// package-lock.json, and `next build` output is tied to the EXACT `next` version
+// that produced it — so pin every prod dep to the version actually installed in
+// the repo before installing, rather than letting npm re-resolve `^` ranges.
 console.log("[desktop] clean production install into stage…");
 rmSync(join(STAGE, "node_modules"), { recursive: true, force: true });
-copyFileSync(join(ROOT, "package.json"), join(STAGE, "package.json"));
-for (const lock of ["package-lock.json", "npm-shrinkwrap.json"]) {
-  if (existsSync(join(ROOT, lock))) copyFileSync(join(ROOT, lock), join(STAGE, lock));
+
+const rootPkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const pinned = {};
+for (const name of Object.keys(rootPkg.dependencies ?? {})) {
+  try {
+    const v = JSON.parse(
+      readFileSync(join(ROOT, "node_modules", ...name.split("/"), "package.json"), "utf8"),
+    ).version;
+    pinned[name] = v;
+  } catch {
+    pinned[name] = rootPkg.dependencies[name]; // fall back to the range
+  }
 }
-run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], {}, STAGE);
+writeFileSync(
+  join(STAGE, "package.json"),
+  JSON.stringify({ ...rootPkg, dependencies: pinned, devDependencies: {} }, null, 2),
+);
+run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", "--no-package-lock"], {}, STAGE);
 
 // Sanity check: the standalone server's own entry deps must be intact.
 for (const probe of ["next/package.json", "@next/env/package.json", "react/package.json"]) {
   if (!existsSync(join(STAGE, "node_modules", ...probe.split("/")))) {
     throw new Error(`staged install is missing ${probe}`);
+  }
+}
+
+// Prune what a prebuilt standalone server never loads at runtime:
+//  - @next/swc-* : the SWC compiler, build-time only (~95 MB)
+//  - sharp/@img native packages for other platforms (~15 MB)
+const platformTriple = `${process.platform}-${process.arch}`; // e.g. darwin-arm64
+const nmScoped = (scope) => join(STAGE, "node_modules", scope);
+for (const [dir, keepIf] of [
+  [nmScoped("@next"), (n) => !n.startsWith("swc-")],
+  [nmScoped("@img"), (n) => n.includes(platformTriple) || !/-(darwin|linux|linuxmusl|win32|wasm32)/.test(n)],
+]) {
+  if (!existsSync(dir)) continue;
+  for (const name of readdirSync(dir)) {
+    if (!keepIf(name)) rmSync(join(dir, name), { recursive: true, force: true });
   }
 }
 
