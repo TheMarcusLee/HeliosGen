@@ -15,12 +15,20 @@ struct Sidecar(Mutex<Option<CommandChild>>);
 /// Pick the loopback port for the Next.js sidecar.
 ///
 /// Prefer a fixed port so the webview origin — and therefore its localStorage /
-/// IndexedDB — stays stable across launches. Fall back to a nearby port, then to
-/// any free port, if something else already holds it.
+/// IndexedDB — stays stable across launches. Only skip it if something is
+/// actively listening there (a TIME_WAIT socket from a previous run doesn't
+/// count — node sets SO_REUSEADDR and will bind it fine).
 fn pick_port() -> u16 {
     const PREFERRED: u16 = 41730;
+    let nothing_listening = |port: u16| {
+        TcpStream::connect_timeout(
+            &format!("127.0.0.1:{port}").parse().unwrap(),
+            Duration::from_millis(200),
+        )
+        .is_err()
+    };
     for candidate in PREFERRED..PREFERRED + 20 {
-        if TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
+        if nothing_listening(candidate) {
             return candidate;
         }
     }
