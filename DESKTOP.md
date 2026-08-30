@@ -73,6 +73,31 @@ open "src-tauri/target/release/bundle/macos/HeliosGen.app"
 To just run the compiled binary without bundling:
 `./src-tauri/target/release/heliosgen-desktop`
 
+## Signed & notarized release build
+
+Needs a **Developer ID Application** certificate (not "Apple Development") in the
+login keychain + notarization credentials.
+
+1. `cp scripts/desktop/sign.env.example scripts/desktop/sign.env` and fill it in
+   (identity string from `security find-identity -v -p codesigning`; an App Store
+   Connect API key or Apple-ID app-specific password).
+2. ```bash
+   set -a; source scripts/desktop/sign.env; set +a
+   pnpm desktop:build
+   ```
+
+With `APPLE_SIGNING_IDENTITY` set, `build-server.mjs` codesigns the native
+modules in the staged server (sharp `.node`/`.dylib`) with hardened runtime;
+Tauri then signs the app shell + sidecar, notarizes, and staples. Entitlements
+are in `src-tauri/entitlements.plist` (JIT + unsigned-exec-memory +
+disable-library-validation — the bundled Node/V8 needs them).
+
+Verify the result:
+```bash
+spctl -a -vvv "src-tauri/target/release/bundle/macos/HeliosGen.app"   # → accepted, source=Notarized Developer ID
+xcrun stapler validate "src-tauri/target/release/bundle/dmg/HeliosGen_0.1.0_aarch64.dmg"
+```
+
 ## Status / remaining work
 
 - [x] Phase 0 — branch + Tauri scaffold
@@ -94,7 +119,9 @@ To just run the compiled binary without bundling:
       Verified end-to-end (nano-banana-2-lite image-to-image, no tunnel).
       **Gap:** video *file* inputs >10 MB should use kie's stream-upload API
       instead of base64.
-- [ ] Phase 4 — code signing, notarization, auto-update
+- [~] Phase 4 — signing/notarization wired up (config + entitlements +
+      native-module signing in `build-server.mjs`); needs a Developer ID cert to
+      actually run. Auto-updater not started.
 - [ ] Bundle size — down to ~330 MB stage / ~440 MB `.app` after moving `shadcn`
       to devDeps and pruning `@next/swc` + off-platform sharp binaries. The
       remaining bulk is the bundled Node runtime (~108 MB) and the prod

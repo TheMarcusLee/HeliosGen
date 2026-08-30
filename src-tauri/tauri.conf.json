@@ -40,7 +40,13 @@
     "resources": ["server/**/*"],
     "category": "GraphicsAndDesign",
     "shortDescription": "Build AI image & video pipelines visually.",
-    "longDescription": "HeliosGen is a local-first visual workflow builder for AI image and video generation. All data stays on your machine."
+    "longDescription": "HeliosGen is a local-first visual workflow builder for AI image and video generation. All data stays on your machine.",
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "entitlements": "entitlements.plist",
+      "signingIdentity": null,
+      "hardenedRuntime": true
+    }
   },
   "plugins": {}
 }

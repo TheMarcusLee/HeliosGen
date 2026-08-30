@@ -148,4 +148,26 @@ console.log(`[desktop] bundling node runtime → ${dest}`);
 copyFileSync(process.execPath, dest);
 if (process.platform !== "win32") chmodSync(dest, 0o755);
 
+// Tauri signs the app shell + the sidecar but not Mach-O buried in resources
+// (sharp's .node / .dylib). Sign those now, inside-out, so notarization passes.
+// Skipped unless APPLE_SIGNING_IDENTITY is set (i.e. a real signed build).
+if (process.platform === "darwin" && process.env.APPLE_SIGNING_IDENTITY) {
+  const identity = process.env.APPLE_SIGNING_IDENTITY;
+  const ents = join(SRC_TAURI, "entitlements.plist");
+  const macho = execFileSync(
+    "sh",
+    ["-c", `find '${STAGE}/node_modules' -type f \\( -name '*.node' -o -name '*.dylib' -o -name '*.so' \\)`],
+    { encoding: "utf8" },
+  )
+    .split("\n")
+    .filter(Boolean);
+  console.log(`[desktop] codesigning ${macho.length} native modules…`);
+  for (const f of macho) {
+    run("codesign", [
+      "--force", "--timestamp", "--options", "runtime",
+      "--entitlements", ents, "-s", identity, f,
+    ]);
+  }
+}
+
 console.log("[desktop] done.");
