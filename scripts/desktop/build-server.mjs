@@ -7,7 +7,7 @@
 
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync, chmodSync, copyFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -50,6 +50,13 @@ function targetTriple() {
   return map[key];
 }
 
+// Clear last run's staging *before* the build — otherwise the file tracer sweeps
+// the previous ~900 MB server tree into .next/standalone/src-tauri and each build
+// compounds. (next.config.ts also excludes src-tauri from tracing.)
+rmSync(STAGE, { recursive: true, force: true });
+rmSync(BIN_DIR, { recursive: true, force: true });
+rmSync(join(ROOT, ".next", "standalone"), { recursive: true, force: true });
+
 console.log("[desktop] next build (standalone)…");
 run("node", [join(ROOT, "node_modules", "next", "dist", "bin", "next"), "build"], {
   DESKTOP_BUILD: "1",
@@ -61,11 +68,14 @@ if (!existsSync(join(STANDALONE, "server.js"))) {
 }
 
 console.log("[desktop] staging server →", STAGE);
-rmSync(STAGE, { recursive: true, force: true });
 cpSync(STANDALONE, STAGE, { recursive: true });
+rmSync(join(STAGE, "src-tauri"), { recursive: true, force: true }); // never nest ourselves
 cpSync(join(ROOT, ".next", "static"), join(STAGE, ".next", "static"), { recursive: true });
 if (existsSync(join(ROOT, "public"))) {
-  cpSync(join(ROOT, "public"), join(STAGE, "public"), { recursive: true });
+  cpSync(join(ROOT, "public"), join(STAGE, "public"), {
+    recursive: true,
+    filter: (src) => !src.includes(`${sep}public${sep}generated`), // runtime data, not an asset
+  });
 }
 
 // The Next.js file tracer (nft) is unreliable with pnpm's symlinked store — it

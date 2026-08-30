@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": ["node_modules/sharp/**/*", "node_modules/@img/**/*"],
   },
+  // Never trace the Tauri desktop staging area into the standalone output.
+  outputFileTracingExcludes: {
+    "/**": ["src-tauri/**/*"],
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.r2.dev" },
