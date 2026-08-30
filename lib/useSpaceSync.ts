@@ -4,6 +4,7 @@ import { useWorkflowStore, Space } from "./store";
 import { createClient } from "./supabase/client";
 
 const DEBOUNCE_MS = 1_500; // wait 1.5s of inactivity before syncing
+const GUEST = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
 
 export type SyncStatus = "idle" | "syncing" | "synced" | "error";
 
@@ -41,6 +42,23 @@ export function useSpaceSync() {
   useEffect(() => {
     if (!hydrated) return;
     (async () => {
+      if (GUEST) {
+        try {
+          const res = await fetch("/api/guest-spaces");
+          if (!res.ok) return;
+          const { spaces: dbSpaces } = (await res.json()) as { spaces: Space[] };
+          if (!dbSpaces?.length) return;
+          loadSpacesFromDB(dbSpaces);
+          const now = new Date();
+          lastSyncedRef.current = now.getTime();
+          setLastSyncedAt(now);
+          setStatus("synced");
+        } catch {
+          /* keep local state */
+        }
+        return;
+      }
+
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -77,6 +95,31 @@ export function useSpaceSync() {
 
   // ── Core save (no rate-limit checks) ────────────────────────────────────────
   const save = useCallback(async () => {
+    if (GUEST) {
+      setStatus("syncing");
+      try {
+        const spacesToSave = spacesRef.current.filter((sp) => sp.nodes.length > 0);
+        const res = await fetch("/api/guest-spaces", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            spaces: spacesToSave.map((sp) => ({
+              ...sp,
+              nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const now = new Date();
+        lastSyncedRef.current = now.getTime();
+        setLastSyncedAt(now);
+        setStatus("synced");
+      } catch {
+        setStatus("error");
+      }
+      return;
+    }
+
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;

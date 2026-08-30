@@ -119,7 +119,7 @@ export function getGenerations(userId: string, type: "image" | "video"): Generat
     .generations
     .filter((g) => g.user_id === userId && g.generation_type === type && g.status === "done" && g[urlKey])
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 1000);
+    .slice(0, 5000);
 }
 
 export function deleteGeneration(id: string, userId: string): void {
@@ -141,7 +141,7 @@ export function getUploads(userId: string, mimeTypePrefix: string): Upload[] {
     .uploads
     .filter((u) => u.user_id === userId && (u.mime_type ?? "").startsWith(mimeTypePrefix))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 1000);
+    .slice(0, 5000);
 }
 
 export function deleteUpload(id: string, userId: string): void {

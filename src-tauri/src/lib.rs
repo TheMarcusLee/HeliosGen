@@ -5,9 +5,18 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
-/// Grab an OS-assigned free port on the loopback interface, then release it so
-/// the Next.js server sidecar can bind it a moment later.
-fn pick_free_port() -> u16 {
+/// Pick the loopback port for the Next.js sidecar.
+///
+/// Prefer a fixed port so the webview origin — and therefore its localStorage /
+/// IndexedDB — stays stable across launches. Fall back to a nearby port, then to
+/// any free port, if something else already holds it.
+fn pick_port() -> u16 {
+    const PREFERRED: u16 = 41730;
+    for candidate in PREFERRED..PREFERRED + 20 {
+        if TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
+            return candidate;
+        }
+    }
     TcpListener::bind("127.0.0.1:0")
         .expect("failed to bind a local port")
         .local_addr()
@@ -100,7 +109,7 @@ pub fn run() {
                 return Ok(());
             }
 
-            let port = pick_free_port();
+            let port = pick_port();
             start_server(&handle, port)?;
 
             std::thread::spawn(move || {
