@@ -31,6 +31,44 @@ fn pick_port() -> u16 {
         .port()
 }
 
+/// A GUI app launched from Finder/Dock inherits only the bare system PATH, so
+/// user-installed CLIs the server shells out to (ffmpeg, ffprobe, codex,
+/// codex-imagegen) go missing. Recover the interactive login shell's PATH and
+/// fold in a few common bin dirs.
+fn resolve_user_path() -> String {
+    let base = std::env::var("PATH").unwrap_or_default();
+
+    let shell_path = std::env::var("SHELL").ok().and_then(|sh| {
+        std::process::Command::new(sh)
+            .args(["-lic", "printf %s \"$PATH\""])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty())
+    });
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(sp) = shell_path {
+        parts.extend(sp.split(':').map(String::from));
+    }
+    parts.extend(base.split(':').map(String::from));
+    let extras = [
+        "/opt/homebrew/bin".to_string(),
+        "/usr/local/bin".to_string(),
+        format!("{home}/.local/bin"),
+        format!("{home}/.cargo/bin"),
+    ];
+    for extra in extras {
+        if !parts.contains(&extra) {
+            parts.push(extra);
+        }
+    }
+    parts.retain(|p| !p.is_empty());
+    parts.join(":")
+}
+
 /// Block until the sidecar is accepting connections (or give up after `timeout`).
 fn wait_for_server(port: u16, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
@@ -68,6 +106,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .sidecar("node")?
         .current_dir(server_dir)
         .args([server_entry.to_string_lossy().to_string()])
+        .env("PATH", resolve_user_path())
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production")
