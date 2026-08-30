@@ -45,6 +45,7 @@ import { MessageSquare, Sparkles, Clapperboard } from "lucide-react";
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 async function getAccessToken(): Promise<string | undefined> {
+  if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") return "guest";
   try {
     const { data } = await createClient().auth.getSession();
     return data.session?.access_token;

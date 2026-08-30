@@ -698,7 +698,9 @@ export const useWorkflowStore = create<WorkflowStore>()(
         settingsOpen:              false,
         setSettingsOpen:           (v) => set({ settingsOpen: v }),
         authModalOpen:             false,
-        setAuthModalOpen:          (v) => set({ authModalOpen: v }),
+        // The desktop/guest build has no accounts — never surface the auth modal.
+        setAuthModalOpen:          (v) =>
+          set({ authModalOpen: process.env.NEXT_PUBLIC_GUEST_MODE === "true" ? false : v }),
         authModalView:             "signin",
         setAuthModalView:          (v) => set({ authModalView: v }),
         resetPasswordModalOpen:    false,
