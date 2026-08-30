@@ -67,8 +67,11 @@ open "src-tauri/target/release/bundle/macos/HeliosGen.app"
   prod `node_modules`).
 - The app is **unsigned** — on first launch macOS Gatekeeper blocks it.
   Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/HeliosGen.app"`.
-- Data lives in `~/Library/Application Support/cash.sdd.helios.desktop/`
-  (`guest-db.json` + `generated/`). Delete that folder to reset.
+- Data lives in `~/Library/Application Support/cash.sdd.helios.desktop/`:
+  `guest.db` (SQLite — generations, uploads, folders, workflows, settings) and
+  `generated/` (media). Delete that folder to reset. Any `guest-db.json` /
+  `guest-spaces.json` there is an import source, imported once into `guest.db`
+  (mtime-guarded) and then dormant.
 
 To just run the compiled binary without bundling:
 `./src-tauri/target/release/heliosgen-desktop`
@@ -108,10 +111,13 @@ node scripts/desktop/import-from-cloud.mjs --email you@example.com   # --dry to 
 Pulls one user's `generations`, `user_uploads`, `folders`, `folder_items`,
 `user_settings`, and `spaces` from Supabase and downloads every referenced R2
 media file into the app data dir. Writes/merges `guest-db.json` +
-`guest-spaces.json` (safe to re-run); media downloads are resumable. Creds come
-from `.env.local`. Media can be several GB.
+`guest-spaces.json`; media downloads are resumable. Creds come from `.env.local`.
+Media can be several GB. **Re-run then relaunch the app** — it re-imports the
+changed JSON into `guest.db` idempotently (`INSERT OR IGNORE`, so app edits win).
 
-Guest-mode workflow persistence: `lib/guest/spaces.ts` + `app/api/guest-spaces`
+Guest-mode store: `lib/guest/sqlite.ts` (SQLite via `node:sqlite`) backs
+`lib/guest/db.ts` and `lib/guest/spaces.ts`. Workflow persistence via
+`app/api/guest-spaces`
 back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
 (`41730`) so the webview's `localStorage` also survives across launches.
 
