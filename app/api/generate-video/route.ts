@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
+import { rewriteLocalMediaForKie } from "@/lib/kieUpload";
 import { ensureR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
@@ -339,6 +340,19 @@ export async function POST(req: NextRequest) {
         });
       }
       if (kling_elements.length > 0) input.kling_elements = kling_elements;
+    }
+  }
+
+  // Desktop/guest without a tunnel: kie.ai can't fetch our local reference
+  // media, so re-host any /generated or data: URLs in the payload first.
+  if (GUEST_MODE) {
+    try {
+      await rewriteLocalMediaForKie(input, apiKey);
+    } catch (e) {
+      return NextResponse.json(
+        { error: `Couldn't upload reference media to kie.ai: ${(e as Error).message}` },
+        { status: 502 },
+      );
     }
   }
 

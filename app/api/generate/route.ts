@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
+import { ensureKieReachableImages } from "@/lib/kieUpload";
 import { ensureR2, uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
@@ -536,13 +537,20 @@ export async function POST(req: NextRequest) {
     const hasImages = r2ImageUrls.length > 0;
     const resolvedApiId = !hasImages && cfg.textOnlyApiId ? cfg.textOnlyApiId : cfg.apiId;
 
+    // Desktop/guest without a tunnel: kie.ai can't fetch our local reference
+    // images, so push them to kie's temporary file store first.
+    let kieImageUrls = r2ImageUrls;
+    if (GUEST_MODE && hasImages) {
+      kieImageUrls = await ensureKieReachableImages(r2ImageUrls, kieToken);
+    }
+
     const input: Record<string, unknown> = {
       prompt:                    prompt.slice(0, apiInput.promptMaxLength),
       [apiInput.aspectRatioKey]: aspectRatio,
     };
 
     if (apiInput.outputFormat)               input.output_format           = apiInput.outputFormat;
-    if (apiInput.imageInputKey && hasImages) input[apiInput.imageInputKey] = r2ImageUrls.slice(0, cfg.maxImages);
+    if (apiInput.imageInputKey && hasImages) input[apiInput.imageInputKey] = kieImageUrls.slice(0, cfg.maxImages);
     if (apiInput.qualityKey) {
       input[apiInput.qualityKey] = apiInput.qualityMap
         ? (apiInput.qualityMap[quality] ?? quality)

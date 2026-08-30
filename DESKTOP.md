@@ -86,8 +86,14 @@ To just run the compiled binary without bundling:
       is no longer required in guest mode. Verified end-to-end (z-image, no
       tunnel). **Gap:** Google Veo models (`/api/v1/veo/*`, different shape)
       still need a callback — poller is skipped for them.
-- [ ] Phase 3 — send reference images to kie.ai without a tunnel (data URI /
-      kie upload endpoint). Text-to-image/video works now; image *inputs* don't.
+- [x] Phase 3 — reference/uploaded images reach kie.ai without a tunnel.
+      `lib/kieUpload.ts` pushes local `/generated` + `data:` media to kie's temp
+      store (`kieai.redpandaai.co/api/file-base64-upload`, 3-day retention) and
+      swaps in the returned URL. `/api/generate` does it for image inputs;
+      `/api/generate-video` deep-walks the payload (its shape varies by model).
+      Verified end-to-end (nano-banana-2-lite image-to-image, no tunnel).
+      **Gap:** video *file* inputs >10 MB should use kie's stream-upload API
+      instead of base64.
 - [ ] Phase 4 — code signing, notarization, auto-update
 - [ ] Bundle size — down to ~330 MB stage / ~440 MB `.app` after moving `shadcn`
       to devDeps and pruning `@next/swc` + off-platform sharp binaries. The
@@ -95,6 +101,6 @@ To just run the compiled binary without bundling:
       `node_modules` (~310 MB, mostly `@aws-sdk`, `@supabase`, `@base-ui`).
       Further trimming needs code changes (lazy-load `@aws-sdk` in `lib/r2.ts`).
 
-Text-to-image and text-to-video generation work fully offline now. Generation
-*from* an uploaded/reference image still needs Phase 3 (or a tunnel), and Veo
-still needs a callback URL.
+Image and video generation — including from uploaded/reference images — work
+with no tunnel. Still needing work: Google Veo (needs a callback URL) and large
+video-file inputs (base64 upload is capped ~10 MB).
