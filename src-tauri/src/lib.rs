@@ -1,9 +1,16 @@
 use std::net::{TcpListener, TcpStream};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager};
-use tauri_plugin_shell::process::CommandEvent;
+use tauri::{AppHandle, Manager, RunEvent};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+
+/// Holds the Next.js sidecar process so it can be killed on app exit — a
+/// dropped Tauri `CommandChild` does NOT terminate the process, which would
+/// otherwise orphan the Node server on the fixed port.
+#[derive(Default)]
+struct Sidecar(Mutex<Option<CommandChild>>);
 
 /// Pick the loopback port for the Next.js sidecar.
 ///
@@ -56,7 +63,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .expect("server.js has no parent dir")
         .to_path_buf();
 
-    let (mut rx, _child) = app
+    let (mut rx, child) = app
         .shell()
         .sidecar("node")?
         .current_dir(server_dir)
@@ -69,6 +76,8 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .env("HELIOS_DATA_DIR", data_dir.to_string_lossy().to_string())
         .env("HELIOS_MEDIA_DIR", media_dir.to_string_lossy().to_string())
         .spawn()?;
+
+    *app.state::<Sidecar>().0.lock().unwrap() = Some(child);
 
     // Drain sidecar output to the parent console for debugging.
     tauri::async_runtime::spawn(async move {
@@ -91,10 +100,17 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+fn kill_sidecar(app: &AppHandle) {
+    if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
+        let _ = child.kill();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .manage(Sidecar::default())
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -126,6 +142,11 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running HeliosGen");
+        .build(tauri::generate_context!())
+        .expect("error while running HeliosGen")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                kill_sidecar(app);
+            }
+        });
 }
