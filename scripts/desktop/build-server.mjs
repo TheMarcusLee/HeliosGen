@@ -30,6 +30,13 @@ if (process.argv.includes("--dev")) {
   process.exit(0);
 }
 
+const nodeMajor = Number(process.version.slice(1).split(".")[0]);
+if (nodeMajor < 22) {
+  throw new Error(
+    `desktop build needs Node >= 22 (running ${process.version}) — the bundled server uses node:sqlite. Try \`nvm use 22\`.`,
+  );
+}
+
 function run(cmd, args, env = {}, cwd = ROOT) {
   execFileSync(cmd, args, {
     cwd,
