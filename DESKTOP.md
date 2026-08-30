@@ -140,6 +140,11 @@ back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
       `setAuthModalOpen` is a no-op, `AuthModal`/`ResetPasswordModal` aren't
       mounted, `getAccessToken` returns "guest". Fixed loopback port (41730) so
       `localStorage` survives launches; sidecar is killed on app exit.
+- [x] External CLIs — the shell resolves the login-shell `$PATH` for the sidecar
+      so `ffmpeg`/`ffprobe` (video trim, frame extract) and `codex`/
+      `codex-imagegen` (optional Codex provider) are found. They're not bundled;
+      if absent the feature degrades cleanly (Codex badge shows NOT CONFIGURED,
+      video-trim errors). Codex still needs a one-time `codex login` in Settings.
 - [x] Cloud import — `scripts/desktop/import-from-cloud.mjs` (see section above).
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to
