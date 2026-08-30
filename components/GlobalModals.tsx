@@ -3,6 +3,7 @@ import AuthModal from "@/components/AuthModal";
 import ResetPasswordModal from "@/components/ResetPasswordModal";
 import SettingsModal from "@/components/SettingsModal";
 import Toaster from "@/components/Toaster";
+import DesktopLinkHandler from "@/components/DesktopLinkHandler";
 import { useWorkflowStore } from "@/lib/store";
 
 // The desktop/guest build is fully local — no accounts, no auth UI.
@@ -16,6 +17,7 @@ export default function GlobalModals() {
     <>
       {!GUEST && <AuthModal />}
       {!GUEST && <ResetPasswordModal />}
+      {GUEST && <DesktopLinkHandler />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       <Toaster />
     </>
