@@ -136,6 +136,11 @@ back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
       Verified end-to-end (nano-banana-2-lite image-to-image, no tunnel).
       **Gap:** video *file* inputs >10 MB should use kie's stream-upload API
       instead of base64.
+- [x] Local-only — no accounts. `NEXT_PUBLIC_GUEST_MODE` is baked at build,
+      `setAuthModalOpen` is a no-op, `AuthModal`/`ResetPasswordModal` aren't
+      mounted, `getAccessToken` returns "guest". Fixed loopback port (41730) so
+      `localStorage` survives launches; sidecar is killed on app exit.
+- [x] Cloud import — `scripts/desktop/import-from-cloud.mjs` (see section above).
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to
       actually run. Auto-updater not started.
