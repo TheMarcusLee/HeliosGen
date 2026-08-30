@@ -149,8 +149,41 @@ const ext = process.platform === "win32" ? ".exe" : "";
 const dest = join(BIN_DIR, `node-${triple}${ext}`);
 mkdirSync(BIN_DIR, { recursive: true });
 console.log(`[desktop] bundling node runtime → ${dest}`);
-copyFileSync(process.execPath, dest);
+copyFileSync(portableNodeBinary(), dest);
 if (process.platform !== "win32") chmodSync(dest, 0o755);
+
+/**
+ * `process.execPath` is only safe to bundle if it's a self-contained binary.
+ * Homebrew's node splits off `libnode.*.dylib`, which would break outside this
+ * machine — detect that and fall back to a cached official nodejs.org build.
+ */
+function portableNodeBinary() {
+  const exe = process.execPath;
+  if (process.platform === "darwin") {
+    try {
+      const libs = execFileSync("otool", ["-L", exe], { encoding: "utf8" });
+      if (!/libnode\.\S+\.dylib/.test(libs)) return exe; // static — good
+    } catch {
+      return exe;
+    }
+    console.log("[desktop] running under a non-portable node — fetching official build");
+  } else {
+    return exe;
+  }
+
+  const ver = process.version; // e.g. v22.23.2
+  const arch = process.arch === "x64" ? "x64" : process.arch; // arm64 stays arm64
+  const name = `node-${ver}-darwin-${arch}`;
+  const cacheDir = join(SRC_TAURI, ".node-cache");
+  const cached = join(cacheDir, name, "bin", "node");
+  if (!existsSync(cached)) {
+    mkdirSync(cacheDir, { recursive: true });
+    const tgz = join(cacheDir, `${name}.tar.gz`);
+    run("curl", ["-fsSL", "-o", tgz, `https://nodejs.org/dist/${ver}/${name}.tar.gz`]);
+    run("tar", ["-xzf", tgz, "-C", cacheDir, `${name}/bin/node`]);
+  }
+  return cached;
+}
 
 // Tauri signs the app shell + the sidecar but not Mach-O buried in resources
 // (sharp's .node / .dylib). Sign those now, inside-out, so notarization passes.

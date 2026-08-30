@@ -61,3 +61,4 @@ next-env.d.ts
 /src-tauri/icons/StoreLogo.png
 # Signing / notarization secrets
 /scripts/desktop/sign.env
+/src-tauri/.node-cache/
