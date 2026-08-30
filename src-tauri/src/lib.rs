@@ -113,7 +113,11 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .shell()
         .sidecar("node")?
         .current_dir(server_dir)
-        .args([server_entry.to_string_lossy().to_string()])
+        .args([
+            "-r".to_string(),
+            "./sidecar-guard.js".to_string(),
+            server_entry.to_string_lossy().to_string(),
+        ])
         .env("PATH", resolve_user_path())
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
