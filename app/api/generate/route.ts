@@ -6,6 +6,7 @@ import { writeFile, unlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jobStore } from "@/lib/jobStore";
+import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureR2, uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
@@ -518,9 +519,15 @@ export async function POST(req: NextRequest) {
   if (!kieToken) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   const callbackBase = process.env.CALLBACK_BASE_URL;
-  if (!callbackBase) return NextResponse.json({ error: "CALLBACK_BASE_URL is not set" }, { status: 500 });
+  // Guest/desktop mode polls kie.ai directly (see lib/kieJobPoller) so it needs
+  // no public callback URL; hosted mode still requires one.
+  if (!callbackBase && !GUEST_MODE) {
+    return NextResponse.json({ error: "CALLBACK_BASE_URL is not set" }, { status: 500 });
+  }
 
-  const callBackUrl = `${callbackBase.replace(/\/$/, "")}/api/callback`;
+  const callBackUrl = callbackBase
+    ? `${callbackBase.replace(/\/$/, "")}/api/callback`
+    : undefined;
 
   try {
     const { apiInput } = cfg;
@@ -569,6 +576,7 @@ export async function POST(req: NextRequest) {
         status: "pending", prompt, model, aspect_ratio: aspectRatio, quality,
         reference_image_urls: r2ImageUrls,
       });
+      pollKieJob(taskId, kieToken, "image");
     } else {
       supabaseAdmin.from("generations").insert({
         task_id:              taskId,

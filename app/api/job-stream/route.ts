@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { jobStore, type JobResult } from "@/lib/jobStore";
 import { jobEvents } from "@/lib/jobEvents";
+import { resumeKieJob } from "@/lib/kieJobPoller";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
@@ -68,7 +69,12 @@ export async function GET(req: NextRequest) {
     return immediate({ status: "error", error: "Job not found" });
   }
 
-  // Job is pending — open an SSE stream and wait for the callback to fire
+  // Desktop/guest: restart the kie.ai poller if a server restart lost it.
+  if (GUEST_MODE && !taskId.startsWith("azure-")) {
+    resumeKieJob(taskId, existing.type === "video" ? "video" : "image");
+  }
+
+  // Job is pending — open an SSE stream and wait for the poller/callback to fire
   const stream = new ReadableStream({
     start(controller) {
       const enc = new TextEncoder();

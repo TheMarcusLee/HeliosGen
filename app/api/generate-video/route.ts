@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
+import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
@@ -54,7 +55,10 @@ export async function POST(req: NextRequest) {
 
   const callbackBase = process.env.CALLBACK_BASE_URL;
   const callBackUrl = rawCallBackUrl || (callbackBase ? `${callbackBase.replace(/\/$/, "")}/api/callback` : undefined);
-  if (!callBackUrl) return NextResponse.json({ error: "callBackUrl or CALLBACK_BASE_URL not set" }, { status: 500 });
+  // Guest/desktop mode polls kie.ai directly (lib/kieJobPoller) — no callback URL needed.
+  if (!callBackUrl && !GUEST_MODE) {
+    return NextResponse.json({ error: "callBackUrl or CALLBACK_BASE_URL not set" }, { status: 500 });
+  }
 
   const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
   if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
@@ -417,6 +421,11 @@ export async function POST(req: NextRequest) {
       sound: cfg.sound ? Boolean(sound) : false,
       reference_image_urls: referenceUrls,
     });
+    if (apiInput.useGoogleVeo) {
+      console.warn("[generate-video] Veo has no jobs-API polling yet — result needs a callback URL");
+    } else {
+      pollKieJob(taskId, apiKey, "video");
+    }
   } else {
     supabaseAdmin.from("generations").insert({
       task_id:              taskId,

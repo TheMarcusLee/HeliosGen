@@ -78,15 +78,21 @@ To just run the compiled binary without bundling:
 - [x] Phase 1 — standalone output + Node sidecar + writable data dir + icons.
       `HeliosGen.app` + `.dmg` build and launch; all routes serve, guest DB
       writes to `~/Library/Application Support/cash.sdd.helios.desktop/`.
-- [ ] Phase 2 — replace the kie.ai webhook (`/api/callback`) with polling
-      (no public URL in a desktop app)
+- [x] Phase 2 — kie.ai webhook replaced with polling (`lib/kieJobPoller.ts`).
+      In guest mode `/api/generate` + `/api/generate-video` start a background
+      poller against `/api/v1/jobs/recordInfo`; `/api/job-status` +
+      `/api/job-stream` restart it after a server restart. `CALLBACK_BASE_URL`
+      is no longer required in guest mode. Verified end-to-end (z-image, no
+      tunnel). **Gap:** Google Veo models (`/api/v1/veo/*`, different shape)
+      still need a callback — poller is skipped for them.
 - [ ] Phase 3 — send reference images to kie.ai without a tunnel (data URI /
-      kie upload endpoint)
+      kie upload endpoint). Text-to-image/video works now; image *inputs* don't.
 - [ ] Phase 4 — code signing, notarization, auto-update
 - [ ] Bundle size — the clean `npm install --omit=dev` ships the full prod tree
       (~530 MB `node_modules`, ~750 MB `.app`). Switch to the traced
       `.next/standalone/node_modules` + a truncated-package repair pass to get
       back to ~270 MB, or prune build-only transitive deps.
 
-Until Phase 2 lands, generation submits but results never come back (the app
-still needs `CALLBACK_BASE_URL` + a reachable tunnel).
+Text-to-image and text-to-video generation work fully offline now. Generation
+*from* an uploaded/reference image still needs Phase 3 (or a tunnel), and Veo
+still needs a callback URL.
