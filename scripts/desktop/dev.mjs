@@ -2,11 +2,15 @@
 // The Tauri shell reads HELIOS_DEV_URL and just points its window there.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DEV_URL = process.env.HELIOS_DEV_URL || "http://localhost:3000";
+const APP_VERSION = JSON.parse(
+  readFileSync(join(ROOT, "src-tauri", "tauri.conf.json"), "utf8"),
+).version;
 
 const children = [];
 function launch(name, cmd, args, extraEnv = {}) {
@@ -35,6 +39,7 @@ process.on("SIGTERM", shutdown);
 launch("next", "node", [join(ROOT, "node_modules", "next", "dist", "bin", "next"), "dev"], {
   GUEST_MODE: "true",
   NEXT_PUBLIC_GUEST_MODE: "true",
+  NEXT_PUBLIC_APP_VERSION: APP_VERSION,
   NODE_OPTIONS: "--disable-warning=ExperimentalWarning", // node:sqlite
 });
 

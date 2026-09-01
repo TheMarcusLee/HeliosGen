@@ -42,13 +42,21 @@ export function pollKieJob(taskId: string, apiKey: string, kind: Kind): void {
     .finally(() => active.delete(taskId));
 }
 
+// Local-only providers mint prefixed task IDs (`azure-…`, `codex-…`) and have no
+// kie.ai job behind them. Polling kie.ai's recordInfo for one of these just
+// comes back `{ msg: "recordInfo is null" }`, which the loop then settles as a
+// spurious error — clobbering the real job that's still running locally.
+function isKieTaskId(taskId: string): boolean {
+  return !taskId.startsWith("azure-") && !taskId.startsWith("codex-");
+}
+
 /**
  * Resume polling a job whose poller was lost to a server restart (guest mode
- * only — reads the kie.ai key from the guest DB). No-op if already polling or
- * no key is configured.
+ * only — reads the kie.ai key from the guest DB). No-op if already polling, if
+ * no key is configured, or if the task belongs to a non-kie local provider.
  */
 export function resumeKieJob(taskId: string, kind: Kind): void {
-  if (!GUEST_MODE || active.has(taskId)) return;
+  if (!GUEST_MODE || active.has(taskId) || !isKieTaskId(taskId)) return;
   const key = guestDb.getKieApiToken();
   if (!key) return;
   pollKieJob(taskId, key, kind);

@@ -18,6 +18,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { requestWorkflowSync } from "@/lib/workflowSyncBus";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
 import CuttableEdge from "@/components/edges/CuttableEdge";
 import { topoSort, resolveInputs } from "@/lib/executor";
@@ -1398,6 +1399,7 @@ export default function WorkflowCanvas() {
   const handleNodeDragStop = useCallback(() => {
     setSnapGuides([]);
     snapTargetRef.current = null;
+    requestWorkflowSync(); // new position is a discrete edit — persist now
   }, []);
 
   // When a member node inside a selected group is clicked or dragged,

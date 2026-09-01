@@ -7,24 +7,35 @@ a per-user app-data directory.
 ## Architecture
 
 ```
-┌─ HeliosGen.app ────────────────────────────────┐
-│  Tauri shell (Rust)                            │
-│    ├─ picks a free localhost port              │
-│    ├─ spawns  node  server/server.js  (sidecar)│
-│    │     GUEST_MODE=true                       │
-│    │     HELIOS_DATA_DIR  = <appData>          │
-│    │     HELIOS_MEDIA_DIR = <appData>/generated│
-│    └─ navigates the webview to 127.0.0.1:<port>│
-└────────────────────────────────────────────────┘
+┌─ HeliosGen.app ─────────────────────────────────────┐
+│  Tauri shell (Rust)                                 │
+│    ├─ picks a free localhost port                   │
+│    ├─ spawns the `helios-node` sidecar shim, which  │
+│    │    hides itself from the Dock, then exec's     │
+│    │    node  server/server.js                      │
+│    │      GUEST_MODE=true                           │
+│    │      HELIOS_DATA_DIR  = <appData>              │
+│    │      HELIOS_MEDIA_DIR = <appData>/generated    │
+│    └─ navigates the webview to 127.0.0.1:<port>     │
+└─────────────────────────────────────────────────────┘
 ```
+
+- The Node runtime is a **resource** (`Contents/Resources/server/node-bin/node`),
+  not the sidecar. A binary launched from a bundle's `Contents/MacOS/` gets its
+  own macOS Dock tile ([tauri#14014]); the sidecar is a ~20-line Rust shim
+  (`src-tauri/loader/`) that calls `TransformProcessType` to drop its Dock tile,
+  then `exec`s the real node (path passed in `HELIOS_NODE_BIN`).
+
+[tauri#14014]: https://github.com/tauri-apps/tauri/issues/14014
 
 - `next.config.ts` emits `output: "standalone"` when `DESKTOP_BUILD=1`.
 - `scripts/desktop/build-server.mjs` builds it, then **discards the traced
   `node_modules`** (nft is unreliable with pnpm and leaves packages truncated)
   and runs a clean `npm install --omit=dev` into `src-tauri/server/` for a flat,
-  symlink-free tree. It also copies `.next/static` + `public` in, and copies the
-  current `node` binary to `src-tauri/binaries/node-<target-triple>` as the
-  Tauri sidecar.
+  symlink-free tree. It also copies `.next/static` + `public` in, copies the
+  current `node` binary to `src-tauri/server/node-bin/node` (bundled as a
+  resource), and `cargo build`s the `src-tauri/loader` shim to
+  `src-tauri/binaries/helios-node-<target-triple>` as the Tauri sidecar.
 - `lib/guest/paths.ts` resolves `DATA_DIR` / `MEDIA_DIR` from the env vars the
   shell sets; `app/generated/[...path]/route.ts` serves media from outside
   `public/` in the packaged app.
@@ -89,10 +100,11 @@ login keychain + notarization credentials.
    pnpm desktop:build
    ```
 
-With `APPLE_SIGNING_IDENTITY` set, `build-server.mjs` codesigns the native
-modules in the staged server (sharp `.node`/`.dylib`) with hardened runtime;
-Tauri then signs the app shell + sidecar, notarizes, and staples. Entitlements
-are in `src-tauri/entitlements.plist` (JIT + unsigned-exec-memory +
+With `APPLE_SIGNING_IDENTITY` set, `build-server.mjs` codesigns the Mach-O in
+the staged server — the bundled `node` runtime plus sharp's `.node`/`.dylib` —
+with hardened runtime + entitlements; Tauri then signs the app shell + the
+`helios-node` sidecar shim, notarizes, and staples. Entitlements are in
+`src-tauri/entitlements.plist` (JIT + unsigned-exec-memory +
 disable-library-validation — the bundled Node/V8 needs them).
 
 Verify the result:
@@ -154,7 +166,17 @@ back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
 - [x] Cloud import — `scripts/desktop/import-from-cloud.mjs` (see section above).
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to
-      actually run. Auto-updater not started.
+      actually run.
+- [x] Update check — `app/api/update-check/route.ts` asks the GitHub Releases
+      API (`repos/SegFault42/WorkflowAI/releases/latest`, cached ~1 h) whether
+      `tag_name` is newer than `NEXT_PUBLIC_APP_VERSION` (baked from
+      `tauri.conf.json` by `build-server.mjs` / `dev.mjs`). When it is,
+      `components/UpdateBanner.tsx` shows a yellow "Update available" bar under
+      the Kie banner; tapping it opens a modal with the release notes and a
+      **Download** button (opens the release page via the external-link handler).
+      Guest/desktop only, no self-install. Cut a release by tagging `vX.Y.Z` on
+      GitHub with `version` bumped in `tauri.conf.json` to match.
+      `NEXT_PUBLIC_UPDATE_CHECK_FORCE=1` (dev) forces the banner on for eyeballing.
 - [ ] Bundle size — down to ~330 MB stage / ~440 MB `.app` after moving `shadcn`
       to devDeps and pruning `@next/swc` + off-platform sharp binaries. The
       remaining bulk is the bundled Node runtime (~108 MB) and the prod

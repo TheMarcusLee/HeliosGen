@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- The bundled Node.js sidecar runs V8, which JITs and writes executable
-       memory; hardened runtime forbids that without these. -->
+  <!-- The bundled Node.js runtime runs V8, which JITs and writes executable
+       memory; hardened runtime forbids that without these. Applied to both the
+       `helios-node` sidecar shim (by Tauri) and node itself (by
+       build-server.mjs), since the shim exec's into node in the same process. -->
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>

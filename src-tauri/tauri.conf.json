@@ -36,7 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/node"],
+    "externalBin": ["binaries/helios-node"],
     "resources": ["server/**/*"],
     "category": "GraphicsAndDesign",
     "shortDescription": "Build AI image & video pipelines visually.",

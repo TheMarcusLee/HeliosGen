@@ -1,9 +1,9 @@
 // Stages a self-contained Next.js server + a Node runtime for the Tauri bundle.
 //
 //   node scripts/desktop/build-server.mjs          # full production build + stage
-//   node scripts/desktop/build-server.mjs --dev     # no-op (tauri dev uses `next dev`)
+//   node scripts/desktop/build-server.mjs --dev     # just build the sidecar shim
 //
-// Invoked automatically by `tauri build` via `beforeBuildCommand`.
+// Invoked automatically by `tauri build` / `tauri dev` via the before* commands.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -25,8 +25,34 @@ const SRC_TAURI = join(ROOT, "src-tauri");
 const STAGE = join(SRC_TAURI, "server");
 const BIN_DIR = join(SRC_TAURI, "binaries");
 
+const EXE = process.platform === "win32" ? ".exe" : "";
+
+// Baked into the client bundle so the in-app update check
+// (`app/api/update-check`) knows what version is running.
+const APP_VERSION = JSON.parse(
+  readFileSync(join(SRC_TAURI, "tauri.conf.json"), "utf8"),
+).version;
+
+/**
+ * Build the sidecar shim (src-tauri/loader) and stage it as the Tauri
+ * `externalBin`. Fast (no tauri deps) and needed even for `tauri dev` — the
+ * Tauri build script hard-fails if the externalBin file is missing.
+ */
+function stageShim(triple) {
+  const manifest = join(SRC_TAURI, "loader", "Cargo.toml");
+  console.log("[desktop] building sidecar shim (helios-node)…");
+  run("cargo", ["build", "--release", "--manifest-path", manifest]);
+  const src = join(SRC_TAURI, "loader", "target", "release", `helios-node${EXE}`);
+  const dest = join(BIN_DIR, `helios-node-${triple}${EXE}`);
+  mkdirSync(BIN_DIR, { recursive: true });
+  copyFileSync(src, dest);
+  if (process.platform !== "win32") chmodSync(dest, 0o755);
+  return dest;
+}
+
 if (process.argv.includes("--dev")) {
   console.log("[desktop] dev mode — run `next dev` yourself (pnpm desktop:dev does both)");
+  stageShim(targetTriple());
   process.exit(0);
 }
 
@@ -80,6 +106,7 @@ run("node", [join(ROOT, "node_modules", "next", "dist", "bin", "next"), "build"]
   // Baked into the client bundle — the desktop app is always guest mode, and
   // NEXT_PUBLIC_* vars can't be set at runtime by the Tauri shell.
   NEXT_PUBLIC_GUEST_MODE: "true",
+  NEXT_PUBLIC_APP_VERSION: APP_VERSION,
 });
 
 const STANDALONE = join(ROOT, ".next", "standalone");
@@ -152,12 +179,18 @@ for (const [dir, keepIf] of [
 }
 
 const triple = targetTriple();
-const ext = process.platform === "win32" ? ".exe" : "";
-const dest = join(BIN_DIR, `node-${triple}${ext}`);
-mkdirSync(BIN_DIR, { recursive: true });
-console.log(`[desktop] bundling node runtime → ${dest}`);
-copyFileSync(portableNodeBinary(), dest);
-if (process.platform !== "win32") chmodSync(dest, 0o755);
+
+// The Node runtime ships as a *resource* (Contents/Resources/server/node-bin/),
+// not as the Tauri sidecar. A binary launched out of a bundle's Contents/MacOS/
+// gets its own macOS Dock tile (tauri-apps/tauri#14014); the sidecar is instead
+// the shim, which hides itself from the Dock and then exec's this node.
+const nodeDest = join(STAGE, "node-bin", `node${EXE}`);
+mkdirSync(dirname(nodeDest), { recursive: true });
+console.log(`[desktop] bundling node runtime → ${nodeDest}`);
+copyFileSync(portableNodeBinary(), nodeDest);
+if (process.platform !== "win32") chmodSync(nodeDest, 0o755);
+
+stageShim(triple);
 
 /**
  * `process.execPath` is only safe to bundle if it's a self-contained binary.
@@ -192,9 +225,10 @@ function portableNodeBinary() {
   return cached;
 }
 
-// Tauri signs the app shell + the sidecar but not Mach-O buried in resources
-// (sharp's .node / .dylib). Sign those now, inside-out, so notarization passes.
-// Skipped unless APPLE_SIGNING_IDENTITY is set (i.e. a real signed build).
+// Tauri signs the app shell + the sidecar shim but not Mach-O buried in
+// resources — the Node runtime itself and sharp's .node / .dylib. Sign those
+// now, inside-out, so notarization passes. Node runs V8 (JIT), so it needs the
+// same entitlements as the shim. Skipped unless APPLE_SIGNING_IDENTITY is set.
 if (process.platform === "darwin" && process.env.APPLE_SIGNING_IDENTITY) {
   const identity = process.env.APPLE_SIGNING_IDENTITY;
   const ents = join(SRC_TAURI, "entitlements.plist");
@@ -205,7 +239,8 @@ if (process.platform === "darwin" && process.env.APPLE_SIGNING_IDENTITY) {
   )
     .split("\n")
     .filter(Boolean);
-  console.log(`[desktop] codesigning ${macho.length} native modules…`);
+  macho.push(nodeDest); // the bundled Node runtime
+  console.log(`[desktop] codesigning ${macho.length} Mach-O files…`);
   for (const f of macho) {
     run("codesign", [
       "--force", "--timestamp", "--options", "runtime",

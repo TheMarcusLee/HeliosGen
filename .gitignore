@@ -46,11 +46,15 @@ next-env.d.ts
 
 # Guest mode — local DB and generated media
 /data/*.json
+/data/*.db
+/data/*.db-shm
+/data/*.db-wal
 /public/generated/**
 !/public/generated/.gitkeep
 
 # Tauri desktop build artifacts
 /src-tauri/target/
+/src-tauri/loader/target/
 /src-tauri/gen/
 /src-tauri/server/
 /src-tauri/binaries/

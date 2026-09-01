@@ -109,9 +109,22 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .expect("server.js has no parent dir")
         .to_path_buf();
 
+    // The Node runtime ships as a resource, not the sidecar — a binary launched
+    // from Contents/MacOS/ gets its own macOS Dock tile (tauri-apps/tauri#14014).
+    // The `helios-node` sidecar is a shim that hides itself from the Dock and
+    // then exec's this.
+    let node_rel = if cfg!(windows) {
+        "server/node-bin/node.exe"
+    } else {
+        "server/node-bin/node"
+    };
+    let node_bin = app
+        .path()
+        .resolve(node_rel, tauri::path::BaseDirectory::Resource)?;
+
     let (mut rx, child) = app
         .shell()
-        .sidecar("node")?
+        .sidecar("helios-node")?
         .current_dir(server_dir)
         .args([
             "--disable-warning=ExperimentalWarning".to_string(), // node:sqlite
@@ -119,6 +132,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
             "./sidecar-guard.js".to_string(),
             server_entry.to_string_lossy().to_string(),
         ])
+        .env("HELIOS_NODE_BIN", node_bin.to_string_lossy().to_string())
         .env("PATH", resolve_user_path())
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
