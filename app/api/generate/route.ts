@@ -4,7 +4,8 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import { writeFile, unlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, normalize } from "node:path";
+import { MEDIA_DIR } from "@/lib/guest/paths";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureKieReachableImages } from "@/lib/kieUpload";
@@ -76,8 +77,17 @@ function httpsPost(
 }
 
 
-// Fetch any http/https URL to a Buffer, following redirects
+// Fetch any http/https URL to a Buffer, following redirects.
+// Root-relative "/generated/..." refs (guest/desktop mode with no public
+// CALLBACK_BASE_URL) aren't valid URLs — read those straight off local disk.
 function fetchBuffer(url: string, maxRedirects = 5): Promise<Buffer> {
+  if (url.startsWith("/generated/")) {
+    const rel = normalize(decodeURIComponent(url.slice("/generated/".length).split(/[?#]/)[0]));
+    if (rel.startsWith("..") || rel.includes("\0")) {
+      return Promise.reject(new Error(`Refusing to read outside media dir: ${url}`));
+    }
+    return readFile(join(MEDIA_DIR, rel));
+  }
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) return reject(new Error("Too many redirects"));
     const u   = new URL(url);

@@ -96,6 +96,50 @@ export async function POST(req: NextRequest) {
     };
     if (apiInput.extra) Object.assign(input, apiInput.extra);
 
+  } else if (apiInput.useMinimaxH3) {
+    // ── MiniMax H3 (text / image / reference to video) ───────────────────────
+    const [startFrameUrl, endFrameUrl, r2RefImages, r2RefVideos, r2RefAudios] = await Promise.all([
+      rawStartFrame ? ensureR2(rawStartFrame, "references").catch(() => rawStartFrame) : Promise.resolve(undefined),
+      rawEndFrame   ? ensureR2(rawEndFrame,   "references").catch(() => rawEndFrame)   : Promise.resolve(undefined),
+      Promise.all((rawRefImages    as string[]).map((u) => ensureR2(u, "references").catch(() => u))),
+      Promise.all((rawRefVideoUrls as string[]).map((u) => ensureR2(u, "references").catch(() => u))),
+      Promise.all((rawRefAudioUrls as string[]).map((u) => ensureR2(u, "references").catch(() => u))),
+    ]);
+
+    if (startFrameUrl || endFrameUrl) {
+      // image-to-video — frames take priority over references
+      effectiveApiId = cfg.imageApiId!;
+      input = {
+        prompt:                 prompt ?? "",
+        [apiInput.durationKey!]: clampedDuration,
+      };
+      if (startFrameUrl)          input[apiInput.firstFrameKey!] = startFrameUrl;
+      if (endFrameUrl)            input[apiInput.lastFrameKey!]  = endFrameUrl;
+      if (apiInput.resolutionKey) input[apiInput.resolutionKey]  = resolution;
+    } else if (r2RefImages.length > 0) {
+      // reference-to-video
+      effectiveApiId = "minimax-h3/reference-to-video";
+      input = {
+        prompt:                     prompt ?? "",
+        [apiInput.referenceImagesKey!]: r2RefImages.slice(0, 9),
+        [apiInput.aspectRatioKey!]: aspectRatio,
+        [apiInput.durationKey!]:    clampedDuration,
+      };
+      // reference_audio cannot be used alone — it always rides along with images here
+      if (r2RefVideos.length > 0 && apiInput.referenceVideosKey) input[apiInput.referenceVideosKey] = r2RefVideos.slice(0, 3);
+      if (r2RefAudios.length > 0 && apiInput.referenceAudiosKey) input[apiInput.referenceAudiosKey] = r2RefAudios.slice(0, 3);
+      if (apiInput.resolutionKey) input[apiInput.resolutionKey] = resolution;
+    } else {
+      // text-to-video
+      effectiveApiId = cfg.apiId;
+      input = {
+        prompt:                     prompt ?? "",
+        [apiInput.aspectRatioKey!]: aspectRatio,
+        [apiInput.durationKey!]:    clampedDuration,
+      };
+      if (apiInput.resolutionKey) input[apiInput.resolutionKey] = resolution;
+    }
+
   } else if (apiInput.firstFrameKey) {
     // ── Seedance-style models (separate frame keys + multi-ref arrays) ─────────
     const [startFrameUrl, endFrameUrl, r2RefImages, r2RefVideos, r2RefAudios] = await Promise.all([
@@ -314,9 +358,10 @@ export async function POST(req: NextRequest) {
       [apiInput.durationKey!]:    apiInput.durationAsString ? String(clampedDuration) : clampedDuration,
     };
 
-    if (apiInput.modeKey)  input[apiInput.modeKey]  = mode;
-    if (apiInput.soundKey) input[apiInput.soundKey] = Boolean(sound);
-    if (apiInput.extra)    Object.assign(input, apiInput.extra);
+    if (apiInput.modeKey)       input[apiInput.modeKey]       = mode;
+    if (apiInput.soundKey)      input[apiInput.soundKey]      = Boolean(sound);
+    if (apiInput.resolutionKey) input[apiInput.resolutionKey] = resolution;
+    if (apiInput.extra)         Object.assign(input, apiInput.extra);
 
     if (apiInput.useImageUrls) {
       const image_urls: string[] = [];
@@ -418,6 +463,14 @@ export async function POST(req: NextRequest) {
     ? [
         ...((input.image_urls as string[] | undefined) ?? []),
         ...((input.video_list as Array<{ url: string }> | undefined)?.map((v) => v.url) ?? []),
+      ]
+    : apiInput.useMinimaxH3
+    ? [
+        ...(input.first_frame_url ? [input.first_frame_url as string] : []),
+        ...(input.last_frame_url  ? [input.last_frame_url as string]  : []),
+        ...((input.reference_image_urls as string[] | undefined) ?? []),
+        ...((input.reference_video_urls as string[] | undefined) ?? []),
+        ...((input.reference_audio_urls as string[] | undefined) ?? []),
       ]
     : apiInput.referenceImagesKey
     ? (input[apiInput.referenceImagesKey] as string[] | undefined) ?? []
