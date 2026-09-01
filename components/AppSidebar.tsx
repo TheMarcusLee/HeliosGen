@@ -832,7 +832,7 @@ export function AppSidebar() {
 
   const displayName = user
     ? (user.user_metadata?.full_name || user.email?.split("@")[0] || "User")
-    : "Guest User";
+    : "";
 
   const avatarSeed = user?.id || "guest";
 
@@ -1049,7 +1049,7 @@ export function AppSidebar() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 text-left group-data-[collapsible=icon]:hidden min-w-0">
-                  <div className="text-[13px] font-semibold text-white/90 truncate leading-tight">{displayName}</div>
+                  {displayName && <div className="text-[13px] font-semibold text-white/90 truncate leading-tight">{displayName}</div>}
                   <div className="flex items-center gap-1 mt-0.5 text-[11px] text-white/40">
                     <CreditIcon />
                     <span>{balance !== null ? `${balance.toLocaleString()} Credits` : "0 Credits"}</span>
@@ -1075,7 +1075,7 @@ export function AppSidebar() {
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <div className="text-[15px] font-semibold text-white truncate">{displayName}</div>
+                {displayName && <div className="text-[15px] font-semibold text-white truncate">{displayName}</div>}
                 <div className="flex items-center gap-1.5 mt-0.5 text-[12px] text-white/40">
                   <CreditIcon size={13} />
                   <span>{balance !== null ? `${balance.toLocaleString()} Credits` : "0 Credits"}</span>

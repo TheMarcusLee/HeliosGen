@@ -2,10 +2,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWorkflowStore, Space } from "./store";
 import { createClient } from "./supabase/client";
+import { SYNC_NOW_EVENT, requestWorkflowSync } from "./workflowSyncBus";
 
-const DEBOUNCE_MS = 1_500; // wait 1.5s of inactivity before syncing
+const DEBOUNCE_MS  = 1_500; // continuous edits (drag frames, typing): coalesce
+const IMMEDIATE_MS = 250;   // discrete edits (add/delete/connect/resize-end): near-instant, still coalesces a burst
+const GUEST = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
 
 export type SyncStatus = "idle" | "syncing" | "synced" | "error";
+
+export { requestWorkflowSync };
 
 export function useSpaceSync() {
   const spaces          = useWorkflowStore((s) => s.spaces);
@@ -22,8 +27,13 @@ export function useSpaceSync() {
 
   const timerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedRef  = useRef<number>(0); // epoch ms of last successful save
-  const spacesRef      = useRef(spaces);
-  spacesRef.current    = spaces;
+  // True when there's an edit that hasn't been flushed to the DB yet. The
+  // debounce only writes 1.5s after the last change, so a quick reload / app
+  // quit right after (e.g. a node resize) would otherwise lose it — the
+  // pagehide/visibilitychange handler below flushes it immediately.
+  const dirtyRef       = useRef(false);
+  // Set by requestWorkflowSync(); makes the next debounce-arm use IMMEDIATE_MS.
+  const immediateRef   = useRef(false);
 
   useEffect(() => {
     if (hydrated) return;
@@ -41,6 +51,23 @@ export function useSpaceSync() {
   useEffect(() => {
     if (!hydrated) return;
     (async () => {
+      if (GUEST) {
+        try {
+          const res = await fetch("/api/guest-spaces");
+          if (!res.ok) return;
+          const { spaces: dbSpaces } = (await res.json()) as { spaces: Space[] };
+          if (!dbSpaces?.length) return;
+          loadSpacesFromDB(dbSpaces);
+          const now = new Date();
+          lastSyncedRef.current = now.getTime();
+          setLastSyncedAt(now);
+          setStatus("synced");
+        } catch {
+          /* keep local state */
+        }
+        return;
+      }
+
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -76,7 +103,39 @@ export function useSpaceSync() {
   }, [hydrated]); // run once after hydration
 
   // ── Core save (no rate-limit checks) ────────────────────────────────────────
-  const save = useCallback(async () => {
+  // `keepalive` lets the request outlive the page during an unload/pagehide
+  // flush (capped at ~64KB of body by the browser — fine for the stripped
+  // spaces payload; a normal fetch is used for the regular debounced path).
+  const save = useCallback(async ({ keepalive = false }: { keepalive?: boolean } = {}) => {
+    dirtyRef.current = false;
+    immediateRef.current = false;
+    if (GUEST) {
+      setStatus("syncing");
+      try {
+        const spacesToSave = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
+        const res = await fetch("/api/guest-spaces", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          keepalive,
+          body: JSON.stringify({
+            spaces: spacesToSave.map((sp) => ({
+              ...sp,
+              nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const now = new Date();
+        lastSyncedRef.current = now.getTime();
+        setLastSyncedAt(now);
+        setStatus("synced");
+      } catch {
+        dirtyRef.current = true;
+        setStatus("error");
+      }
+      return;
+    }
+
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -84,7 +143,7 @@ export function useSpaceSync() {
     setStatus("syncing");
     try {
       // Only persist spaces that have at least one node
-      const spacesToSave = spacesRef.current.filter((sp) => sp.nodes.length > 0);
+      const spacesToSave = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
 
       if (spacesToSave.length > 0) {
         const rows = spacesToSave.map((sp) => ({
@@ -125,6 +184,7 @@ export function useSpaceSync() {
       setLastSyncedAt(now);
       setStatus("synced");
     } catch {
+      dirtyRef.current = true;
       setStatus("error");
     }
   }, []);
@@ -135,17 +195,56 @@ export function useSpaceSync() {
     save();
   }, [save]);
 
-  // ── Debounced sync — fires 1.5s after the last change ────────────────────────
+  // ── Debounced sync ─────────────────────────────────────────────────────────
+  // IMMEDIATE_MS (~instant) after a discrete edit, else DEBOUNCE_MS.
   const syncDebounced = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(save, DEBOUNCE_MS);
+    // `immediateRef` stays sticky until `save` runs, so churn right after a
+    // discrete edit (e.g. React Flow auto-measuring a just-added node) can't
+    // bump the pending write back out to the full debounce.
+    const delay = immediateRef.current ? IMMEDIATE_MS : DEBOUNCE_MS;
+    timerRef.current = setTimeout(save, delay);
   }, [save]);
 
   useEffect(() => {
     if (!hydrated) return;
+    dirtyRef.current = true;
     syncDebounced();
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [spaces, syncDebounced, hydrated]);
+
+  // ── Flush a pending edit early instead of waiting out the debounce ──────────
+  //  • discrete edits (requestWorkflowSync): drop/delete a node, finish a
+  //    resize, connect an edge — the next debounce-arm uses IMMEDIATE_MS
+  //  • page teardown: resize/edit then immediately reload or quit the app —
+  //    `pagehide` fires on reload, navigation and tab/app close; a hidden
+  //    `visibilitychange` catches app backgrounding while the page is alive
+  useEffect(() => {
+    if (!hydrated) return;
+    const flush = (keepalive: boolean) => {
+      if (!dirtyRef.current) return;
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+      save({ keepalive });
+    };
+    // Fires synchronously right after a store mutation — before the [spaces]
+    // effect re-arms the debounce — so just flag it; that effect then arms a
+    // short timer. Also arm one here in case no [spaces] change follows.
+    const onSyncNow = () => {
+      immediateRef.current = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(save, IMMEDIATE_MS);
+    };
+    const onPageHide = () => flush(true);
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(false); };
+    window.addEventListener(SYNC_NOW_EVENT, onSyncNow);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener(SYNC_NOW_EVENT, onSyncNow);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [hydrated, save]);
 
   return { status, lastSyncedAt, syncNow };
 }

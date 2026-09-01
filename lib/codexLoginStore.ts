@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
+import { DATA_DIR } from "./guest/paths";
 
 // File-based (not in-memory) so state survives Next.js dev's module reloads —
 // same pattern as lib/jobStore.ts.
@@ -9,7 +10,7 @@ export type CodexLoginState =
   | { status: "success" }
   | { status: "error"; error: string };
 
-const FILE = join(process.cwd(), ".codex-login-store.json");
+const FILE = join(DATA_DIR, ".codex-login-store.json");
 
 function read(): CodexLoginState {
   if (!existsSync(FILE)) return { status: "idle" };
@@ -18,6 +19,7 @@ function read(): CodexLoginState {
 }
 
 function write(state: CodexLoginState): void {
+  mkdirSync(DATA_DIR, { recursive: true });
   writeFileSync(FILE, JSON.stringify(state), "utf8");
 }
 

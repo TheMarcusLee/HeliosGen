@@ -1,0 +1,21 @@
+[package]
+name = "helios-node-loader"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Sidecar shim: hides the bundled Node server from the macOS Dock, then exec's it."
+
+# Standalone — deliberately not a member of the src-tauri crate's build so it
+# compiles in a fraction of a second (no tauri deps). Staged by
+# scripts/desktop/build-server.mjs as the Tauri `externalBin`.
+
+[[bin]]
+name = "helios-node"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

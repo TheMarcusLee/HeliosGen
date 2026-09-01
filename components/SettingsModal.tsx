@@ -485,7 +485,21 @@ function ApiKeysPanel({
           setLoginFlow({ status: "idle" });
           onCodexLoginSuccess();
         } else if (d.status === "error") {
-          setLoginFlow({ status: "error", error: d.error ?? "Login failed" });
+          // Safety net: the login-store verdict can race the credential write.
+          // Before showing a red error, confirm against codex-status (which
+          // just checks auth.json on disk) — if the login actually landed,
+          // treat it as success instead of latching an error.
+          let recovered = false;
+          try {
+            const s = await fetch("/api/settings/codex-status").then((r) => r.json());
+            if (s.ready || s.authFound) recovered = true;
+          } catch { /* fall through to error */ }
+          if (recovered) {
+            setLoginFlow({ status: "idle" });
+            onCodexLoginSuccess();
+          } else {
+            setLoginFlow({ status: "error", error: d.error ?? "Login failed" });
+          }
         }
         // "pending" → keep polling
       } catch { /* network hiccup — keep polling */ }

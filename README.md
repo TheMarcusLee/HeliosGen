@@ -13,9 +13,49 @@
 
 ---
 
-# Demo
+# ⬇️ Download
 
-you can create an account and use it here : https://helios.sdd.cash/
+**HeliosGen is a desktop app.** Grab the latest build for your OS from the
+releases page — no account, no server, no cloud setup:
+
+### 👉 **[Download from the Releases page](https://github.com/SegFault42/HeliosGen/releases)**
+
+| OS | File |
+| --- | --- |
+| **macOS** (Apple Silicon) | `HeliosGen_<version>_aarch64.dmg` |
+| **Windows** | 🙋 **looking for a contributor to build & submit** — see below |
+| **Linux** | 🙋 **looking for a contributor to build & submit** — see below |
+
+> Only the builds actually attached to the latest release are available. macOS
+> is published today. **Tauri can't cross-compile, so Windows and Linux builds
+> need someone on those platforms** — if you can run `npm run desktop:build` on
+> Windows or Linux (see the **Build from source** section below), please open a
+> PR or attach the artifacts to an issue and we'll add them to the release.
+
+The app is **not code-signed** yet:
+
+- **macOS** — right-click the app → **Open** (once), or run
+  `xattr -cr /Applications/HeliosGen.app`.
+- **Windows** — SmartScreen: **More info → Run anyway**.
+
+---
+
+## 🚀 First run
+
+1. Launch HeliosGen.
+2. Open **Settings → API Keys** and paste your **[kie.ai](https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec) API key**.
+3. Start generating.
+
+Everything stays on your machine. Generations, uploads, folders, workflows and
+settings live in a local database; media is saved to a local folder:
+
+| OS | Data location |
+| --- | --- |
+| macOS | `~/Library/Application Support/cash.sdd.helios.desktop/` |
+| Windows | `%APPDATA%\cash.sdd.helios.desktop\` |
+| Linux | `~/.local/share/cash.sdd.helios.desktop/` |
+
+Delete that folder to reset the app.
 
 ---
 
@@ -59,11 +99,12 @@ Build reusable AI pipelines with:
 - multi-model generation,
 - reference images,
 - automation chains,
-- and self-hosted infrastructure.
+- all running 100% locally on your machine.
 
 No subscriptions.  
 No disappearing credits.  
-No vendor lock-in.
+No vendor lock-in.  
+No cloud, no accounts — just a local app and your own kie.ai key.
 
 ---
 
@@ -91,10 +132,9 @@ You only pay for what you generate.
 - Multi-model pipelines
 - Reference image support
 - Parallel & sequential pipeline execution
-- Shareable public workflows
-- Per-user API keys
 - Real-time generation history
-- Self-hostable architecture
+- 100% local — your data never leaves your machine
+- Bring your own kie.ai key
 - Modern responsive UI
 
 ---
@@ -123,106 +163,21 @@ More models are coming.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js + React + TypeScript |
-| Backend | Next.js API Routes |
-| Database | Supabase / JSON |
-| Storage | Cloudflare R2 / Local disk |
-| AI Backend | Kie.ai |
-| Deployment | Vercel / Railway / Render |
-
----
-
-# 🚀 Getting Started
-
-## 1. Clone the repository
-
-```bash
-git clone https://github.com/SegFault42/HeliosGen
-cd HeliosGen
-npm install
-```
-
----
-
-## 2. Guest Mode (quick setup)
-
-Requirements:
-- Kie.ai API key
-- ngrok
-
-```bash
-cp .env.guest .env.local
-```
-
-Fill your `.env.local`:
-
-```env
-GUEST_MODE=true
-KIE_API_KEY=your_key
-CALLBACK_BASE_URL=https://xxxx.ngrok-free.app
-```
-
-Start ngrok:
-
-```bash
-ngrok http 3000
-```
-
-Run the app:
-
-```bash
-npm run dev
-```
-
----
-
-## 3. Cloud Mode (production)
-
-Requirements:
-- Supabase
-- Cloudflare R2
-- Kie.ai API key
-
-### 3a. Database setup
-
-Open the **SQL Editor** in your Supabase project and run the two migration files in order:
-
-1. **`supabase-setup.sql`** — core tables (generations, uploads, spaces, settings)
-2. **`supabase-folders.sql`** — gallery folders & folder items
-
-### 3b. Environment variables
-
-Create `.env.local`:
-
-```env
-CALLBACK_BASE_URL=https://your-domain.com
-
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=
-R2_PUBLIC_URL=
-```
-
-### 3c. Run
-
-```bash
-npm run dev
-```
+| Desktop shell | Tauri 2 (Rust) |
+| App | Next.js + React + TypeScript (bundled Node sidecar) |
+| Database | SQLite (local) |
+| Storage | Local disk |
+| AI Backend | kie.ai |
 
 ---
 
 # 🤖 Codex CLI (optional — alternate GPT Image 2 backend)
 
-Instead of routing GPT Image 2 through Kie.ai credits, HeliosGen can generate through your own ChatGPT Codex subscription via [`codex-imagegen-cli`](https://github.com/jdmnk/codex-imagegen-cli). This is a single shared login on the server — not a per-user API key — so it's best suited to self-hosted / single-user setups.
+Instead of routing GPT Image 2 through kie.ai credits, HeliosGen can generate through your own ChatGPT Codex subscription via [`codex-imagegen-cli`](https://github.com/jdmnk/codex-imagegen-cli). The desktop app picks up `codex` from your `PATH` automatically; if it's missing, the feature just shows **NOT CONFIGURED** and everything else keeps working.
 
 Requirements:
 - A ChatGPT Plus/Pro/Team/Enterprise account with Codex access
-- [`codex`](https://github.com/openai/codex) CLI installed on the machine running the server
+- [`codex`](https://github.com/openai/codex) CLI installed on your machine
 - [`uv`](https://docs.astral.sh/uv/) (Python package manager)
 
 ### 1. Install the Codex CLI
@@ -244,12 +199,12 @@ uv sync --dev
 uv tool install -e .
 ```
 
-This installs the `codex-imagegen` binary — make sure it's on the server's `PATH`.
+This installs the `codex-imagegen` binary — make sure it's on your `PATH`.
 
 ### 3. Log in
 
 Either:
-- run `codex login` in a terminal on the server (opens a browser to sign in), **or**
+- run `codex login` in a terminal (opens a browser to sign in), **or**
 - open the app → **Settings → API Keys → Codex CLI → Connect Codex**, which walks you through a device-code login — visit the printed URL and enter the code, no terminal needed.
 
 > ⚠️ Starting a new login (either way) immediately invalidates any existing session on that machine — the CLI clears old credentials the moment a login attempt begins, whether or not it's ever completed. Only start one when the status badge below shows **NOT CONFIGURED**.
@@ -260,17 +215,68 @@ In **Settings → Image Models**, set GPT Image 2's provider toggle to **Codex C
 
 ---
 
-# 🌍 Deployment
+# 🛠️ Build from source
 
-Recommended platforms:
-- Vercel
-- Railway
-- Render
-- Fly.io
+Prefer to build it yourself, or need a platform that isn't on the releases page
+yet? The whole app builds from this repo.
+
+Tauri does **not** cross-compile — build on the OS you want to target. Run
+`npm run desktop:build` on a Mac for the macOS build, on Windows for Windows,
+on Linux for Linux.
+
+> **Want to help ship Windows / Linux builds?** Build on that OS and send the
+> artifacts (PR or issue attachment) — they'll be added to the next release,
+> with credit.
+
+## Prerequisites (one-time, all platforms)
+
+| Tool | Notes |
+| --- | --- |
+| **Node 22+** | The bundled server uses `node:sqlite`. `nvm use 22`. |
+| **Rust** | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| **Tauri system deps** | See <https://v2.tauri.app/start/prerequisites/> |
+
+Platform-specific system deps:
+
+- **macOS** — Xcode Command Line Tools: `xcode-select --install`
+- **Windows** — [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+  (Desktop development with C++) and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)
+  (preinstalled on Windows 11)
+- **Linux** — `webkit2gtk-4.1`, `librsvg2`, `build-essential`, `curl`, `wget`,
+  `file`, `libssl-dev`, `libayatana-appindicator3-dev` (Debian/Ubuntu package
+  names; see the Tauri prerequisites page for other distros)
+
+## Build
 
 ```bash
-npm run build && npm start
+git clone https://github.com/SegFault42/HeliosGen
+cd HeliosGen
+npm install
+npm run desktop:build
 ```
+
+Artifacts land in `src-tauri/target/release/bundle/`:
+
+| OS | Output |
+| --- | --- |
+| macOS | `macos/HeliosGen.app`, `dmg/HeliosGen_<ver>_<arch>.dmg` |
+| Windows | `msi/HeliosGen_<ver>_x64_en-US.msi`, `nsis/HeliosGen_<ver>_x64-setup.exe` |
+| Linux | `deb/`, `rpm/`, `appimage/HeliosGen_<ver>_amd64.AppImage` |
+
+The macOS build is **unsigned** — on first launch Gatekeeper blocks it.
+Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/HeliosGen.app"`.
+
+## Develop (hot reload)
+
+```bash
+npm run desktop:dev
+```
+
+Runs `next dev` and `tauri dev` together. The first run compiles the Rust shell
+(~1–2 min).
+
+See [`DESKTOP.md`](DESKTOP.md) for architecture, data locations, and signing &
+notarization.
 
 ---
 

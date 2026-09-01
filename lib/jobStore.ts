@@ -1,12 +1,15 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
+import { DATA_DIR } from "./guest/paths";
 
 export type JobResult =
   | { status: "pending"; type?: "image" | "video"; userId?: string }
   | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }
   | { status: "error"; error: string };
 
-const FILE = join(process.cwd(), ".job-store.json");
+// DATA_DIR is the repo in dev and a writable per-user dir in the packaged
+// desktop app (the install dir is read-only there).
+const FILE = join(DATA_DIR, ".job-store.json");
 
 function read(): Record<string, JobResult> {
   if (!existsSync(FILE)) return {};
@@ -15,6 +18,7 @@ function read(): Record<string, JobResult> {
 }
 
 function write(data: Record<string, JobResult>): void {
+  mkdirSync(DATA_DIR, { recursive: true });
   writeFileSync(FILE, JSON.stringify(data), "utf8");
 }
 

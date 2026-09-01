@@ -612,7 +612,11 @@ export default function WorkflowDashboard() {
   const switchSpace = useWorkflowStore((s) => s.switchSpace);
   const deleteSpace = useWorkflowStore((s) => s.deleteSpace);
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-  const [user, setUser] = useState<boolean | null>(null);
+  // Guest/desktop build has no accounts — treat as "signed in" from the first
+  // render so no auth copy ever flashes.
+  const [user, setUser] = useState<boolean | null>(
+    process.env.NEXT_PUBLIC_GUEST_MODE === "true" ? true : null,
+  );
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") { setUser(true); return; }

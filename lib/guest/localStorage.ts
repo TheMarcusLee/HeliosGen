@@ -5,8 +5,7 @@ import https from "node:https";
 import http  from "node:http";
 import { lookupAssetHash, storeAssetHash } from "./db";
 import { stripMetadata } from "../mediaMetadata";
-
-const GENERATED_DIR = join(process.cwd(), "public", "generated");
+import { MEDIA_DIR as GENERATED_DIR } from "./paths";
 
 function hashBuffer(buf: Buffer): string {
   return createHash("sha256").update(buf).digest("hex");

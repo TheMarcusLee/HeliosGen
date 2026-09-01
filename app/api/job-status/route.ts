@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
+import { resumeKieJob } from "@/lib/kieJobPoller";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
@@ -56,6 +57,11 @@ export async function GET(req: NextRequest) {
 
   // Task known to local store — return as-is, no kie.ai polling
   if (result) {
+    // Desktop/guest: if a restart killed the background poller for a job that's
+    // still pending, restart it so the result can still land.
+    if (GUEST_MODE && result.status === "pending" && !taskId.startsWith("azure-")) {
+      resumeKieJob(taskId, result.type === "video" ? "video" : "image");
+    }
     return NextResponse.json(result);
   }
 

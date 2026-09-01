@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- The bundled Node.js runtime runs V8, which JITs and writes executable
+       memory; hardened runtime forbids that without these. Applied to both the
+       `helios-node` sidecar shim (by Tauri) and node itself (by
+       build-server.mjs), since the shim exec's into node in the same process. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- Node loads native .node addons (sharp) from Resources at runtime. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- The shell passes PORT / HELIOS_* / GUEST_MODE to the sidecar process. -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+</dict>
+</plist>

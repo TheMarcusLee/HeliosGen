@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Desktop build staging area (contains a copied Next.js server tree).
+    "src-tauri/**",
   ]),
 ]);
 
