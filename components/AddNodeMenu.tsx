@@ -11,7 +11,6 @@ import { Search, X, Upload, LayoutGrid } from "lucide-react";
 
 const TOOLBAR_OFFSET_PX = 80;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 /* Node types replaced by Upload/Assets — hide from search results */
 const HIDDEN_FROM_MENU = new Set(["imageInputNode", "videoInputNode"]);
@@ -26,6 +25,11 @@ const SECTIONS: Array<{ id: string; label: string; nodeTypes: string[] }> = [
     id: "resources",
     label: "INPUTS",
     nodeTypes: ["promptNode"],
+  },
+  {
+    id: "annotate",
+    label: "ANNOTATE",
+    nodeTypes: ["commentNode"],
   },
 ];
 
@@ -96,6 +100,7 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
         generateNode: "IMAGE GEN",
         videoGeneratorNode: "VIDEO GEN",
         assistantNode: "ASSISTANT",
+        commentNode: "COMMENT",
       };
       const label = `${DISPLAY[type] ?? type} #${count}`;
 
@@ -426,10 +431,7 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
                       accent="#34d399"
                       bg="#052e16"
                       icon={<Upload size={18} strokeWidth={1.8} />}
-                      onClick={() => {
-                        if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; }
-                        fileInputRef.current?.click();
-                      }}
+                      onClick={() => fileInputRef.current?.click()}
                     />
                     <CustomRow
                       id="assets"

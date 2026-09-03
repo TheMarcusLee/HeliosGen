@@ -5,7 +5,6 @@ import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
 import CornerResizer from "./CornerResizer";
-import { createClient } from "@/lib/supabase/client";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 import { useReadOnly } from "@/lib/readOnlyContext";
 
@@ -139,9 +138,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
     updateNodeData(id, { status: "running", outputText: "", errorMsg: undefined });
 
     try {
-      const { data: { session } } = await createClient().auth.getSession();
       const assistantHeaders: Record<string, string> = { "Content-Type": "application/json" };
-      if (session?.access_token) assistantHeaders["Authorization"] = `Bearer ${session.access_token}`;
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: assistantHeaders,

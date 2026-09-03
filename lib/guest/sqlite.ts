@@ -5,7 +5,7 @@ import { DATA_DIR } from "./paths";
 
 /**
  * Guest-mode store, backed by SQLite (`node:sqlite`, built into Node 22 — no
- * dependency, no native build). Only ever loaded behind `GUEST_MODE`, i.e. the
+ * dependency, no native build). Only ever loaded server-side, i.e. the
  * desktop app; hosted/Vercel never touches this file.
  *
  * On first open it imports any pre-existing `guest-db.json` / `guest-spaces.json`

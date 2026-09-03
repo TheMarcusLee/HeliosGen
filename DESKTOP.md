@@ -1,8 +1,9 @@
 # HeliosGen Desktop (Tauri)
 
-A fully local, self-contained desktop build. No Supabase, no R2, no ngrok — it
-runs the Next.js app in guest mode as a bundled sidecar and stores everything in
-a per-user app-data directory.
+A fully local, self-contained desktop app. No accounts, no Supabase, no R2, no
+ngrok — it runs the Next.js app as a bundled Node sidecar and stores everything
+in a per-user app-data directory. This is the only way the app runs; there is no
+hosted/web deployment.
 
 ## Architecture
 
@@ -13,7 +14,6 @@ a per-user app-data directory.
 │    ├─ spawns the `helios-node` sidecar shim, which  │
 │    │    hides itself from the Dock, then exec's     │
 │    │    node  server/server.js                      │
-│    │      GUEST_MODE=true                           │
 │    │      HELIOS_DATA_DIR  = <appData>              │
 │    │      HELIOS_MEDIA_DIR = <appData>/generated    │
 │    └─ navigates the webview to 127.0.0.1:<port>     │
@@ -80,9 +80,7 @@ open "src-tauri/target/release/bundle/macos/HeliosGen.app"
   Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/HeliosGen.app"`.
 - Data lives in `~/Library/Application Support/cash.sdd.helios.desktop/`:
   `guest.db` (SQLite — generations, uploads, folders, workflows, settings) and
-  `generated/` (media). Delete that folder to reset. Any `guest-db.json` /
-  `guest-spaces.json` there is an import source, imported once into `guest.db`
-  (mtime-guarded) and then dormant.
+  `generated/` (media). Delete that folder to reset.
 
 To just run the compiled binary without bundling:
 `./src-tauri/target/release/heliosgen-desktop`
@@ -113,25 +111,18 @@ spctl -a -vvv "src-tauri/target/release/bundle/macos/HeliosGen.app"   # → acce
 xcrun stapler validate "src-tauri/target/release/bundle/dmg/HeliosGen_0.1.0_aarch64.dmg"
 ```
 
-## Importing web-app data (Supabase + R2 → local)
+## Local data store
 
-```bash
-nvm use 22
-node scripts/desktop/import-from-cloud.mjs --email you@example.com   # --dry to preview
-```
+`lib/guest/sqlite.ts` (SQLite via `node:sqlite`, built into Node 22 — no native
+dep) backs `lib/guest/db.ts` (generations, uploads, folders, settings, asset
+hashes) and `lib/guest/spaces.ts` (workflows, served to `useSpaceSync` via
+`app/api/workflows`). Media bytes go to `MEDIA_DIR` on disk and are served
+same-origin from `app/generated/[...path]/route.ts`. The loopback port is fixed
+(`41730`) so the webview's `localStorage` survives across launches.
 
-Pulls one user's `generations`, `user_uploads`, `folders`, `folder_items`,
-`user_settings`, and `spaces` from Supabase and downloads every referenced R2
-media file into the app data dir. Writes/merges `guest-db.json` +
-`guest-spaces.json`; media downloads are resumable. Creds come from `.env.local`.
-Media can be several GB. **Re-run then relaunch the app** — it re-imports the
-changed JSON into `guest.db` idempotently (`INSERT OR IGNORE`, so app edits win).
-
-Guest-mode store: `lib/guest/sqlite.ts` (SQLite via `node:sqlite`) backs
-`lib/guest/db.ts` and `lib/guest/spaces.ts`. Workflow persistence via
-`app/api/guest-spaces`
-back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
-(`41730`) so the webview's `localStorage` also survives across launches.
+Export a workflow (canvas toolbar → Export) to a `.zip` bundling `workflow.json`
+plus every referenced image/video — portable and shareable as a file
+(`lib/exportWorkflow.ts`).
 
 ## Status / remaining work
 
@@ -140,12 +131,11 @@ back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
       `HeliosGen.app` + `.dmg` build and launch; all routes serve, guest DB
       writes to `~/Library/Application Support/cash.sdd.helios.desktop/`.
 - [x] Phase 2 — kie.ai webhook replaced with polling (`lib/kieJobPoller.ts`).
-      In guest mode `/api/generate` + `/api/generate-video` start a background
-      poller against `/api/v1/jobs/recordInfo`; `/api/job-status` +
-      `/api/job-stream` restart it after a server restart. `CALLBACK_BASE_URL`
-      is no longer required in guest mode. Verified end-to-end (z-image, no
-      tunnel). **Gap:** Google Veo models (`/api/v1/veo/*`, different shape)
-      still need a callback — poller is skipped for them.
+      `/api/generate` + `/api/generate-video` start a background poller against
+      `/api/v1/jobs/recordInfo`; `/api/job-status` + `/api/job-stream` restart it
+      after a server restart. No callback URL needed. Verified end-to-end
+      (z-image, no tunnel). **Gap:** Google Veo models (`/api/v1/veo/*`,
+      different shape) still need a callback — poller is skipped for them.
 - [x] Phase 3 — reference/uploaded images reach kie.ai without a tunnel.
       `lib/kieUpload.ts` pushes local `/generated` + `data:` media to kie's temp
       store (`kieai.redpandaai.co/api/file-base64-upload`, 3-day retention) and
@@ -154,16 +144,15 @@ back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
       Verified end-to-end (nano-banana-2-lite image-to-image, no tunnel).
       **Gap:** video *file* inputs >10 MB should use kie's stream-upload API
       instead of base64.
-- [x] Local-only — no accounts. `NEXT_PUBLIC_GUEST_MODE` is baked at build,
-      `setAuthModalOpen` is a no-op, `AuthModal`/`ResetPasswordModal` aren't
-      mounted, `getAccessToken` returns "guest". Fixed loopback port (41730) so
-      `localStorage` survives launches; sidecar is killed on app exit.
+- [x] Local-only — no accounts, no Supabase, no R2. The web/cloud code path was
+      removed entirely (`@supabase/*` + `@aws-sdk/*` dropped); all storage is the
+      local SQLite DB + disk. Fixed loopback port (41730) so `localStorage`
+      survives launches; sidecar is killed on app exit.
 - [x] External CLIs — the shell resolves the login-shell `$PATH` for the sidecar
       so `ffmpeg`/`ffprobe` (video trim, frame extract) and `codex`/
       `codex-imagegen` (optional Codex provider) are found. They're not bundled;
       if absent the feature degrades cleanly (Codex badge shows NOT CONFIGURED,
       video-trim errors). Codex still needs a one-time `codex login` in Settings.
-- [x] Cloud import — `scripts/desktop/import-from-cloud.mjs` (see section above).
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to
       actually run.
@@ -174,14 +163,12 @@ back `useSpaceSync` with `guest-spaces.json`. The loopback port is fixed
       `components/UpdateBanner.tsx` shows a yellow "Update available" bar under
       the Kie banner; tapping it opens a modal with the release notes and a
       **Download** button (opens the release page via the external-link handler).
-      Guest/desktop only, no self-install. Cut a release by tagging `vX.Y.Z` on
-      GitHub with `version` bumped in `tauri.conf.json` to match.
+      No self-install. Cut a release by tagging `vX.Y.Z` on GitHub with `version`
+      bumped in `tauri.conf.json` to match.
       `NEXT_PUBLIC_UPDATE_CHECK_FORCE=1` (dev) forces the banner on for eyeballing.
-- [ ] Bundle size — down to ~330 MB stage / ~440 MB `.app` after moving `shadcn`
-      to devDeps and pruning `@next/swc` + off-platform sharp binaries. The
-      remaining bulk is the bundled Node runtime (~108 MB) and the prod
-      `node_modules` (~310 MB, mostly `@aws-sdk`, `@supabase`, `@base-ui`).
-      Further trimming needs code changes (lazy-load `@aws-sdk` in `lib/r2.ts`).
+- [ ] Bundle size — was ~330 MB stage / ~440 MB `.app`; dropping `@aws-sdk` +
+      `@supabase` (~web/cloud removal) should trim it further. Remaining bulk is
+      the bundled Node runtime (~108 MB) and the prod `node_modules`.
 
 Image and video generation — including from uploaded/reference images — work
 with no tunnel. Still needing work: Google Veo (needs a callback URL) and large

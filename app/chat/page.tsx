@@ -12,10 +12,8 @@ import { motion } from "motion/react";
 import Image from "next/image";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 import TypewriterHeading from "@/components/ui/TypewriterHeading";
-import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 import { loadAzureBaseUrl, loadAzureTextDeployment, loadAzureTextModelName } from "@/components/SettingsModal";
-import type { User } from "@supabase/supabase-js";
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
 
@@ -610,17 +608,6 @@ function ChatInner() {
   const [hydrated, setHydrated] = useState(false);
   const [landingModel, setLandingModel] = useState<ModelId>("claude-sonnet-4-6");
   const [pendingMessage, setPendingMessage] = useState("");
-  const [user, setUser] = useState<User | null>(null);
-  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user ?? null);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
 
   // Sync landingModel from store once hydrated
   useEffect(() => { if (hydrated) setLandingModel(preferredModel as ModelId); }, [hydrated]);
@@ -633,10 +620,7 @@ function ChatInner() {
 
   const activeSession = idParam ? (sessions.find(s => s.id === idParam) ?? null) : null;
 
-  const isGuestMode = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
-
   function handleLandingSubmit(text: string) {
-    if (!user && !isGuestMode) { setAuthModalOpen(true); return; }
     const id = createSession(landingModel, text.slice(0, 50));
     setPendingMessage(text);
     router.push(`/chat?id=${id}`);
@@ -659,7 +643,6 @@ function ChatInner() {
           onUpdate={(msgs, mdl) => upsertSession(activeSession.id, msgs, mdl)}
           defaultModel={preferredModel}
           onModelChange={setPreferredModel}
-          onAuthRequired={!user && !isGuestMode ? () => setAuthModalOpen(true) : undefined}
           initialMessage={pendingMessage || undefined}
         />
       ) : (

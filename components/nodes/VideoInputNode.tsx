@@ -5,13 +5,11 @@ import { Handle, Position, NodeProps, Node, useReactFlow, useUpdateNodeInternals
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
-import { createClient } from "@/lib/supabase/client";
 import { sha256Hex } from "@/lib/assetHash";
 
 type VideoInputNodeType = Node<NodeData, "videoInputNode">;
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 const IMAGE_HANDLES = new Set(["startFrame", "endFrame", "resource", "image"]);
 
 const VIDEO_SRC_COLORS: Record<string, string> = {
@@ -215,11 +213,9 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       const w = v.videoWidth  || 1280;
       const h = v.videoHeight || 720;
 
-      // Use a temporary off-screen video via our CORS proxy so the canvas isn't tainted.
-      // Blob URLs (local uploads) are same-origin and don't need a proxy.
-      const proxyUrl = srcUrl.startsWith("blob:")
-        ? srcUrl
-        : `/api/video-proxy?url=${encodeURIComponent(srcUrl)}`;
+      // All video sources are same-origin (blob: uploads or /generated/... on disk),
+      // so the canvas isn't tainted — no CORS proxy needed.
+      const proxyUrl = srcUrl;
 
       let blurDataUrl = "";
       const blob: Blob = await new Promise((resolve, reject) => {
@@ -260,10 +256,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       });
 
       const bytes = await blob.arrayBuffer();
-      const { data: authData } = await createClient().auth.getSession();
-      const token = authData.session?.access_token;
       const authHeaders: Record<string, string> = {};
-      if (token) authHeaders["Authorization"] = `Bearer ${token}`;
 
       const res  = await fetch("/api/upload-asset", {
         method: "POST",
@@ -340,10 +333,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     updateNodeData(id, { extractingFrame: true });
     addToast("Extracting frame…", "info");
     try {
-      const { data: authData } = await createClient().auth.getSession();
-      const token = authData.session?.access_token;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
       const nodeData = useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data;
       const tStart = nodeData?.trimStart as number | undefined;
       const tEnd   = nodeData?.trimEnd   as number | undefined;
@@ -396,7 +386,6 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   // ── Video upload ─────────────────────────────────────────────────────────────
 
   const loadFile = useCallback(async (file: File) => {
-    if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; }
     setUploadErr(null);
 
     if (!file.type.startsWith("video/")) { setUploadErr("Please select a video file"); return; }
@@ -404,10 +393,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
 
     const bytes = await file.arrayBuffer();
     const hash  = await sha256Hex(bytes);
-    const { data: authData } = await createClient().auth.getSession();
-    const token = authData.session?.access_token;
     const authHeaders: Record<string, string> = {};
-    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
 
     try {
       const lookupRes = await fetch(`/api/lookup-asset?hash=${hash}`, { headers: authHeaders });
@@ -980,7 +966,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                 <div className="absolute bottom-2 left-0 right-0 flex justify-center items-center px-2.5 opacity-0 group-hover/player:opacity-100 transition-opacity z-10 node-slide-reveal">
                   <button
                     onMouseDown={(e) => e.stopPropagation()}
-                    onClick={() => { if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; } fileRef.current?.click(); }}
+                    onClick={() => { fileRef.current?.click(); }}
                     className="h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors pointer-events-auto"
                   >replace</button>
                 </div>
@@ -1404,7 +1390,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
         <div
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
-          onClick={() => { if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; } fileRef.current?.click(); }}
+          onClick={() => { fileRef.current?.click(); }}
           className="border border-dashed border-[#22d3ee]/20 hover:border-[#22d3ee]/40 rounded-md cursor-pointer transition-colors py-8 text-center"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" className="mx-auto mb-2 opacity-40">

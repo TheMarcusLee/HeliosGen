@@ -5,13 +5,11 @@ import NextImage from "next/image";
 import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { createClient } from "@/lib/supabase/client";
 import { sha256Hex } from "@/lib/assetHash";
 
 
 type ImageInputNodeType = Node<NodeData, "imageInputNode">;
 
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export default function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
@@ -87,19 +85,15 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         if (src.startsWith("data:") || src.startsWith("http")) {
           (async () => {
             try {
-              const { data: { session } } = await createClient().auth.getSession();
-              const headers: Record<string, string> = { "Content-Type": "application/json" };
-              if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-
-              const r = await fetch("/api/upload-to-r2", {
+              const r = await fetch("/api/upload", {
                 method: "POST",
-                headers,
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ dataUrl: src, folder: "uploads", mimeType }),
               });
               const { cdnUrl } = await r.json();
               if (cdnUrl) updateNodeData(id, { r2Url: cdnUrl });
             } catch {
-              // R2 unavailable — base64 stays as fallback
+              // storage unavailable — base64 stays as fallback
             }
           })();
         }
@@ -111,15 +105,11 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
 
   const loadFile = useCallback(
     async (file: File) => {
-      if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; }
       // Read as ArrayBuffer — needed for hashing and direct binary upload
       const bytes = await file.arrayBuffer();
       const hash  = await sha256Hex(bytes);
 
-      const { data: { session } } = await createClient().auth.getSession();
-      const authToken = session?.access_token;
       const authHeaders: Record<string, string> = {};
-      if (authToken) authHeaders["Authorization"] = `Bearer ${authToken}`;
 
       // ── Cache lookup: skip upload if already in R2 ───────────────────────
       try {
@@ -348,7 +338,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           <div className="absolute bottom-2 left-0 right-0 flex justify-center px-2.5 opacity-0 group-hover:opacity-100 transition-opacity node-slide-reveal">
             <button
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => { if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; } fileRef.current?.click(); }}
+              onClick={() => { fileRef.current?.click(); }}
               className="h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors relative z-10"
             >
               replace
@@ -496,7 +486,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         <div
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
-          onClick={() => { if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; } fileRef.current?.click(); }}
+          onClick={() => { fileRef.current?.click(); }}
           className="border border-dashed border-[#1E2840] hover:border-[#243050] rounded-md cursor-pointer transition-colors py-8 text-center"
         >
           <p className="text-[11px] text-[#A0A0A0]">

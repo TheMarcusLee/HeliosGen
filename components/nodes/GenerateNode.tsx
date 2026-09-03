@@ -8,7 +8,6 @@ import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyfl
 import CornerResizer from "./CornerResizer";
 import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { createClient } from "@/lib/supabase/client";
 import { resolveInputs } from "@/lib/executor";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { browserNotify, requestNotificationPermission } from "@/lib/browserNotify";
@@ -168,7 +167,6 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize = useWorkflowStore((s) => s.updateNodeSize);
   const removeEdgesForHandle = useWorkflowStore((s) => s.removeEdgesForHandle);
-  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
   const flashEdgeError = useWorkflowStore((s) => s.flashEdgeError);
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
   const addNode = useWorkflowStore((s) => s.addNode);
@@ -569,14 +567,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
   const generate = useCallback(async () => {
     requestNotificationPermission();
-    let accessToken: string;
-    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
-      accessToken = "guest";
-    } else {
-      const { data: authData } = await createClient().auth.getSession();
-      if (!authData.session) { setAuthModalOpen(true); return; }
-      accessToken = authData.session.access_token;
-    }
+    const accessToken = "guest";
 
     // Extract frames from VideoInputNodes on the image handle that lack a capturedFrameUrl.
     // Uses trimEnd if set (end frame), otherwise trimStart ?? 0 (start / first frame).

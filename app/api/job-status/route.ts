@@ -1,49 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { resumeKieJob } from "@/lib/kieJobPoller";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { GUEST_MODE } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
-async function recoverJob(taskId: string): Promise<"done" | "error" | "pending" | "not_found"> {
-  if (GUEST_MODE) {
-    const gen = guestDb.recoverJob(taskId);
-    if (!gen) return "not_found";
-    if (gen.status === "done") {
-      const result = gen.video_url
-        ? { status: "done" as const, videoUrl: gen.video_url }
-        : { status: "done" as const, imageUrl: gen.image_url ?? undefined, imageUrls: gen.image_urls ?? undefined };
-      jobStore.set(taskId, result);
-      return "done";
-    }
-    if (gen.status === "error") {
-      jobStore.set(taskId, { status: "error", error: gen.error_msg ?? "Generation failed" });
-      return "error";
-    }
-    return "pending";
-  }
-
-  const { data: gen } = await supabaseAdmin
-    .from("generations")
-    .select("status, video_url, image_url, image_urls, error_msg")
-    .eq("task_id", taskId)
-    .single();
-
+function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" {
+  const gen = guestDb.recoverJob(taskId);
   if (!gen) return "not_found";
-
   if (gen.status === "done") {
     const result = gen.video_url
       ? { status: "done" as const, videoUrl: gen.video_url }
-      : { status: "done" as const, imageUrl: gen.image_url, imageUrls: gen.image_urls };
+      : { status: "done" as const, imageUrl: gen.image_url ?? undefined, imageUrls: gen.image_urls ?? undefined };
     jobStore.set(taskId, result);
     return "done";
   }
-
   if (gen.status === "error") {
     jobStore.set(taskId, { status: "error", error: gen.error_msg ?? "Generation failed" });
     return "error";
   }
-
   return "pending";
 }
 
@@ -57,21 +30,21 @@ export async function GET(req: NextRequest) {
 
   // Task known to local store — return as-is, no kie.ai polling
   if (result) {
-    // Desktop/guest: if a restart killed the background poller for a job that's
-    // still pending, restart it so the result can still land.
-    if (GUEST_MODE && result.status === "pending" && !taskId.startsWith("azure-")) {
+    // If a restart killed the background poller for a job that's still pending,
+    // restart it so the result can still land.
+    if (result.status === "pending" && !taskId.startsWith("azure-")) {
       resumeKieJob(taskId, result.type === "video" ? "video" : "image");
     }
     return NextResponse.json(result);
   }
 
   // Task not in local store (server restarted / cold start).
-  // Azure jobs have no Supabase record and can't be recovered.
+  // Azure jobs have no DB record and can't be recovered.
   if (taskId.startsWith("azure-")) {
     return NextResponse.json({ status: "not_found" });
   }
 
-  const recovered = await recoverJob(taskId);
+  const recovered = recoverJob(taskId);
 
   if (recovered === "done" || recovered === "error") {
     return NextResponse.json(jobStore.get(taskId)!);

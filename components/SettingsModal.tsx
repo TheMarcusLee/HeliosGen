@@ -2,7 +2,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { MODEL_GROUPS } from "@/lib/models";
-import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 import { PROVIDERS, ProviderId, loadModelProviders, saveModelProviders, getModelProvider } from "@/lib/providers";
 
@@ -1349,10 +1348,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   async function authHeader(): Promise<Record<string, string>> {
-    const { data: { session } } = await createClient().auth.getSession();
-    const h: Record<string, string> = {};
-    if (session?.access_token) h["Authorization"] = `Bearer ${session.access_token}`;
-    return h;
+    return {};
   }
 
   const refreshCodexStatus = useCallback(() => {

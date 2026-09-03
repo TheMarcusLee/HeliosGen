@@ -2,14 +2,13 @@
 import { useEffect, useState } from "react";
 
 /**
- * Desktop-only "Update available" bar, styled like {@link KieBanner} but amber.
+ * "Update available" bar, styled like {@link KieBanner} but amber.
  * Polls `/api/update-check` (GitHub latest release vs the bundled version);
  * tapping the bar opens a modal with the release notes and a Download link.
  * No self-install — Download just opens the release page in the OS browser
  * (caught by {@link DesktopLinkHandler}).
  */
 
-const GUEST = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
 const DISMISS_KEY = "helios-update-dismissed"; // holds the version the user dismissed
 
 const AMBER = "245,158,11";
@@ -30,7 +29,6 @@ export default function UpdateBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (!GUEST) return;
     let alive = true;
     fetch("/api/update-check")
       .then((r) => (r.ok ? r.json() : null))
@@ -58,7 +56,7 @@ export default function UpdateBanner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  if (!GUEST || !info?.updateAvailable || dismissed) return null;
+  if (!info?.updateAvailable || dismissed) return null;
 
   const dismiss = (e: React.SyntheticEvent) => {
     e.stopPropagation();

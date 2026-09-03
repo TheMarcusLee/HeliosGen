@@ -5,7 +5,7 @@ export default function KieBanner() {
   const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
   const setSettingsOpen = useWorkflowStore((s) => s.setSettingsOpen);
 
-  if (kieKeySet !== false || process.env.NEXT_PUBLIC_DEMO_MODE === "true") return null;
+  if (kieKeySet !== false) return null;
 
   return (
     <button

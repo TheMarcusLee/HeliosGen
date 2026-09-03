@@ -13,8 +13,7 @@
  */
 import { jobStore, type JobResult } from "./jobStore";
 import { jobEvents } from "./jobEvents";
-import { mirrorToR2 } from "./r2";
-import { GUEST_MODE } from "./guestMode";
+import { mirrorToR2 } from "./storage";
 import * as guestDb from "./guest/db";
 
 const BASE = "https://api.kie.ai";
@@ -56,7 +55,7 @@ function isKieTaskId(taskId: string): boolean {
  * no key is configured, or if the task belongs to a non-kie local provider.
  */
 export function resumeKieJob(taskId: string, kind: Kind): void {
-  if (!GUEST_MODE || active.has(taskId) || !isKieTaskId(taskId)) return;
+  if (active.has(taskId) || !isKieTaskId(taskId)) return;
   const key = guestDb.getKieApiToken();
   if (!key) return;
   pollKieJob(taskId, key, kind);
@@ -158,7 +157,6 @@ function settle(taskId: string, kind: Kind, result: JobResult): void {
   jobStore.set(taskId, result);
   jobEvents.emit(`job:${taskId}`, result);
 
-  if (!GUEST_MODE) return;
   if (result.status === "done") {
     guestDb.updateGeneration(
       taskId,

@@ -103,9 +103,8 @@ rmSync(join(ROOT, ".next", "standalone"), { recursive: true, force: true });
 console.log("[desktop] next build (standalone)…");
 run("node", [join(ROOT, "node_modules", "next", "dist", "bin", "next"), "build"], {
   DESKTOP_BUILD: "1",
-  // Baked into the client bundle — the desktop app is always guest mode, and
-  // NEXT_PUBLIC_* vars can't be set at runtime by the Tauri shell.
-  NEXT_PUBLIC_GUEST_MODE: "true",
+  // Baked into the client bundle — NEXT_PUBLIC_* vars can't be set at runtime
+  // by the Tauri shell.
   NEXT_PUBLIC_APP_VERSION: APP_VERSION,
 });
 

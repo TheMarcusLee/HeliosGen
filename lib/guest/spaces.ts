@@ -1,8 +1,8 @@
 import { db } from "./sqlite";
 
 /**
- * Guest-mode persistence for workflow "spaces" (node canvases). SQLite-backed
- * (see ./sqlite); the hosted app uses the Supabase `spaces` table instead.
+ * Local persistence for workflow "spaces" (node canvases). SQLite-backed
+ * (see ./sqlite).
  */
 export interface GuestSpace {
   id: string;
@@ -13,7 +13,6 @@ export interface GuestSpace {
   createdAt: number;
   updatedAt?: number;
   viewport?: { x: number; y: number; zoom: number };
-  isPublic?: boolean;
 }
 
 export function getSpaces(): GuestSpace[] {

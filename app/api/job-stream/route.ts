@@ -2,8 +2,6 @@ import { NextRequest } from "next/server";
 import { jobStore, type JobResult } from "@/lib/jobStore";
 import { jobEvents } from "@/lib/jobEvents";
 import { resumeKieJob } from "@/lib/kieJobPoller";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { GUEST_MODE } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
 const SSE_HEADERS = {
@@ -18,30 +16,12 @@ function immediate(payload: JobResult): Response {
   return new Response(`data: ${JSON.stringify(payload)}\n\n`, { headers: SSE_HEADERS });
 }
 
-async function recoverJob(taskId: string): Promise<JobResult | null> {
-  if (GUEST_MODE) {
-    const gen = guestDb.recoverJob(taskId);
-    if (gen?.status === "done") {
-      return gen.video_url
-        ? { status: "done", videoUrl: gen.video_url }
-        : { status: "done", imageUrl: gen.image_url ?? undefined, imageUrls: gen.image_urls ?? undefined };
-    }
-    if (gen?.status === "error") {
-      return { status: "error", error: gen.error_msg ?? "Generation failed" };
-    }
-    return null;
-  }
-
-  const { data: gen } = await supabaseAdmin
-    .from("generations")
-    .select("status, video_url, image_url, image_urls, error_msg")
-    .eq("task_id", taskId)
-    .single();
-
+function recoverJob(taskId: string): JobResult | null {
+  const gen = guestDb.recoverJob(taskId);
   if (gen?.status === "done") {
     return gen.video_url
       ? { status: "done", videoUrl: gen.video_url }
-      : { status: "done", imageUrl: gen.image_url, imageUrls: gen.image_urls };
+      : { status: "done", imageUrl: gen.image_url ?? undefined, imageUrls: gen.image_urls ?? undefined };
   }
   if (gen?.status === "error") {
     return { status: "error", error: gen.error_msg ?? "Generation failed" };
@@ -60,17 +40,17 @@ export async function GET(req: NextRequest) {
   }
 
   if (!existing) {
-    const recovered = await recoverJob(taskId);
+    const recovered = recoverJob(taskId);
     if (recovered) {
       jobStore.set(taskId, recovered);
       return immediate(recovered);
     }
-    // Not in Supabase either — truly not found
+    // No DB record either — truly not found
     return immediate({ status: "error", error: "Job not found" });
   }
 
-  // Desktop/guest: restart the kie.ai poller if a server restart lost it.
-  if (GUEST_MODE && !taskId.startsWith("azure-")) {
+  // Restart the kie.ai poller if a server restart lost it.
+  if (!taskId.startsWith("azure-")) {
     resumeKieJob(taskId, existing.type === "video" ? "video" : "image");
   }
 

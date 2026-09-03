@@ -4,19 +4,17 @@
  * Unified raw-binary upload for images and videos.
  * Body  : raw file bytes
  * Headers:
- *   Content-Type  : MIME type of the file (image/jpeg, video/mp4, …)
- *   Authorization : Bearer <supabase-token>  (optional)
+ *   Content-Type : MIME type of the file (image/jpeg, video/mp4, …)
  *
  * Flow:
  *   1. Read body as Buffer
- *   2. Deduplication happens inside uploadBuffer (lib/r2.ts)
- *   3. Record in user_uploads if authenticated
- *   4. Return CDN URL
+ *   2. Deduplication happens inside uploadBuffer (lib/storage.ts)
+ *   3. Record in uploads
+ *   4. Return stored URL
  */
 import { NextRequest, NextResponse } from "next/server";
-import { uploadBuffer } from "@/lib/r2";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import { uploadBuffer } from "@/lib/storage";
+import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
 export const maxDuration = 60;
@@ -39,25 +37,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File exceeds 100 MB limit" }, { status: 413 });
     }
 
-    // ── Upload to R2 (Deduplication happens inside uploadBuffer) ──────────────
+    // ── Store on local disk (dedupe happens inside uploadBuffer) ─────────────
     const folder  = mimeType.startsWith("video/") ? "references" : "uploads";
     const cdnUrl  = await uploadBuffer(buffer, mimeType, folder);
 
-    const userId = await resolveUserId(req);
-    if (userId) {
-      if (GUEST_MODE) {
-        guestDb.insertUpload({ user_id: userId, r2_url: cdnUrl, mime_type: mimeType, source: "user_upload" });
-      } else {
-        supabaseAdmin.from("user_uploads").insert({
-          user_id:   userId,
-          r2_url:    cdnUrl,
-          mime_type: mimeType,
-          source:    "user_upload",
-        }).then(({ error }) => {
-          if (error) console.error("[upload-asset] db insert error:", error.message);
-        });
-      }
-    }
+    guestDb.insertUpload({ user_id: GUEST_USER_ID, r2_url: cdnUrl, mime_type: mimeType, source: "user_upload" });
 
     return NextResponse.json({ cdnUrl });
   } catch (e: unknown) {
