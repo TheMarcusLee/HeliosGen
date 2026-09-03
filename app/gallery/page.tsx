@@ -3285,6 +3285,21 @@ function GalleryInner() {
       {/* ── Prompt bar ── */}
       <div
         ref={promptBarRef}
+        onDragOver={e => {
+          // OS file drag (Finder/Explorer): make the WHOLE prompt bar a drop target.
+          if (Array.from(e.dataTransfer.types).includes("Files")) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDrop={e => {
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleFilePick(e.dataTransfer.files);
+          }
+        }}
         style={{
           position: "fixed",
           bottom: "32px",
