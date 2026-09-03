@@ -3,12 +3,11 @@
  * the running build exists and hands the frontend (`components/UpdateBanner.tsx`)
  * everything it needs to show the "Update available" bar + changelog modal.
  *
- * Guest/desktop only. No self-install — the banner just links to the release
- * page. The running version is `NEXT_PUBLIC_APP_VERSION`, baked from
- * `src-tauri/tauri.conf.json` by `scripts/desktop/build-server.mjs` / `dev.mjs`.
+ * No self-install — the banner just links to the release page. The running
+ * version is `NEXT_PUBLIC_APP_VERSION`, baked from `src-tauri/tauri.conf.json`
+ * by `scripts/desktop/build-server.mjs` / `dev.mjs`.
  */
 import { NextResponse } from "next/server";
-import { GUEST_MODE } from "@/lib/guestMode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,10 +109,6 @@ async function check(): Promise<UpdatePayload> {
 }
 
 export async function GET() {
-  if (!GUEST_MODE) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
-
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
     return NextResponse.json(cache.data);
   }

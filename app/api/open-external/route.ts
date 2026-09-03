@@ -3,11 +3,10 @@
  * `window.open` / `target="_blank"`, so external links are routed here instead
  * (the Next.js server runs as a local child of the app and can shell out).
  *
- * Guest/desktop only. http(s) URLs only.
+ * http(s) URLs only.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
-import { GUEST_MODE } from "@/lib/guestMode";
 
 export const runtime = "nodejs";
 
@@ -18,8 +17,6 @@ function opener(): { cmd: string; args: string[] } {
 }
 
 export async function POST(req: NextRequest) {
-  if (!GUEST_MODE) return NextResponse.json({ error: "not found" }, { status: 404 });
-
   let url: string;
   try {
     url = (await req.json()).url;

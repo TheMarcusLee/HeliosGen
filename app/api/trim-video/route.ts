@@ -5,7 +5,7 @@
  * Returns: { cdnUrl: string }
  */
 import { NextRequest, NextResponse } from "next/server";
-import { uploadBuffer } from "@/lib/r2";
+import { uploadBuffer } from "@/lib/storage";
 import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";

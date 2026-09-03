@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { rewriteLocalMediaForKie } from "@/lib/kieUpload";
-import { ensureR2 } from "@/lib/r2";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { ensureR2 } from "@/lib/storage";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
-import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
 const KIE_BASE = "https://api.kie.ai";
@@ -49,17 +48,13 @@ export async function POST(req: NextRequest) {
     debugOnly       = false,
   } = body;
 
-  const userId = await resolveUserId(req);
+  const userId = GUEST_USER_ID;
 
-  const apiKey = (userId ? await getKieTokenForUser(userId) : null) ?? process.env.KIE_API_TOKEN ?? null;
+  const apiKey = (await getKieTokenForUser()) ?? process.env.KIE_API_TOKEN ?? null;
   if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
-  const callbackBase = process.env.CALLBACK_BASE_URL;
-  const callBackUrl = rawCallBackUrl || (callbackBase ? `${callbackBase.replace(/\/$/, "")}/api/callback` : undefined);
-  // Guest/desktop mode polls kie.ai directly (lib/kieJobPoller) — no callback URL needed.
-  if (!callBackUrl && !GUEST_MODE) {
-    return NextResponse.json({ error: "callBackUrl or CALLBACK_BASE_URL not set" }, { status: 500 });
-  }
+  // The app polls kie.ai directly (lib/kieJobPoller) — no callback URL needed.
+  const callBackUrl = rawCallBackUrl || undefined;
 
   const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
   if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
@@ -388,17 +383,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Desktop/guest without a tunnel: kie.ai can't fetch our local reference
-  // media, so re-host any /generated or data: URLs in the payload first.
-  if (GUEST_MODE) {
-    try {
-      await rewriteLocalMediaForKie(input, apiKey);
-    } catch (e) {
-      return NextResponse.json(
-        { error: `Couldn't upload reference media to kie.ai: ${(e as Error).message}` },
-        { status: 502 },
-      );
-    }
+  // kie.ai can't fetch our local reference media, so re-host any /generated or
+  // data: URLs in the payload first.
+  try {
+    await rewriteLocalMediaForKie(input, apiKey);
+  } catch (e) {
+    return NextResponse.json(
+      { error: `Couldn't upload reference media to kie.ai: ${(e as Error).message}` },
+      { status: 502 },
+    );
   }
 
   // Submit task to kie.ai
@@ -452,8 +445,6 @@ export async function POST(req: NextRequest) {
   // Register as pending so the frontend can poll job-status
   jobStore.set(taskId, { status: "pending", type: "video", userId: userId ?? undefined });
 
-  // Save to Supabase (fire-and-forget)
-
   const referenceUrls: string[] = apiInput.useMotionControl
     ? [
         ...((input.input_urls as string[] | undefined) ?? []),
@@ -480,35 +471,17 @@ export async function POST(req: NextRequest) {
           ?.map((el) => el.element_input_urls[0]) ?? []),
       ];
 
-  if (GUEST_MODE) {
-    guestDb.insertGeneration({
-      task_id: taskId, user_id: userId, generation_type: "video",
-      status: "pending", model: videoModel, prompt, aspect_ratio: effectiveAspectRatio,
-      duration: clampedDuration, kling_mode: mode,
-      sound: cfg.sound ? Boolean(sound) : false,
-      reference_image_urls: referenceUrls,
-    });
-    if (apiInput.useGoogleVeo) {
-      console.warn("[generate-video] Veo has no jobs-API polling yet — result needs a callback URL");
-    } else {
-      pollKieJob(taskId, apiKey, "video");
-    }
+  guestDb.insertGeneration({
+    task_id: taskId, user_id: userId, generation_type: "video",
+    status: "pending", model: videoModel, prompt, aspect_ratio: effectiveAspectRatio,
+    duration: clampedDuration, kling_mode: mode,
+    sound: cfg.sound ? Boolean(sound) : false,
+    reference_image_urls: referenceUrls,
+  });
+  if (apiInput.useGoogleVeo) {
+    console.warn("[generate-video] Veo has no jobs-API polling yet — result needs a callback URL");
   } else {
-    supabaseAdmin.from("generations").insert({
-      task_id:              taskId,
-      user_id:              userId,
-      generation_type:      "video",
-      status:               "pending",
-      model:                videoModel,
-      prompt,
-      aspect_ratio:         effectiveAspectRatio,
-      duration:             clampedDuration,
-      kling_mode:           mode,
-      sound:                cfg.sound ? Boolean(sound) : false,
-      reference_image_urls: referenceUrls,
-    }).then(({ error }) => {
-      if (error) console.error("[generate-video] supabase insert error:", error.message);
-    });
+    pollKieJob(taskId, apiKey, "video");
   }
 
   return NextResponse.json({ taskId });

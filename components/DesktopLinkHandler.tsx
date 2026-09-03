@@ -5,7 +5,6 @@ import { useEffect } from "react";
  * In the desktop build the webview would open external links inside the app (or
  * not at all). Intercept `window.open` and clicks on external / `target="_blank"`
  * anchors and hand the URL to the OS default browser via `/api/open-external`.
- * Rendered only when NEXT_PUBLIC_GUEST_MODE (i.e. the desktop app).
  */
 export default function DesktopLinkHandler() {
   useEffect(() => {

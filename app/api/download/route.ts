@@ -6,18 +6,16 @@
  * Only allowed origins are proxied.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { GUEST_MODE } from "@/lib/guestMode";
 
 const ALLOWED_ORIGINS = [
-  process.env.R2_PUBLIC_URL ?? "",
   "https://cdn.kie.ai",
   "https://api.kie.ai",
   "https://replicate.delivery",
   "https://pbxt.replicate.delivery",
-].filter(Boolean).map((o) => o.replace(/\/$/, ""));
+].map((o) => o.replace(/\/$/, ""));
 
 function isAllowed(url: string): boolean {
-  if (GUEST_MODE && url.startsWith("/generated/")) return true; // local disk, served same-origin
+  if (url.startsWith("/generated/")) return true; // local disk, served same-origin
   return ALLOWED_ORIGINS.some((origin) => url.startsWith(origin));
 }
 
@@ -31,7 +29,7 @@ export async function GET(req: NextRequest) {
   if (!isAllowed(url)) return new NextResponse("Forbidden", { status: 403 });
 
   let fetchUrl = url;
-  if (GUEST_MODE && url.startsWith("/generated/")) {
+  if (url.startsWith("/generated/")) {
     const resolved = new URL(url, req.nextUrl.origin);
     // Re-check after normalization: rejects "/generated/../api/..." traversal
     // that would otherwise turn this proxy into same-origin SSRF.

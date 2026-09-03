@@ -38,19 +38,9 @@ interface FolderState {
   setUnseenAllAssets: (v: boolean) => void;
 }
 
-async function getAuthToken(): Promise<string | null> {
-  if (typeof window === "undefined") return null;
-  if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") return "guest";
-  const { createClient } = await import("./supabase/client");
-  const { data } = await createClient().auth.getSession();
-  return data.session?.access_token ?? null;
-}
-
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getAuthToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers ?? {}),
   };
   return fetch(url, { ...options, headers });

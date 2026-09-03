@@ -1,7 +1,7 @@
 <p align="center">
-  <img 
-    src="https://helios.sdd.cash/HG.svg" 
-    alt="HeliosGen Banner" 
+  <img
+    src="https://raw.githubusercontent.com/SegFault42/HeliosGen/main/public/HG.svg"
+    alt="HeliosGen"
     width="64"
   />
 </p>

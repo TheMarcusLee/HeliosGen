@@ -137,8 +137,6 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production")
-        .env("GUEST_MODE", "true")
-        .env("NEXT_PUBLIC_GUEST_MODE", "true")
         .env("HELIOS_DATA_DIR", data_dir.to_string_lossy().to_string())
         .env("HELIOS_MEDIA_DIR", media_dir.to_string_lossy().to_string())
         .spawn()?;

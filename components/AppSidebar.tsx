@@ -4,11 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
 import { useFolderStore } from "@/lib/folderStore";
-import type { User } from "@supabase/supabase-js";
 import {
   Workflow,
   Image as ImageIcon,
@@ -17,8 +15,6 @@ import {
   MessageSquare,
   Settings,
   MoreHorizontal,
-  LogOut,
-  User as UserIcon,
   Bot,
   Pencil,
   Trash2,
@@ -674,65 +670,27 @@ export function AppSidebar() {
   const tab = searchParams.get("tab") ?? "images";
   const activeChatId = searchParams.get("id");
 
-  const [user, setUser] = React.useState<User | null>(null);
   const [balance, setBalance] = React.useState<number | null>(null);
 
-  const setAuthModalOpen  = useWorkflowStore((s) => s.setAuthModalOpen);
   const setSettingsOpen   = useWorkflowStore((s) => s.setSettingsOpen);
   const setKieKeySet      = useWorkflowStore((s) => s.setKieKeySet);
   const setAzureKeySet    = useWorkflowStore((s) => s.setAzureKeySet);
-  const clearLocalData    = useWorkflowStore((s) => s.clearLocalData);
-  const clearSessions     = useChatSessionStore((s) => s.clearSessions);
-  const supabase = createClient();
 
   React.useEffect(() => {
-    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
-      fetch("/api/settings/kie-key")
-        .then((r) => r.json())
-        .then((d) => setKieKeySet(!!d.hasToken))
-        .catch(() => setKieKeySet(null));
-      fetch("/api/settings/azure-key")
-        .then((r) => r.json())
-        .then((d) => setAzureKeySet(!!d.hasToken))
-        .catch(() => setAzureKeySet(null));
-      return;
-    }
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      if (data.user) useChatSessionStore.getState().loadFromSupabase();
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.access_token) {
-        fetch("/api/settings/kie-key", { headers: { Authorization: `Bearer ${session.access_token}` } })
-          .then((r) => r.json())
-          .then((d) => setKieKeySet(!!d.hasToken))
-          .catch(() => {});
-        fetch("/api/settings/azure-key", { headers: { Authorization: `Bearer ${session.access_token}` } })
-          .then((r) => r.json())
-          .then((d) => setAzureKeySet(!!d.hasToken))
-          .catch(() => {});
-        useChatSessionStore.getState().loadFromSupabase();
-      } else {
-        setKieKeySet(null);
-        setAzureKeySet(null);
-        if (event === "SIGNED_OUT") {
-          clearLocalData();
-          clearSessions();
-        }
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [supabase, setKieKeySet, setAzureKeySet]);
+    fetch("/api/settings/kie-key")
+      .then((r) => r.json())
+      .then((d) => setKieKeySet(!!d.hasToken))
+      .catch(() => setKieKeySet(null));
+    fetch("/api/settings/azure-key")
+      .then((r) => r.json())
+      .then((d) => setAzureKeySet(!!d.hasToken))
+      .catch(() => setAzureKeySet(null));
+  }, [setKieKeySet, setAzureKeySet]);
 
   React.useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: HeadersInit = session?.access_token
-          ? { Authorization: `Bearer ${session.access_token}` }
-          : {};
-        const res = await fetch("/api/credit", { headers });
+        const res = await fetch("/api/credit");
         if (!res.ok) return;
         const data = await res.json();
         const val = typeof data?.data === "number"
@@ -745,17 +703,9 @@ export function AppSidebar() {
     const id = setInterval(fetchBalance, 60_000);
     window.addEventListener("credits-refresh", fetchBalance);
     return () => { clearInterval(id); window.removeEventListener("credits-refresh", fetchBalance); };
-  }, [supabase]);
+  }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    clearLocalData();
-    clearSessions();
-  };
-
-  const { sessions: allSessions, deleteSession } = useChatSessionStore();
-  const isGuestMode = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
-  const sessions = (user || isGuestMode) ? allSessions : [];
+  const { sessions, deleteSession } = useChatSessionStore();
 
   const {
     folders, selectedFolderId, itemFolderMap,
@@ -771,10 +721,8 @@ export function AppSidebar() {
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
-    if (user || isGuestMode) {
-      loadFromServer();
-    }
-  }, [user, isGuestMode, loadFromServer]);
+    loadFromServer();
+  }, [loadFromServer]);
 
   function startNewChat() {
     router.push("/chat");
@@ -830,11 +778,8 @@ export function AppSidebar() {
     });
   }
 
-  const displayName = user
-    ? (user.user_metadata?.full_name || user.email?.split("@")[0] || "User")
-    : "";
-
-  const avatarSeed = user?.id || "guest";
+  const displayName = "";
+  const avatarSeed = "guest";
 
   const folderParam = selectedFolderId ? `&folder=${selectedFolderId}` : "";
   const navItems = [
@@ -843,7 +788,7 @@ export function AppSidebar() {
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
-    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); if (user || process.env.NEXT_PUBLIC_GUEST_MODE === "true") setSettingsOpen(true); else setAuthModalOpen(true); } },
+    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); setSettingsOpen(true); } },
   ];
 
   const itemCls = (active: boolean, disabled?: boolean) => cn(
@@ -1098,35 +1043,11 @@ export function AppSidebar() {
 
             {/* Settings */}
             <DropdownMenuItem
-              className="rounded-none px-4 py-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-              onClick={() => (user || process.env.NEXT_PUBLIC_GUEST_MODE === "true") ? setSettingsOpen(true) : setAuthModalOpen(true)}
+              className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
+              onClick={() => setSettingsOpen(true)}
             >
               Settings
             </DropdownMenuItem>
-
-            {/* Sign out / Sign in — hidden in guest mode */}
-            {process.env.NEXT_PUBLIC_GUEST_MODE !== "true" && (
-              <>
-                <DropdownMenuSeparator className="!bg-white/[0.07] !my-0 !mx-0" />
-                {user ? (
-                  <DropdownMenuItem
-                    className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-                    onClick={signOut}
-                  >
-                    <LogOut size={14} className="mr-2 opacity-60" />
-                    Sign out
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-                    onClick={() => setAuthModalOpen(true)}
-                  >
-                    <UserIcon size={14} className="mr-2 opacity-60" />
-                    Sign in
-                  </DropdownMenuItem>
-                )}
-              </>
-            )}
           </DropdownMenuContent>
 
         </DropdownMenu>

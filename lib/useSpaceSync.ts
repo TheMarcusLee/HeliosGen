@@ -1,12 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWorkflowStore, Space } from "./store";
-import { createClient } from "./supabase/client";
 import { SYNC_NOW_EVENT, requestWorkflowSync } from "./workflowSyncBus";
 
 const DEBOUNCE_MS  = 1_500; // continuous edits (drag frames, typing): coalesce
 const IMMEDIATE_MS = 250;   // discrete edits (add/delete/connect/resize-end): near-instant, still coalesces a burst
-const GUEST = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
 
 export type SyncStatus = "idle" | "syncing" | "synced" | "error";
 
@@ -18,9 +16,9 @@ export function useSpaceSync() {
 
   const [status,       setStatus]       = useState<SyncStatus>("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  // Block all Supabase writes until localStorage has fully rehydrated.
-  // In Zustand v5, persist rehydration is async — if we save before it
-  // completes, we'd write the default empty state and delete all real spaces.
+  // Block all writes until localStorage has fully rehydrated. In Zustand v5,
+  // persist rehydration is async — if we save before it completes, we'd write
+  // the default empty state and delete all real spaces.
   const [hydrated, setHydrated] = useState(
     () => typeof window !== "undefined" && (useWorkflowStore.persist?.hasHydrated() ?? false)
   );
@@ -51,53 +49,19 @@ export function useSpaceSync() {
   useEffect(() => {
     if (!hydrated) return;
     (async () => {
-      if (GUEST) {
-        try {
-          const res = await fetch("/api/guest-spaces");
-          if (!res.ok) return;
-          const { spaces: dbSpaces } = (await res.json()) as { spaces: Space[] };
-          if (!dbSpaces?.length) return;
-          loadSpacesFromDB(dbSpaces);
-          const now = new Date();
-          lastSyncedRef.current = now.getTime();
-          setLastSyncedAt(now);
-          setStatus("synced");
-        } catch {
-          /* keep local state */
-        }
-        return;
+      try {
+        const res = await fetch("/api/workflows");
+        if (!res.ok) return;
+        const { spaces: dbSpaces } = (await res.json()) as { spaces: Space[] };
+        if (!dbSpaces?.length) return;
+        loadSpacesFromDB(dbSpaces);
+        const now = new Date();
+        lastSyncedRef.current = now.getTime();
+        setLastSyncedAt(now);
+        setStatus("synced");
+      } catch {
+        /* keep local state */
       }
-
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { data, error } = await supabase
-        .from("spaces")
-        .select("id, name, data, is_public, created_at")
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: true });
-
-      console.log("[SpaceSync] DB load:", { error, rows: data?.length, data, session: session.user.id });
-      if (error || !data?.length) return;
-
-      const dbSpaces: Space[] = data.map((row) => ({
-        id:           row.id,
-        name:         row.name,
-        nodes:        row.data?.nodes        ?? [],
-        edges:        row.data?.edges        ?? [],
-        nodeCounters: row.data?.nodeCounters ?? {},
-        viewport:     row.data?.viewport,
-        createdAt:    row.data?.createdAt    ?? Date.parse(row.created_at),
-        updatedAt:    row.data?.updatedAt    ?? row.data?.createdAt ?? Date.parse(row.created_at),
-        isPublic:     row.is_public          ?? false,
-      }));
-
-      loadSpacesFromDB(dbSpaces);
-      const now = new Date();
-      lastSyncedRef.current = now.getTime();
-      setLastSyncedAt(now);
-      setStatus("synced");
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]); // run once after hydration
@@ -109,76 +73,21 @@ export function useSpaceSync() {
   const save = useCallback(async ({ keepalive = false }: { keepalive?: boolean } = {}) => {
     dirtyRef.current = false;
     immediateRef.current = false;
-    if (GUEST) {
-      setStatus("syncing");
-      try {
-        const spacesToSave = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
-        const res = await fetch("/api/guest-spaces", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          keepalive,
-          body: JSON.stringify({
-            spaces: spacesToSave.map((sp) => ({
-              ...sp,
-              nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
-            })),
-          }),
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const now = new Date();
-        lastSyncedRef.current = now.getTime();
-        setLastSyncedAt(now);
-        setStatus("synced");
-      } catch {
-        dirtyRef.current = true;
-        setStatus("error");
-      }
-      return;
-    }
-
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
     setStatus("syncing");
     try {
-      // Only persist spaces that have at least one node
       const spacesToSave = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
-
-      if (spacesToSave.length > 0) {
-        const rows = spacesToSave.map((sp) => ({
-          id:        sp.id,
-          user_id:   session.user.id,
-          name:      sp.name,
-          is_public: sp.isPublic ?? false,
-          data:    {
-            nodes: sp.nodes.map((n) => ({
-              ...n,
-              data: { ...n.data, inputImage: undefined },
-            })),
-            edges:        sp.edges,
-            nodeCounters: sp.nodeCounters,
-            viewport:     sp.viewport,
-            createdAt:    sp.createdAt,
-            updatedAt:    sp.updatedAt ?? sp.createdAt,
-          },
-        }));
-
-        const { error } = await supabase
-          .from("spaces")
-          .upsert(rows, { onConflict: "id" });
-
-        if (error) throw error;
-      }
-
-      // Only count non-empty spaces as "existing" — empty ones are local-only
-      const currentIds = spacesToSave.map((sp) => sp.id);
-      await supabase
-        .from("spaces")
-        .delete()
-        .eq("user_id", session.user.id)
-        .not("id", "in", `(${currentIds.join(",")})`);
-
+      const res = await fetch("/api/workflows", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        keepalive,
+        body: JSON.stringify({
+          spaces: spacesToSave.map((sp) => ({
+            ...sp,
+            nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
       const now = new Date();
       lastSyncedRef.current = now.getTime();
       setLastSyncedAt(now);

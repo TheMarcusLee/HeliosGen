@@ -1,9 +1,9 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
-// Desktop (Tauri) builds run `next build` with DESKTOP_BUILD=1 and ship the
-// self-contained `.next/standalone` server as a bundled sidecar. Web/Vercel
-// builds leave this unset and keep the default output.
+// The packaged desktop (Tauri) build runs `next build` with DESKTOP_BUILD=1 and
+// ships the self-contained `.next/standalone` server as a bundled sidecar. Plain
+// `next dev` / `next build` (local development) leave it unset.
 const DESKTOP_BUILD = process.env.DESKTOP_BUILD === "1";
 
 const nextConfig: NextConfig = {
@@ -27,8 +27,9 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
+      // Read-only public bucket holding the bundled workflow-template sample media
+      // (lib/templates.ts). Not app storage — just an image CDN allow-list entry.
       { protocol: "https", hostname: "*.r2.dev" },
-      { protocol: "https", hostname: "**.r2.dev" },
       { protocol: "https", hostname: "*.replicate.delivery" },
       { protocol: "https", hostname: "pbxt.replicate.delivery" },
       { protocol: "https", hostname: "*.replicate.com" },

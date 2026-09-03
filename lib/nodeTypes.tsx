@@ -1,6 +1,6 @@
 // Shared node type definitions — imported by both Sidebar and NodePickerMenu
 import React from "react";
-import { MessageSquare, Image, Film, Sparkles, Bot, Clapperboard } from "lucide-react";
+import { MessageSquare, Image, Film, Sparkles, Bot, Clapperboard, StickyNote } from "lucide-react";
 
 export type NodeCategory = "generators" | "resources";
 
@@ -14,6 +14,7 @@ export const NODE_META: Record<
   generateNode:       { accent: "#2DD4BF", bg: "#001f1f",  bigIcon: <Sparkles      size={18} strokeWidth={1.7} /> },
   assistantNode:      { accent: "#FBBF24", bg: "#1c1000",  bigIcon: <Bot           size={18} strokeWidth={1.7} /> },
   videoGeneratorNode: { accent: "#5EEAD4", bg: "#042f2e",  bigIcon: <Clapperboard  size={18} strokeWidth={1.7} /> },
+  commentNode:        { accent: "#FACC15", bg: "#2a2005",  bigIcon: <StickyNote    size={18} strokeWidth={1.7} /> },
 };
 
 export const NODES: Array<{
@@ -107,6 +108,18 @@ export const NODES: Array<{
       label: "Reference Video",
       description: "Upload a video · max 100 MB",
     },
+    {
+      type: "commentNode",
+      category: "resources",
+      canReceiveConnection: false,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+      label: "Comment",
+      description: "Free-floating sticky note — drag & resize anywhere",
+    },
   ];
 
 const GEN_NODE_SETTINGS: Record<string, string[]> = {
@@ -139,6 +152,7 @@ export const NODE_SIZE: Record<string, { w: number; h: number }> = {
   promptNode: { w: 520, h: 250 },
   imageInputNode: { w: 200, h: 160 },
   videoInputNode: { w: 220, h: 180 },
+  commentNode: { w: 260, h: 160 },
 };
 
 export const FALLBACK_SIZE = { w: 280, h: 280 };

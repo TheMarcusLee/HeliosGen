@@ -24,7 +24,6 @@ import CuttableEdge from "@/components/edges/CuttableEdge";
 import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
-import { createClient } from "@/lib/supabase/client";
 import { sha256Hex } from "@/lib/assetHash";
 
 import { motion } from "motion/react";
@@ -36,30 +35,20 @@ import GenerateNode from "./nodes/GenerateNode";
 import VideoGeneratorNode from "./nodes/VideoGeneratorNode";
 import AssistantNode from "./nodes/AssistantNode";
 import GroupNode from "./nodes/GroupNode";
+import CommentNode from "./nodes/CommentNode";
 import NodePickerMenu, { DropState } from "./NodePickerMenu";
 import SelectionToolbar from "./SelectionToolbar";
 import CanvasToolbar from "./CanvasToolbar";
 import AddNodeMenu from "./AddNodeMenu";
-import ShareModal from "./ShareModal";
 import { MessageSquare, Sparkles, Clapperboard } from "lucide-react";
 
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-
+// Local-only app: no auth token, kept so call sites don't churn.
 async function getAccessToken(): Promise<string | undefined> {
-  if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") return "guest";
-  try {
-    const { data } = await createClient().auth.getSession();
-    return data.session?.access_token;
-  } catch {
-    return undefined;
-  }
+  return "guest";
 }
 
-function authHeaders(token: string | undefined): HeadersInit {
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+function authHeaders(_token?: string | undefined): HeadersInit {
+  return { "Content-Type": "application/json" };
 }
 
 const nodeTypes = {
@@ -70,6 +59,7 @@ const nodeTypes = {
   videoGeneratorNode: VideoGeneratorNode,
   assistantNode: AssistantNode,
   groupNode: GroupNode,
+  commentNode: CommentNode,
 };
 
 const edgeTypes = {
@@ -498,7 +488,6 @@ export default function WorkflowCanvas() {
       (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
     );
     if (files.length > 0) {
-      if (DEMO_MODE) { useWorkflowStore.getState().setAuthModalOpen(true); return; }
       const dropX = (e.clientX - rect.left - panX) / zoom;
       const dropY = (e.clientY - rect.top - panY) / zoom;
 
@@ -549,20 +538,16 @@ export default function WorkflowCanvas() {
             try {
               const bytes = await file.arrayBuffer();
               const hash = await sha256Hex(bytes);
-              const { data: authData } = await (await import("@/lib/supabase/client")).createClient().auth.getSession();
-              const token = authData.session?.access_token;
-              const authHdr: Record<string, string> = {};
-              if (token) authHdr["Authorization"] = `Bearer ${token}`;
 
               try {
-                const lk = await fetch(`/api/lookup-asset?hash=${hash}`, { headers: authHdr });
+                const lk = await fetch(`/api/lookup-asset?hash=${hash}`);
                 const { cdnUrl } = await lk.json() as { cdnUrl: string | null };
                 if (cdnUrl) { updateNodeDataRef.current(nodeId, { inputImage: cdnUrl, r2Url: cdnUrl }); return; }
               } catch { /* fall through */ }
 
               const res = await fetch("/api/upload-asset", {
                 method: "POST",
-                headers: { "Content-Type": file.type || "image/jpeg", ...authHdr },
+                headers: { "Content-Type": file.type || "image/jpeg" },
                 body: bytes,
               });
               const { cdnUrl } = await res.json() as { cdnUrl?: string };
@@ -583,20 +568,16 @@ export default function WorkflowCanvas() {
             try {
               const bytes = await file.arrayBuffer();
               const hash = await sha256Hex(bytes);
-              const { data: authData } = await (await import("@/lib/supabase/client")).createClient().auth.getSession();
-              const token = authData.session?.access_token;
-              const authHdr: Record<string, string> = {};
-              if (token) authHdr["Authorization"] = `Bearer ${token}`;
 
               try {
-                const lk = await fetch(`/api/lookup-asset?hash=${hash}`, { headers: authHdr });
+                const lk = await fetch(`/api/lookup-asset?hash=${hash}`);
                 const { cdnUrl } = await lk.json() as { cdnUrl: string | null };
                 if (cdnUrl) { updateNodeDataRef.current(nodeId, { videoUrl: cdnUrl }); return; }
               } catch { /* fall through */ }
 
               const res = await fetch("/api/upload-asset", {
                 method: "POST",
-                headers: { "Content-Type": file.type || "video/mp4", ...authHdr },
+                headers: { "Content-Type": file.type || "video/mp4" },
                 body: bytes,
               });
               const { cdnUrl } = await (await res.json()) as { cdnUrl?: string };
@@ -943,9 +924,30 @@ export default function WorkflowCanvas() {
   const [addMenuAnchor, setAddMenuAnchor] = useState<DOMRect | null>(null);
 
   const setSettingsOpen = useWorkflowStore((s) => s.setSettingsOpen);
-  const activeSpaceId = useWorkflowStore((s) => s.activeSpaceId);
-  const activeSpace = useWorkflowStore((s) => s.spaces.find((sp) => sp.id === s.activeSpaceId));
-  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    const space = useWorkflowStore.getState().spaces.find((sp) => sp.id === useWorkflowStore.getState().activeSpaceId);
+    if (!space || space.nodes.length === 0) {
+      useWorkflowStore.getState().addToast("Nothing to export yet", "error");
+      return;
+    }
+    setExporting(true);
+    try {
+      const { exportWorkflow } = await import("@/lib/exportWorkflow");
+      const r = await exportWorkflow(space);
+      useWorkflowStore.getState().addToast(
+        r.skipped > 0
+          ? `Exported — ${r.assetCount} asset(s), ${r.skipped} couldn't be bundled`
+          : `Exported ${r.assetCount} asset(s)`,
+        r.skipped > 0 ? "info" : "success",
+      );
+    } catch (e) {
+      useWorkflowStore.getState().addToast(`Export failed: ${(e as Error).message}`, "error");
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   // ── Alignment snap guides ─────────────────────────────────────────────────────
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
@@ -1121,16 +1123,11 @@ export default function WorkflowCanvas() {
     [],
   );
 
-  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
   const addToast   = useWorkflowStore((s) => s.addToast);
   const kieKeySet  = useWorkflowStore((s) => s.kieKeySet);
 
   const runAll = useCallback(async () => {
     const token = await getAccessToken();
-    if (!token) {
-      setAuthModalOpen(true);
-      return;
-    }
 
     setIsRunning(true);
     setLog([]);
@@ -1625,17 +1622,9 @@ export default function WorkflowCanvas() {
           canUndo={canUndo}
           canRedo={canRedo}
           onOpenSettings={() => setSettingsOpen(true)}
-          onShare={() => setShareModalOpen(true)}
-          isPublic={activeSpace?.isPublic ?? false}
+          onExport={handleExport}
+          exporting={exporting}
         />
-
-        {shareModalOpen && (
-          <ShareModal
-            spaceId={activeSpaceId}
-            open={shareModalOpen}
-            onClose={() => setShareModalOpen(false)}
-          />
-        )}
 
 
         {/* ── Alignment guide lines ────────────────────────────────────────────── */}

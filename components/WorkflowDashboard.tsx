@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import NextImage from "next/image";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore, Space } from "@/lib/store";
 import { makeUGCTemplate } from "@/lib/templates";
 import { timeAgo } from "@/lib/useSpaceSync";
@@ -149,6 +148,26 @@ const CSS = `
     letter-spacing: 0.01em;
   }
   .wsd-new-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+  .wsd-import-btn {
+    appearance: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.75); font-size: 12px; font-weight: 600; border-radius: 10px;
+    transition: background 140ms ease, border-color 140ms ease, transform 140ms ease, color 140ms ease;
+    white-space: nowrap; font-family: inherit; letter-spacing: 0.01em;
+  }
+  .wsd-import-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.22);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+  .wsd-import-btn:disabled { opacity: 0.5; cursor: default; }
+
+  @keyframes wsd-spin { to { transform: rotate(360deg); } }
 
   .wsd-tmpl {
     position: relative;
@@ -611,26 +630,46 @@ export default function WorkflowDashboard() {
   const createSpace = useWorkflowStore((s) => s.createSpace);
   const switchSpace = useWorkflowStore((s) => s.switchSpace);
   const deleteSpace = useWorkflowStore((s) => s.deleteSpace);
-  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-  // Guest/desktop build has no accounts — treat as "signed in" from the first
-  // render so no auth copy ever flashes.
-  const [user, setUser] = useState<boolean | null>(
-    process.env.NEXT_PUBLIC_GUEST_MODE === "true" ? true : null,
-  );
 
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") { setUser(true); return; }
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => setUser(!!data.session?.user));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(!!session?.user);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
   const openSpace = (id: string) => {
     switchSpace(id);
     router.push(`/workflow/${id}`);
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+
+    const { addToast } = useWorkflowStore.getState();
+    setImporting(true);
+    try {
+      const { importWorkflowZip } = await import("@/lib/importWorkflow");
+      const wf = await importWorkflowZip(file);
+
+      createSpace(wf.name, {
+        nodes: wf.nodes,
+        edges: wf.edges,
+        nodeCounters: wf.nodeCounters,
+      });
+      const newId = useWorkflowStore.getState().activeSpaceId;
+      if (wf.viewport) useWorkflowStore.getState().saveViewport(wf.viewport);
+
+      addToast(
+        wf.skipped > 0
+          ? `Imported "${wf.name}" — ${wf.assetCount} asset(s), ${wf.skipped} couldn't be restored`
+          : `Imported "${wf.name}" — ${wf.assetCount} asset(s)`,
+        wf.skipped > 0 ? "info" : "success",
+      );
+      router.push(`/workflow/${newId}`);
+    } catch (err) {
+      addToast(`Import failed: ${(err as Error).message}`, "error");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleCreate = () => {
@@ -660,11 +699,9 @@ export default function WorkflowDashboard() {
     spawnFreshTemplate();
   };
 
-  const sorted = user
-    ? [...spaces]
-        .filter((sp) => sp.nodes.length > 0 && sp.name !== TEMPLATE_NAME)
-        .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt))
-    : [];
+  const sorted = [...spaces]
+    .filter((sp) => sp.nodes.length > 0 && sp.name !== TEMPLATE_NAME)
+    .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
 
   return (
     <div
@@ -704,28 +741,31 @@ export default function WorkflowDashboard() {
               fontSize: "11px", fontWeight: 500, color: "rgba(255,255,255,0.4)",
               letterSpacing: "0.06em", textTransform: "uppercase",
             }}>
-              {user ? (
-                <>
-                  <b style={{ color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>{sorted.length}</b>
-                  <span>workspace{sorted.length !== 1 ? "s" : ""}</span>
-                </>
-              ) : (
-                <span style={{ color: "rgba(255,255,255,0.35)" }}>Sign in to save and sync your workflows</span>
-              )}
+              <b style={{ color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>{sorted.length}</b>
+              <span>workspace{sorted.length !== 1 ? "s" : ""}</span>
             </div>
           </div>
 
-          <div style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center" }}>
-            {user ? (
-              <button className="wsd-new-btn" onClick={handleCreate}>
-                <PlusIcon />
-                New workflow
-              </button>
-            ) : (
-              <button className="wsd-new-btn" onClick={() => setAuthModalOpen(true)}>
-                Sign in
-              </button>
-            )}
+          <div style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "10px" }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              onChange={handleImportFile}
+              style={{ display: "none" }}
+            />
+            <button
+              className="wsd-import-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+            >
+              {importing ? <SpinnerIcon /> : <ImportIcon />}
+              {importing ? "Importing…" : "Import"}
+            </button>
+            <button className="wsd-new-btn" onClick={handleCreate}>
+              <PlusIcon />
+              New workflow
+            </button>
           </div>
         </section>
 
@@ -764,6 +804,24 @@ function PlusIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function ImportIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "wsd-spin 0.7s linear infinite", transformOrigin: "center" }}>
+      <path d="M12 3a9 9 0 1 0 9 9" />
     </svg>
   );
 }

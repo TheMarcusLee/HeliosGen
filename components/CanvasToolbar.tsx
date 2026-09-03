@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import {
   Plus, MousePointer2, Hand, Scissors, LayoutTemplate,
-  MessageSquare, Undo2, Redo2, Share2,
+  MessageSquare, Undo2, Redo2, Download,
 } from "lucide-react";
 
 type ToolId = "select" | "hand" | "cut" | "frame" | "comment";
@@ -16,8 +16,8 @@ interface CanvasToolbarProps {
   canUndo?: boolean;
   canRedo?: boolean;
   onOpenSettings?: () => void;
-  onShare?: () => void;
-  isPublic?: boolean;
+  onExport?: () => void;
+  exporting?: boolean;
 }
 
 function Divider() {
@@ -73,8 +73,8 @@ export default function CanvasToolbar({
   onRedo,
   canUndo = true,
   canRedo = false,
-  onShare,
-  isPublic = false,
+  onExport,
+  exporting = false,
 }: CanvasToolbarProps) {
   const [internalTool, setInternalTool] = useState<ToolId>("select");
   const [addHovered, setAddHovered] = useState(false);
@@ -142,32 +142,29 @@ export default function CanvasToolbar({
         <Redo2 size={15} strokeWidth={1.8} />
       </Btn>
 
-      {/* ── Bottom section: share ── */}
+      {/* ── Bottom section: export ── */}
       <span style={{
         display: "block", width: "100%", height: "1px",
         background: "rgba(255,255,255,0.07)", margin: "4px 0", flexShrink: 0,
       }} />
 
       <button
-        id="toolbar-share"
-        title="Share workflow"
+        id="toolbar-export"
+        title="Export workflow (.zip)"
         onMouseEnter={() => setShareHovered(true)}
         onMouseLeave={() => setShareHovered(false)}
-        onClick={() => onShare?.()}
+        onClick={() => { if (!exporting) onExport?.(); }}
         style={{
           display: "flex", alignItems: "center", justifyContent: "center",
           width: "34px", height: "34px", borderRadius: "10px",
-          border: "none", cursor: "pointer", flexShrink: 0,
+          border: "none", cursor: exporting ? "wait" : "pointer", flexShrink: 0,
           transition: "background 150ms, color 150ms",
-          background: isPublic
-            ? shareHovered ? "rgba(45,212,191,0.22)" : "rgba(45,212,191,0.12)"
-            : shareHovered ? "rgba(255,255,255,0.08)" : "transparent",
-          color: isPublic
-            ? "#2DD4BF"
-            : shareHovered ? "#fff" : "rgba(255,255,255,0.6)",
+          background: shareHovered && !exporting ? "rgba(255,255,255,0.08)" : "transparent",
+          color: exporting ? "rgba(45,212,191,0.8)" : shareHovered ? "#fff" : "rgba(255,255,255,0.6)",
+          opacity: exporting ? 0.7 : 1,
         }}
       >
-        <Share2 size={15} strokeWidth={1.8} />
+        <Download size={15} strokeWidth={1.8} style={exporting ? { animation: "spin 1s linear infinite" } : undefined} />
       </button>
     </div>
   );

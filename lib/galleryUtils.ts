@@ -1,5 +1,3 @@
-import { createClient } from "@/lib/supabase/client";
-
 export interface GalleryItem {
   id: string;
   url: string;
@@ -27,10 +25,9 @@ export function thumbSrc(url: string, w = 96): string {
   return `/_next/image?url=${encodeURIComponent(url)}&w=${snapped}&q=75`;
 }
 
+/** Local-only app has no real auth; call sites still gate on a truthy token. */
 export async function getToken(): Promise<string | undefined> {
-  if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") return "guest";
-  const { data } = await createClient().auth.getSession();
-  return data.session?.access_token;
+  return "guest";
 }
 
 const _galleryCacheMem = new Map<string, { items: GalleryItem[]; hasMore: boolean }>();

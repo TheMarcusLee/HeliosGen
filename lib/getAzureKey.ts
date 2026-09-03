@@ -1,30 +1,13 @@
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { GUEST_MODE } from "@/lib/guestMode";
-import type { NextRequest } from "next/server";
+import { getAzureApiKey } from "./guest/db";
 
-export async function getAzureKeyForUser(userId: string): Promise<string | null> {
-  if (GUEST_MODE) {
-    const { getAzureApiKey } = await import("./guest/db");
-    return getAzureApiKey();
-  }
-  const { data } = await supabaseAdmin
-    .from("user_settings")
-    .select("azure_api_key")
-    .eq("user_id", userId)
-    .single();
-  return data?.azure_api_key ?? null;
+/**
+ * The user's Azure OpenAI API key, saved locally via Settings → API Keys.
+ * Arguments are ignored — kept so existing call sites don't need to change.
+ */
+export async function getAzureKeyForUser(..._args: unknown[]): Promise<string | null> {
+  return getAzureApiKey();
 }
 
-export async function getAzureToken(req: NextRequest): Promise<string | null> {
-  if (GUEST_MODE) {
-    const { getAzureApiKey } = await import("./guest/db");
-    return getAzureApiKey();
-  }
-  const auth = req.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return null;
-  const { data } = await supabaseAdmin.auth.getUser(token);
-  const userId = data.user?.id;
-  if (!userId) return null;
-  return getAzureKeyForUser(userId);
+export async function getAzureToken(..._args: unknown[]): Promise<string | null> {
+  return getAzureApiKey();
 }

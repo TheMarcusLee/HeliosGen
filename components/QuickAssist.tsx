@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { flushSync } from "react-dom";
-import { createClient } from "@/lib/supabase/client";
 import { getToken } from "@/lib/galleryUtils";
 import { MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
@@ -17,7 +16,6 @@ interface Message {
 
 
 export function QuickAssist() {
-  const [user, setUser] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -35,16 +33,6 @@ export function QuickAssist() {
   const { createSession, upsertSession } = useChatSessionStore();
   const azureKeySet = useWorkflowStore((s) => s.azureKeySet);
   const disabledIds = azureKeySet === true ? [] : ["azure-auto"];
-
-  // Track auth state
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => setUser(!!data.session?.user));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(!!session?.user);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
 
   // Sync to store when streaming stops
   useEffect(() => {
@@ -186,8 +174,6 @@ export function QuickAssist() {
   }
 
   const isEmpty = messages.length === 0;
-
-  if (!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true") return null;
 
   return (
     <div ref={containerRef}>

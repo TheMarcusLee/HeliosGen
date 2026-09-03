@@ -9,12 +9,11 @@ import { MEDIA_DIR } from "@/lib/guest/paths";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureKieReachableImages } from "@/lib/kieUpload";
-import { ensureR2, uploadBuffer } from "@/lib/r2";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { ensureR2, uploadBuffer } from "@/lib/storage";
 import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
-import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
 const BASE   = "https://api.kie.ai";
@@ -78,8 +77,8 @@ function httpsPost(
 
 
 // Fetch any http/https URL to a Buffer, following redirects.
-// Root-relative "/generated/..." refs (guest/desktop mode with no public
-// CALLBACK_BASE_URL) aren't valid URLs — read those straight off local disk.
+// Root-relative "/generated/..." refs aren't valid URLs — read those straight
+// off local disk.
 function fetchBuffer(url: string, maxRedirects = 5): Promise<Buffer> {
   if (url.startsWith("/generated/")) {
     const rel = normalize(decodeURIComponent(url.slice("/generated/".length).split(/[?#]/)[0]));
@@ -313,13 +312,11 @@ export async function POST(req: NextRequest) {
     // image mirroring failures are non-fatal — proceed without reference images
   }
 
-  const currentUserId = await resolveUserId(req).catch(() => null);
+  const currentUserId = GUEST_USER_ID;
 
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {
-    const azureKey = currentUserId
-      ? await getAzureKeyForUser(currentUserId)
-      : process.env.AZURE_API_KEY ?? null;
+    const azureKey = (await getAzureKeyForUser()) ?? process.env.AZURE_API_KEY ?? null;
     if (!azureKey) return NextResponse.json({ error: "Azure API key is not configured. Add it in Settings." }, { status: 500 });
 
     const resSizeMaps     = cfg.azureResolutionSizeMaps ?? {};
@@ -423,31 +420,13 @@ export async function POST(req: NextRequest) {
         const imageUrl = await uploadBuffer(buf, "image/png", "generated");
         jobStore.set(azureTaskId, { status: "done", imageUrl });
 
-        if (GUEST_MODE) {
-          guestDb.insertGeneration({
-            task_id: azureTaskId, user_id: azureUserId, generation_type: "image",
-            status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
-            model, aspect_ratio: aspectRatio, quality,
-            azure_resolution: azureResolution,
-            reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
-          });
-        } else {
-          supabaseAdmin.from("generations").insert({
-            task_id:              azureTaskId,
-            user_id:              azureUserId,
-            generation_type:      "image",
-            status:               "done",
-            image_url:            imageUrl,
-            prompt:               prompt.slice(0, 2000),
-            model,
-            aspect_ratio:         aspectRatio,
-            quality,
-            azure_resolution:     azureResolution,
-            reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
-          }).then(({ error }) => {
-            if (error) console.error("[azure] supabase insert error:", error.message);
-          });
-        }
+        guestDb.insertGeneration({
+          task_id: azureTaskId, user_id: azureUserId, generation_type: "image",
+          status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
+          model, aspect_ratio: aspectRatio, quality,
+          azure_resolution: azureResolution,
+          reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[azure] background error:", msg, e);
@@ -494,27 +473,11 @@ export async function POST(req: NextRequest) {
         const imageUrl = await uploadBuffer(outBuf, "image/png", "generated");
         jobStore.set(codexTaskId, { status: "done", imageUrl });
 
-        if (GUEST_MODE) {
-          guestDb.insertGeneration({
-            task_id: codexTaskId, user_id: codexUserId, generation_type: "image",
-            status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
-            model, aspect_ratio: aspectRatio, quality,
-          });
-        } else {
-          supabaseAdmin.from("generations").insert({
-            task_id:         codexTaskId,
-            user_id:         codexUserId,
-            generation_type: "image",
-            status:          "done",
-            image_url:       imageUrl,
-            prompt:          prompt.slice(0, 2000),
-            model,
-            aspect_ratio:    aspectRatio,
-            quality,
-          }).then(({ error }) => {
-            if (error) console.error("[codex] supabase insert error:", error.message);
-          });
-        }
+        guestDb.insertGeneration({
+          task_id: codexTaskId, user_id: codexUserId, generation_type: "image",
+          status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
+          model, aspect_ratio: aspectRatio, quality,
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[codex] background error:", msg, e);
@@ -526,19 +489,11 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Kie.ai branch ─────────────────────────────────────────────────────────────
-  const kieToken = currentUserId ? await getKieTokenForUser(currentUserId) : null;
+  const kieToken = await getKieTokenForUser();
   if (!kieToken) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
-  const callbackBase = process.env.CALLBACK_BASE_URL;
-  // Guest/desktop mode polls kie.ai directly (see lib/kieJobPoller) so it needs
-  // no public callback URL; hosted mode still requires one.
-  if (!callbackBase && !GUEST_MODE) {
-    return NextResponse.json({ error: "CALLBACK_BASE_URL is not set" }, { status: 500 });
-  }
-
-  const callBackUrl = callbackBase
-    ? `${callbackBase.replace(/\/$/, "")}/api/callback`
-    : undefined;
+  // The app polls kie.ai directly (see lib/kieJobPoller), so no callback URL.
+  const callBackUrl = undefined;
 
   try {
     const { apiInput } = cfg;
@@ -547,10 +502,10 @@ export async function POST(req: NextRequest) {
     const hasImages = r2ImageUrls.length > 0;
     const resolvedApiId = !hasImages && cfg.textOnlyApiId ? cfg.textOnlyApiId : cfg.apiId;
 
-    // Desktop/guest without a tunnel: kie.ai can't fetch our local reference
-    // images, so push them to kie's temporary file store first.
+    // kie.ai can't fetch our local reference images, so push them to kie's
+    // temporary file store first.
     let kieImageUrls = r2ImageUrls;
-    if (GUEST_MODE && hasImages) {
+    if (hasImages) {
       kieImageUrls = await ensureKieReachableImages(r2ImageUrls, kieToken);
     }
 
@@ -588,28 +543,12 @@ export async function POST(req: NextRequest) {
 
     jobStore.set(taskId, { status: "pending", userId: currentUserId ?? undefined });
 
-    if (GUEST_MODE) {
-      guestDb.insertGeneration({
-        task_id: taskId, user_id: currentUserId, generation_type: "image",
-        status: "pending", prompt, model, aspect_ratio: aspectRatio, quality,
-        reference_image_urls: r2ImageUrls,
-      });
-      pollKieJob(taskId, kieToken, "image");
-    } else {
-      supabaseAdmin.from("generations").insert({
-        task_id:              taskId,
-        user_id:              currentUserId,
-        generation_type:      "image",
-        status:               "pending",
-        prompt,
-        model,
-        aspect_ratio:         aspectRatio,
-        quality,
-        reference_image_urls: r2ImageUrls,
-      }).then(({ error }) => {
-        if (error) console.error("[generate] supabase insert error:", error.message);
-      });
-    }
+    guestDb.insertGeneration({
+      task_id: taskId, user_id: currentUserId, generation_type: "image",
+      status: "pending", prompt, model, aspect_ratio: aspectRatio, quality,
+      reference_image_urls: r2ImageUrls,
+    });
+    pollKieJob(taskId, kieToken, "image");
 
     return NextResponse.json({ taskId, referenceImageUrls: r2ImageUrls });
   } catch (e: unknown) {
