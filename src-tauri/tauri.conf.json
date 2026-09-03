@@ -19,7 +19,8 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "url": "index.html"
+        "url": "index.html",
+        "dragDropEnabled": false
       }
     ],
     "security": {
@@ -36,8 +37,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/helios-node"],
-    "resources": ["server/**/*"],
+    "externalBin": [
+      "binaries/helios-node"
+    ],
+    "resources": [
+      "server/**/*"
+    ],
     "category": "GraphicsAndDesign",
     "shortDescription": "Build AI image & video pipelines visually.",
     "longDescription": "HeliosGen is a local-first visual workflow builder for AI image and video generation. All data stays on your machine.",
