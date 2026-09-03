@@ -8,6 +8,7 @@ import UpdateBanner from "@/components/UpdateBanner";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cookies } from "next/headers";
+import { DragDropGuard } from "@/components/DragDropGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -60,7 +61,8 @@ export default async function RootLayout({
               <div className="md:hidden flex items-center h-10 px-3 border-b border-white/[0.08] shrink-0">
                 <SidebarTrigger className="text-white/50 hover:text-white hover:bg-white/[0.05] transition-colors rounded-lg p-1.5 [&_svg]:size-4" />
               </div>
-              {children}
+              <DragDropGuard />
+        {children}
             </SidebarInset>
           </SidebarProvider>
         </TooltipProvider>

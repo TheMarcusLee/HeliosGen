@@ -3285,6 +3285,21 @@ function GalleryInner() {
       {/* ── Prompt bar ── */}
       <div
         ref={promptBarRef}
+        onDragOver={e => {
+          // OS file drag (Finder/Explorer): make the WHOLE prompt bar a drop target.
+          if (Array.from(e.dataTransfer.types).includes("Files")) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDrop={e => {
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleFilePick(e.dataTransfer.files);
+          }
+        }}
         style={{
           position: "fixed",
           bottom: "32px",
@@ -3582,6 +3597,21 @@ function GalleryInner() {
                 data-prompt-input=""
                 value={prompt}
                 rows={1}
+                onDragOver={e => {
+                  // Textareas are NATIVE drop targets: without explicit handlers WebKit grabs
+                  // file drags itself (expanded mode = the textarea covers the whole bar).
+                  if (Array.from(e.dataTransfer.types).includes("Files")) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                  }
+                }}
+                onDrop={e => {
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleFilePick(e.dataTransfer.files);
+                  }
+                }}
                 onChange={e => {
                   const text = e.target.value;
                   const cursor = e.target.selectionStart ?? text.length;
@@ -3769,6 +3799,22 @@ function GalleryInner() {
                           data-prompt-input=""
                           placeholder={blockIdx === 0 && !isNonEmpty ? "Describe the scene you imagine…" : undefined}
                           onClick={e => { if (isExpanded) e.stopPropagation(); }}
+                          onDragOver={e => {
+                            // Textareas are NATIVE drop targets: without explicit handlers WebKit
+                            // grabs file drags itself (expanded mode = the textarea covers the whole
+                            // bar, so drops silently died there). Route files to the composer.
+                            if (Array.from(e.dataTransfer.types).includes("Files")) {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "copy";
+                            }
+                          }}
+                          onDrop={e => {
+                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleFilePick(e.dataTransfer.files);
+                            }
+                          }}
                           onFocus={e => {
                             activeBlockRef.current = e.currentTarget;
                             activeBlockIdxRef.current = blockIdx;
