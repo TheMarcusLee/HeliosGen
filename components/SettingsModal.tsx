@@ -1098,6 +1098,178 @@ function ProviderLegend() {
   );
 }
 
+type WaveSpeedCatalogModel = {
+  modelId: string;
+  name: string;
+  description: string;
+  type: string;
+  basePrice?: number;
+  parameterCount?: number;
+  requiredParameterCount?: number;
+};
+
+type WaveSpeedCatalogResponse = {
+  total: number;
+  models: WaveSpeedCatalogModel[];
+  hasMore: boolean;
+  nextOffset?: number;
+  availableTypes: string[];
+  error?: string;
+};
+
+function formatModelType(type: string): string {
+  return type.split("-").map((part) => part ? `${part[0].toUpperCase()}${part.slice(1)}` : part).join(" ");
+}
+
+function WaveSpeedModelCatalog({
+  family,
+  accent,
+  keyStatus,
+}: {
+  family: "image" | "video";
+  accent: string;
+  keyStatus: "unknown" | "set" | "unset";
+}) {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("");
+  const [models, setModels] = useState<WaveSpeedCatalogModel[]>([]);
+  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
+  const [total, setTotal] = useState(0);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (offset: number, append: boolean, signal?: AbortSignal) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ family, limit: "30", offset: String(offset) });
+      if (query.trim()) params.set("query", query.trim());
+      if (type) params.set("type", type);
+      const response = await fetch(`/api/wavespeed/models?${params}`, { signal });
+      const body = await response.json() as WaveSpeedCatalogResponse;
+      if (!response.ok) throw new Error(body.error ?? "Unable to load WaveSpeed models.");
+      setModels((current) => append ? [...current, ...body.models] : body.models);
+      setAvailableTypes(body.availableTypes ?? []);
+      setTotal(body.total);
+      setNextOffset(body.hasMore && body.nextOffset !== undefined ? body.nextOffset : null);
+    } catch (loadError) {
+      if (loadError instanceof Error && loadError.name === "AbortError") return;
+      setError(loadError instanceof Error ? loadError.message : "Unable to load WaveSpeed models.");
+      if (!append) {
+        setModels([]);
+        setTotal(0);
+        setNextOffset(null);
+      }
+    } finally {
+      if (!signal?.aborted) {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      }
+    }
+  }, [family, query, type]);
+
+  useEffect(() => {
+    if (keyStatus !== "set") return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void load(0, false, controller.signal), 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [keyStatus, load]);
+
+  return (
+    <section aria-label={`WaveSpeed ${family} models`}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: accent }} />
+          <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", color: "rgba(255,255,255,0.42)", textTransform: "uppercase" }}>
+            WaveSpeed live catalog
+          </span>
+        </div>
+        {keyStatus === "set" && !loading && (
+          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>{total.toLocaleString()} matches</span>
+        )}
+      </div>
+
+      {keyStatus === "unset" ? (
+        <div style={{ padding: "14px 16px", borderRadius: "10px", background: "rgba(34,211,238,0.04)", border: "1px solid rgba(34,211,238,0.14)", color: "rgba(255,255,255,0.55)", fontSize: "12px" }}>
+          Add a WaveSpeed API key under API Keys to load the live catalog.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 180px", gap: "8px", marginBottom: "10px" }}>
+            <input
+              aria-label="Search WaveSpeed models"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search ${family} models by name or ID…`}
+              style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "8px 11px", color: "rgba(255,255,255,0.85)", outline: "none", fontSize: "12px", fontFamily: "inherit" }}
+            />
+            <select
+              aria-label="Filter WaveSpeed model type"
+              value={type}
+              onChange={(event) => setType(event.target.value)}
+              style={{ background: "rgb(19,20,23)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "8px 10px", color: "rgba(255,255,255,0.72)", outline: "none", fontSize: "12px", fontFamily: "inherit" }}
+            >
+              <option value="">All {family} types</option>
+              {availableTypes.map((availableType) => (
+                <option key={availableType} value={availableType}>{formatModelType(availableType)}</option>
+              ))}
+            </select>
+          </div>
+
+          {error && (
+            <div role="alert" style={{ padding: "12px 14px", borderRadius: "9px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.18)", color: "rgba(252,165,165,0.9)", fontSize: "12px" }}>
+              {error}
+            </div>
+          )}
+
+          {loading || keyStatus === "unknown" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {[0, 1, 2].map((row) => <div key={row} style={{ height: "62px", borderRadius: "10px", background: "rgba(255,255,255,0.04)", animation: "skeleton-pulse 1.4s ease-in-out infinite" }} />)}
+            </div>
+          ) : !error && models.length === 0 ? (
+            <div style={{ padding: "18px", textAlign: "center", color: "rgba(255,255,255,0.35)", fontSize: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "10px" }}>
+              No WaveSpeed models match these filters.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {models.map((model) => (
+                <div key={model.modelId} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "11px 16px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div title={model.name} style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.name}</div>
+                    <div title={model.modelId} style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", marginTop: "3px", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.modelId}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, gap: "3px" }}>
+                    <span style={{ fontSize: "10px", color: "rgba(103,232,249,0.75)", background: "rgba(34,211,238,0.07)", border: "1px solid rgba(34,211,238,0.12)", borderRadius: "999px", padding: "2px 7px" }}>{formatModelType(model.type)}</span>
+                    <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)" }}>
+                      {model.parameterCount ?? 0} inputs{model.basePrice !== undefined ? ` · from $${model.basePrice.toFixed(4)}` : ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {nextOffset !== null && (
+                <button
+                  type="button"
+                  disabled={loadingMore}
+                  onClick={() => void load(nextOffset, true)}
+                  style={{ marginTop: "4px", padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(34,211,238,0.16)", background: "rgba(34,211,238,0.06)", color: "rgba(103,232,249,0.82)", cursor: loadingMore ? "default" : "pointer", fontSize: "11px", fontWeight: 600 }}
+                >
+                  {loadingMore ? "Loading…" : `Load more (${models.length} of ${total})`}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 /* ─── Image Models panel ─────────────────────────────────────────────────────── */
 
 function ImageModelsPanel({
@@ -1105,11 +1277,13 @@ function ImageModelsPanel({
   onProviderChange,
   azureDeployments,
   onDeploymentChange,
+  waveSpeedKeyStatus,
 }: {
   providers: Record<string, ProviderId>;
   onProviderChange: (modelId: string, v: ProviderId) => void;
   azureDeployments: Record<string, string>;
   onDeploymentChange: (modelId: string, v: string) => void;
+  waveSpeedKeyStatus: "unknown" | "set" | "unset";
 }) {
   const models = IMAGE_MODELS.map((m) => ({
     id: m.id,
@@ -1139,6 +1313,7 @@ function ImageModelsPanel({
         azureDeployments={azureDeployments}
         onDeploymentChange={onDeploymentChange}
       />
+      <WaveSpeedModelCatalog family="image" accent="#22d3ee" keyStatus={waveSpeedKeyStatus} />
     </div>
   );
 }
@@ -1150,11 +1325,13 @@ function VideoModelsPanel({
   onProviderChange,
   azureDeployments,
   onDeploymentChange,
+  waveSpeedKeyStatus,
 }: {
   providers: Record<string, ProviderId>;
   onProviderChange: (modelId: string, v: ProviderId) => void;
   azureDeployments: Record<string, string>;
   onDeploymentChange: (modelId: string, v: string) => void;
+  waveSpeedKeyStatus: "unknown" | "set" | "unset";
 }) {
   const models = VIDEO_MODELS.map((m) => ({
     id: m.id,
@@ -1184,6 +1361,7 @@ function VideoModelsPanel({
         azureDeployments={azureDeployments}
         onDeploymentChange={onDeploymentChange}
       />
+      <WaveSpeedModelCatalog family="video" accent="#22d3ee" keyStatus={waveSpeedKeyStatus} />
     </div>
   );
 }
@@ -1826,6 +2004,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 onProviderChange={handleProviderChange}
                 azureDeployments={azureDeployments}
                 onDeploymentChange={handleDeploymentChange}
+                waveSpeedKeyStatus={waveSpeedKeyStatus}
               />
             )}
             {activeNav === "video-models" && (
@@ -1834,6 +2013,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 onProviderChange={handleProviderChange}
                 azureDeployments={azureDeployments}
                 onDeploymentChange={handleDeploymentChange}
+                waveSpeedKeyStatus={waveSpeedKeyStatus}
               />
             )}
             {activeNav === "text-models" && (

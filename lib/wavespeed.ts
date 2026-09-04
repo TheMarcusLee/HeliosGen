@@ -31,6 +31,46 @@ export interface WaveSpeedModel {
   requestSchema?: WaveSpeedRequestSchema;
 }
 
+export type WaveSpeedMediaFamily = "image" | "video";
+
+const IMAGE_OUTPUT_TYPES = new Set([
+  "image-to-image",
+  "text-to-image",
+]);
+
+const VIDEO_OUTPUT_TYPES = new Set([
+  "audio-to-video",
+  "digital-human",
+  "image-to-video",
+  "motion-control",
+  "text-to-video",
+  "video-dubbing",
+  "video-effects",
+  "video-extend",
+  "video-to-video",
+]);
+
+const AMBIGUOUS_MEDIA_TYPES = new Set(["ai-remover", "lora-support", "portrait-transfer", "upscaler"]);
+const VIDEO_ID_MARKERS = [
+  "/video", "video-", "-video", "/t2v", "/i2v", "/v2v", "text-to-video", "image-to-video", "video-to-video",
+  "video-extend", "/mocha", "pixverse/swap",
+];
+
+/** Classify models by the media they produce, rather than by every media word in their input type. */
+export function isWaveSpeedMediaModel(
+  model: Pick<WaveSpeedModel, "type"> & Partial<Pick<WaveSpeedModel, "modelId" | "name">>,
+  family: WaveSpeedMediaFamily,
+): boolean {
+  const type = model.type.trim().toLowerCase();
+  if (IMAGE_OUTPUT_TYPES.has(type)) return family === "image";
+  if (VIDEO_OUTPUT_TYPES.has(type)) return family === "video";
+  if (!AMBIGUOUS_MEDIA_TYPES.has(type)) return false;
+
+  const identity = `${model.modelId ?? ""} ${model.name ?? ""}`.toLowerCase();
+  const isVideo = VIDEO_ID_MARKERS.some((marker) => identity.includes(marker));
+  return family === (isVideo ? "video" : "image");
+}
+
 type JsonObject = Record<string, unknown>;
 
 let modelCache: { expiresAt: number; models: WaveSpeedModel[] } | null = null;
