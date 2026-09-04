@@ -4,7 +4,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { HeliosClient, type JsonObject, type Workflow } from "./client.js";
 
-const jsonObject = z.record(z.string(), z.unknown());
+const jsonObject = z.record(z.string(), z.json());
 const position = z.object({ x: z.number(), y: z.number() });
 
 function result(value: JsonObject) {
@@ -35,14 +35,15 @@ function createServer(): McpServer {
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, openWorldHint: false },
   }, async () => {
-    const [spaces, models, key] = await Promise.all([
+    const [spaces, models, key, waveSpeedKey] = await Promise.all([
       client.getWorkflows(),
       client.json<JsonObject>("/api/models"),
       client.json<{ hasToken: boolean }>("/api/settings/kie-key"),
+      client.json<{ hasToken: boolean }>("/api/settings/wavespeed-key"),
     ]);
     const textGroups = Array.isArray(models.text) ? models.text as JsonObject[] : [];
     const textCount = textGroups.reduce((count, group) => count + (Array.isArray(group.models) ? group.models.length : 0), 0);
-    return result({ reachable: true, baseUrl: client.baseUrl, kieKeyConfigured: key.hasToken, workflowCount: spaces.length, textModelCount: textCount, imageModelCount: Array.isArray(models.image) ? models.image.length : 0, videoModelCount: Array.isArray(models.video) ? models.video.length : 0 });
+    return result({ reachable: true, baseUrl: client.baseUrl, kieKeyConfigured: key.hasToken, waveSpeedKeyConfigured: waveSpeedKey.hasToken, workflowCount: spaces.length, textModelCount: textCount, imageModelCount: Array.isArray(models.image) ? models.image.length : 0, videoModelCount: Array.isArray(models.video) ? models.video.length : 0 });
   });
 
   server.registerTool("helios_list_models", {
@@ -218,6 +219,50 @@ function createServer(): McpServer {
     inputSchema: z.object({ prompt: z.string().default(""), videoModel: z.string().default("kling-3.0"), startFrameUrl: z.string().url().optional(), endFrameUrl: z.string().url().optional(), referenceImageUrls: z.array(z.string().url()).default([]), referenceVideoUrls: z.array(z.string().url()).default([]), referenceAudioUrls: z.array(z.string().url()).default([]), sound: z.boolean().default(false), duration: z.number().positive().default(5), aspectRatio: z.string().default("16:9"), mode: z.string().default("pro"), resolution: z.string().optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result(await client.json<JsonObject>("/api/generate-video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
+
+  server.registerTool("helios_list_wavespeed_models", {
+    title: "List WaveSpeed models",
+    description: "Search and paginate the live WaveSpeed catalog. Returns compact model metadata, capability type, and base price; use helios_get_wavespeed_model to inspect a model's request schema before generation.",
+    inputSchema: z.object({
+      query: z.string().max(200).optional().describe("Case-insensitive search across model ID, name, description, and type."),
+      type: z.string().max(100).optional().describe("Exact WaveSpeed type such as text-to-image, image-to-image, text-to-video, or image-to-video."),
+      offset: z.number().int().min(0).default(0),
+      limit: z.number().int().min(1).max(100).default(25),
+    }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  }, async ({ query, type, offset, limit }) => {
+    const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    if (query) params.set("query", query);
+    if (type) params.set("type", type);
+    return result(await client.json<JsonObject>(`/api/wavespeed/models?${params}`));
+  });
+
+  server.registerTool("helios_get_wavespeed_model", {
+    title: "Get WaveSpeed model schema",
+    description: "Get one WaveSpeed model and its live JSON request schema, including required parameters, defaults, enums, and numeric bounds. Call this before helios_generate_wavespeed.",
+    inputSchema: z.object({
+      modelId: z.string().min(3).max(240).describe("Exact WaveSpeed model ID, for example wavespeed-ai/z-image/turbo."),
+    }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  }, async ({ modelId }) => {
+    const params = new URLSearchParams({ modelId, includeSchema: "true" });
+    return result(await client.json<JsonObject>(`/api/wavespeed/models?${params}`));
+  });
+
+  server.registerTool("helios_generate_wavespeed", {
+    title: "Start WaveSpeed generation",
+    description: "Start a billable WaveSpeed image or video generation using an exact model ID and that model's schema-specific input object. Returns a HeliosGen task ID for helios_wait_for_job. Inspect the model with helios_get_wavespeed_model first; unsupported or missing parameters are rejected by WaveSpeed.",
+    inputSchema: z.object({
+      modelId: z.string().min(3).max(240).describe("Exact WaveSpeed model ID."),
+      mediaType: z.enum(["image", "video"]).describe("How HeliosGen should store and expose the completed media."),
+      input: jsonObject.describe("WaveSpeed model parameters, including prompt and any model-specific image, size, duration, seed, or quality fields."),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async (input) => result(await client.json<JsonObject>("/api/wavespeed/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })));
 
   server.registerTool("helios_wait_for_job", {
     title: "Wait for generation job",

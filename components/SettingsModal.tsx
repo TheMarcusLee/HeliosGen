@@ -422,6 +422,9 @@ function ApiKeysPanel({
   kieKeyStatus,
   onKieKeySave,
   onKieKeyDelete,
+  waveSpeedKeyStatus,
+  onWaveSpeedKeySave,
+  onWaveSpeedKeyDelete,
   azureKeyStatus,
   onAzureKeySave,
   onAzureKeyDelete,
@@ -433,6 +436,9 @@ function ApiKeysPanel({
   kieKeyStatus: "unknown" | "set" | "unset";
   onKieKeySave: (token: string) => Promise<void>;
   onKieKeyDelete: () => Promise<void>;
+  waveSpeedKeyStatus: "unknown" | "set" | "unset";
+  onWaveSpeedKeySave: (key: string) => Promise<void>;
+  onWaveSpeedKeyDelete: () => Promise<void>;
   azureKeyStatus: "unknown" | "set" | "unset";
   onAzureKeySave: (key: string) => Promise<void>;
   onAzureKeyDelete: () => Promise<void>;
@@ -442,6 +448,9 @@ function ApiKeysPanel({
   const [kieInput, setKieInput]       = useState("");
   const [kieSaving, setKieSaving]     = useState(false);
   const [kieError, setKieError]       = useState<string | null>(null);
+  const [waveSpeedInput, setWaveSpeedInput]   = useState("");
+  const [waveSpeedSaving, setWaveSpeedSaving] = useState(false);
+  const [waveSpeedError, setWaveSpeedError]   = useState<string | null>(null);
   const [azureInput, setAzureInput]   = useState("");
   const [azureSaving, setAzureSaving] = useState(false);
   const [azureError, setAzureError]   = useState<string | null>(null);
@@ -534,6 +543,20 @@ function ApiKeysPanel({
     }
   };
 
+  const handleWaveSpeedSave = async () => {
+    if (!waveSpeedInput.trim()) return;
+    setWaveSpeedSaving(true);
+    setWaveSpeedError(null);
+    try {
+      await onWaveSpeedKeySave(waveSpeedInput.trim());
+      setWaveSpeedInput("");
+    } catch (e: unknown) {
+      setWaveSpeedError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setWaveSpeedSaving(false);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
       {/* Header */}
@@ -542,7 +565,7 @@ function ApiKeysPanel({
           API Keys
         </h2>
         <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
-          Your Kie.ai key is stored securely on the server — it is never exposed to the browser.
+          Provider keys are stored locally on the server and are never exposed back to the browser.
         </p>
       </div>
 
@@ -655,6 +678,115 @@ function ApiKeysPanel({
               Get your token at{" "}
               <a href="https://kie.ai/api-key" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>
                 kie.ai/api-key
+              </a>
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ──── WaveSpeed API key ───────────────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          padding: "16px",
+          background: "rgba(34,211,238,0.035)",
+          border: "1px solid rgba(34,211,238,0.14)",
+          borderRadius: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span
+            style={{
+              width: "28px", height: "28px", borderRadius: "7px",
+              background: "rgba(34,211,238,0.09)", border: "1px solid rgba(34,211,238,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "rgba(103,232,249,0.9)", fontSize: "13px", fontWeight: 750,
+            }}
+          >
+            W
+          </span>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>WaveSpeed</div>
+            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+              Live model catalog and schema-driven image &amp; video generation
+            </div>
+          </div>
+          {waveSpeedKeyStatus === "set" && (
+            <span
+              style={{
+                marginLeft: "auto", fontSize: "10px", fontWeight: 600,
+                color: "rgba(74,222,128,0.8)", background: "rgba(74,222,128,0.08)",
+                border: "1px solid rgba(74,222,128,0.2)", borderRadius: "5px",
+                padding: "2px 7px", letterSpacing: "0.04em",
+              }}
+            >
+              SAVED
+            </span>
+          )}
+        </div>
+
+        {waveSpeedKeyStatus === "unknown" ? (
+          <div style={{
+            height: "31px", borderRadius: "7px", background: "rgba(255,255,255,0.05)",
+            animation: "skeleton-pulse 1.4s ease-in-out infinite",
+          }} />
+        ) : waveSpeedKeyStatus === "set" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <input
+              type="password"
+              value="placeholdertoken"
+              readOnly
+              aria-label="Saved WaveSpeed API key"
+              style={{ ...INPUT_STYLE, flex: 1, cursor: "default", color: "rgba(255,255,255,0.3)" }}
+            />
+            <button
+              onClick={onWaveSpeedKeyDelete}
+              style={{
+                padding: "7px 12px", borderRadius: "7px", border: "1px solid rgba(239,68,68,0.3)",
+                background: "rgba(239,68,68,0.06)", color: "rgba(239,68,68,0.7)",
+                cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                id="wavespeed-api-key"
+                type="password"
+                placeholder="Paste your WaveSpeed API key"
+                value={waveSpeedInput}
+                onChange={(e) => setWaveSpeedInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleWaveSpeedSave(); }}
+                style={{ ...INPUT_STYLE, flex: 1 }}
+                onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(34,211,238,0.4)"; }}
+                onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+              />
+              <button
+                onClick={handleWaveSpeedSave}
+                disabled={!waveSpeedInput.trim() || waveSpeedSaving}
+                style={{
+                  padding: "7px 14px", borderRadius: "7px", border: "none",
+                  background: waveSpeedInput.trim() ? "rgba(34,211,238,0.14)" : "rgba(255,255,255,0.04)",
+                  color: waveSpeedInput.trim() ? "rgba(103,232,249,0.9)" : "rgba(255,255,255,0.25)",
+                  cursor: waveSpeedInput.trim() ? "pointer" : "default",
+                  fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
+                }}
+              >
+                {waveSpeedSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {waveSpeedError && (
+              <p style={{ fontSize: "11px", color: "rgba(239,68,68,0.7)", margin: 0 }}>{waveSpeedError}</p>
+            )}
+            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+              Get your key at{" "}
+              <a href="https://wavespeed.ai/accesskey" target="_blank" rel="noreferrer" style={{ color: "rgba(103,232,249,0.55)" }}>
+                wavespeed.ai/accesskey
               </a>
             </p>
           </div>
@@ -1341,6 +1473,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [azureTextDeployment, setAzureTextDeployment] = useState("auto-model");
   const [azureTextModelName, setAzureTextModelName]   = useState("model-router");
   const [kieKeyStatus, setKieKeyStatus]               = useState<"unknown" | "set" | "unset">("unknown");
+  const [waveSpeedKeyStatus, setWaveSpeedKeyStatus]   = useState<"unknown" | "set" | "unset">("unknown");
   const [azureKeyStatus, setAzureKeyStatus]   = useState<"unknown" | "set" | "unset">("unknown");
   const [codexStatus, setCodexStatus]         = useState<CodexStatus>({ kind: "unknown" });
   const setKieKeySet    = useWorkflowStore((s) => s.setKieKeySet);
@@ -1380,6 +1513,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         .then((r) => r.json())
         .then((d) => setAzureKeyStatus(d.hasToken ? "set" : "unset"))
         .catch(() => setAzureKeyStatus("unset"))
+    );
+    authHeader().then((h) =>
+      fetch("/api/settings/wavespeed-key", { headers: h })
+        .then((r) => r.json())
+        .then((d) => setWaveSpeedKeyStatus(d.hasToken ? "set" : "unset"))
+        .catch(() => setWaveSpeedKeyStatus("unset"))
     );
     // Check whether the server has a working codex-imagegen + codex login
     refreshCodexStatus();
@@ -1452,6 +1591,23 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     await fetch("/api/settings/azure-key", { method: "DELETE", headers: h });
     setAzureKeyStatus("unset");
     setAzureKeySet(false);
+  };
+
+  const handleWaveSpeedKeySave = async (key: string) => {
+    const h = await authHeader();
+    const res = await fetch("/api/settings/wavespeed-key", {
+      method: "POST",
+      headers: { ...h, "Content-Type": "application/json" },
+      body: JSON.stringify({ waveSpeedApiKey: key }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+    setWaveSpeedKeyStatus("set");
+  };
+
+  const handleWaveSpeedKeyDelete = async () => {
+    const h = await authHeader();
+    await fetch("/api/settings/wavespeed-key", { method: "DELETE", headers: h });
+    setWaveSpeedKeyStatus("unset");
   };
 
   const handleAzureTextDeploymentChange = (v: string) => {
@@ -1654,6 +1810,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 kieKeyStatus={kieKeyStatus}
                 onKieKeySave={handleKieKeySave}
                 onKieKeyDelete={handleKieKeyDelete}
+                waveSpeedKeyStatus={waveSpeedKeyStatus}
+                onWaveSpeedKeySave={handleWaveSpeedKeySave}
+                onWaveSpeedKeyDelete={handleWaveSpeedKeyDelete}
                 azureKeyStatus={azureKeyStatus}
                 onAzureKeySave={handleAzureKeySave}
                 onAzureKeyDelete={handleAzureKeyDelete}

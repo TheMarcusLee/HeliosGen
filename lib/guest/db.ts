@@ -131,7 +131,7 @@ export function updateGeneration(
 
 export function recoverJob(
   taskId: string,
-): Pick<Generation, "status" | "video_url" | "image_url" | "image_urls" | "error_msg"> | null {
+): Pick<Generation, "status" | "generation_type" | "video_url" | "image_url" | "image_urls" | "error_msg"> | null {
   const r = db().prepare("SELECT * FROM generations WHERE task_id = ?").get(taskId) as GenRow | undefined;
   return r ? rowToGeneration(r) : null;
 }
@@ -250,6 +250,21 @@ export function setAzureApiKey(key: string): void {
 
 export function deleteAzureApiKey(): void {
   deleteSetting("azure_api_key");
+}
+
+export function getWaveSpeedApiKey(): string | null {
+  const dbKey = getSetting("wavespeed_api_key");
+  if (dbKey) return dbKey;
+  const envKey = process.env.WAVESPEED_API_KEY ?? "";
+  return envKey || null;
+}
+
+export function setWaveSpeedApiKey(key: string): void {
+  setSetting("wavespeed_api_key", key);
+}
+
+export function deleteWaveSpeedApiKey(): void {
+  deleteSetting("wavespeed_api_key");
 }
 
 // ── Folders ────────────────────────────────────────────────────────────────

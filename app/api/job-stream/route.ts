@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { jobStore, type JobResult } from "@/lib/jobStore";
 import { jobEvents } from "@/lib/jobEvents";
 import { resumeKieJob } from "@/lib/kieJobPoller";
+import { isWaveSpeedTaskId, resumeWaveSpeedJob } from "@/lib/wavespeedJobPoller";
 import * as guestDb from "@/lib/guest/db";
 
 const SSE_HEADERS = {
@@ -26,6 +27,9 @@ function recoverJob(taskId: string): JobResult | null {
   if (gen?.status === "error") {
     return { status: "error", error: gen.error_msg ?? "Generation failed" };
   }
+  if (gen?.status === "pending") {
+    return { status: "pending", type: gen.generation_type === "video" ? "video" : "image" };
+  }
   return null;
 }
 
@@ -34,7 +38,7 @@ export async function GET(req: NextRequest) {
   if (!taskId) return new Response("taskId required", { status: 400 });
 
   // Already settled in jobStore — respond immediately, no stream needed
-  const existing = jobStore.get(taskId);
+  let existing = jobStore.get(taskId);
   if (existing && existing.status !== "pending") {
     return immediate(existing);
   }
@@ -43,15 +47,19 @@ export async function GET(req: NextRequest) {
     const recovered = recoverJob(taskId);
     if (recovered) {
       jobStore.set(taskId, recovered);
-      return immediate(recovered);
+      if (recovered.status !== "pending") return immediate(recovered);
+      existing = recovered;
+    } else {
+      // No DB record either — truly not found
+      return immediate({ status: "error", error: "Job not found" });
     }
-    // No DB record either — truly not found
-    return immediate({ status: "error", error: "Job not found" });
   }
 
   // Restart the kie.ai poller if a server restart lost it.
-  if (!taskId.startsWith("azure-")) {
-    resumeKieJob(taskId, existing.type === "video" ? "video" : "image");
+  if (!taskId.startsWith("azure-") && !taskId.startsWith("codex-")) {
+    const kind = existing.type === "video" ? "video" : "image";
+    if (isWaveSpeedTaskId(taskId)) resumeWaveSpeedJob(taskId, kind);
+    else resumeKieJob(taskId, kind);
   }
 
   // Job is pending — open an SSE stream and wait for the poller/callback to fire

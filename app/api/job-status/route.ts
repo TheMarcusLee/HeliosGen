@@ -1,23 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { resumeKieJob } from "@/lib/kieJobPoller";
+import { isWaveSpeedTaskId, resumeWaveSpeedJob } from "@/lib/wavespeedJobPoller";
 import * as guestDb from "@/lib/guest/db";
 
-function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" {
+function recoverJob(taskId: string): { state: "done" | "error" | "pending" | "not_found"; type?: "image" | "video" } {
   const gen = guestDb.recoverJob(taskId);
-  if (!gen) return "not_found";
+  if (!gen) return { state: "not_found" };
   if (gen.status === "done") {
     const result = gen.video_url
       ? { status: "done" as const, videoUrl: gen.video_url }
       : { status: "done" as const, imageUrl: gen.image_url ?? undefined, imageUrls: gen.image_urls ?? undefined };
     jobStore.set(taskId, result);
-    return "done";
+    return { state: "done" };
   }
   if (gen.status === "error") {
     jobStore.set(taskId, { status: "error", error: gen.error_msg ?? "Generation failed" });
-    return "error";
+    return { state: "error" };
   }
-  return "pending";
+  return { state: "pending", type: gen.generation_type === "video" ? "video" : "image" };
 }
 
 export async function GET(req: NextRequest) {
@@ -32,25 +33,31 @@ export async function GET(req: NextRequest) {
   if (result) {
     // If a restart killed the background poller for a job that's still pending,
     // restart it so the result can still land.
-    if (result.status === "pending" && !taskId.startsWith("azure-")) {
-      resumeKieJob(taskId, result.type === "video" ? "video" : "image");
+    if (result.status === "pending" && !taskId.startsWith("azure-") && !taskId.startsWith("codex-")) {
+      const kind = result.type === "video" ? "video" : "image";
+      if (isWaveSpeedTaskId(taskId)) resumeWaveSpeedJob(taskId, kind);
+      else resumeKieJob(taskId, kind);
     }
     return NextResponse.json(result);
   }
 
   // Task not in local store (server restarted / cold start).
   // Azure jobs have no DB record and can't be recovered.
-  if (taskId.startsWith("azure-")) {
+  if (taskId.startsWith("azure-") || taskId.startsWith("codex-")) {
     return NextResponse.json({ status: "not_found" });
   }
 
   const recovered = recoverJob(taskId);
 
-  if (recovered === "done" || recovered === "error") {
+  if (recovered.state === "done" || recovered.state === "error") {
     return NextResponse.json(jobStore.get(taskId)!);
   }
 
-  if (recovered === "pending") {
+  if (recovered.state === "pending") {
+    const kind = recovered.type ?? "image";
+    jobStore.set(taskId, { status: "pending", type: kind });
+    if (isWaveSpeedTaskId(taskId)) resumeWaveSpeedJob(taskId, kind);
+    else resumeKieJob(taskId, kind);
     return NextResponse.json({ status: "pending" });
   }
 

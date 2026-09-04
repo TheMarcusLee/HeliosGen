@@ -43,7 +43,7 @@ The app is **not code-signed** yet:
 ## 🚀 First run
 
 1. Launch HeliosGen.
-2. Open **Settings → API Keys** and paste your **[kie.ai](https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec) API key**.
+2. Open **Settings → API Keys** and add your **[kie.ai](https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec)** and/or **[WaveSpeed](https://wavespeed.ai/accesskey)** API key.
 3. Start generating.
 
 Everything stays on your machine. Generations, uploads, folders, workflows and
@@ -134,7 +134,7 @@ You only pay for what you generate.
 - Parallel & sequential pipeline execution
 - Real-time generation history
 - 100% local — your data never leaves your machine
-- Bring your own kie.ai key
+- Bring your own Kie.ai and WaveSpeed keys
 - Modern responsive UI
 
 ---
@@ -155,7 +155,9 @@ You only pay for what you generate.
 - Grok Imagine, Grok Imagine 1.5 preview (X)
 - HappyHorse (Alibaba)
 
-More models are coming.
+WaveSpeed's live catalog is also available through the HeliosGen API and writable MCP. Agents can search the catalog, inspect each model's current request schema, start image or video jobs, and wait for locally mirrored results.
+
+See [the Node Banana review and provider roadmap](docs/node-banana-review.md) for the architectural ideas adopted now and the next features planned for the canvas.
 
 ---
 
@@ -167,7 +169,7 @@ More models are coming.
 | App | Next.js + React + TypeScript (bundled Node sidecar) |
 | Database | SQLite (local) |
 | Storage | Local disk |
-| AI Backend | kie.ai |
+| AI Backends | Kie.ai, WaveSpeed, Azure Foundry, Codex CLI |
 
 ---
 
@@ -302,4 +304,3 @@ MIT License
 <p align="center">
   Built for creators building the future of AI workflows.
 </p>
-
