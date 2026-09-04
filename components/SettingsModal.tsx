@@ -95,7 +95,7 @@ export function saveAzureTextModelName(name: string) {
 
 const IS_DEBUG = process.env.NEXT_PUBLIC_DEBUG === "true";
 
-type NavId = "api-keys" | "image-models" | "video-models" | "text-models" | "debug";
+type NavId = "api-keys" | "image-models" | "video-models" | "text-models" | "usage" | "debug";
 
 const NAV_BASE: { id: NavId; label: string; icon: React.ReactNode }[] = [
   {
@@ -129,6 +129,13 @@ const NAV_BASE: { id: NavId; label: string; icon: React.ReactNode }[] = [
         <path d="m22 8-6 4 6 4V8z" />
         <rect x="2" y="6" width="14" height="12" rx="2" />
       </svg>
+    ),
+  },
+  {
+    id: "usage",
+    label: "Usage & Cost",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 2v20M17 5.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
     ),
   },
   {
@@ -415,6 +422,39 @@ const INPUT_STYLE: React.CSSProperties = {
   fontFamily: "inherit",
   width: "100%",
 };
+
+function ComfySettingsCard() {
+  const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:8188");
+  const [apiKey, setApiKey] = useState("");
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings/comfy").then((response) => response.json()).then((body) => {
+      setBaseUrl(body.baseUrl ?? "http://127.0.0.1:8188");
+      setHasApiKey(Boolean(body.hasApiKey));
+    }).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setSaving(true); setMessage(null);
+    try {
+      const response = await fetch("/api/settings/comfy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseUrl, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Unable to save ComfyUI settings.");
+      setHasApiKey(Boolean(body.hasApiKey)); setApiKey(""); setMessage("Saved");
+    } catch (error) { setMessage((error as Error).message); }
+    finally { setSaving(false); }
+  };
+
+  return <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px", background: "rgba(192,132,252,0.035)", border: "1px solid rgba(192,132,252,0.14)", borderRadius: "12px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}><span style={{ width: 28, height: 28, borderRadius: 7, display: "grid", placeItems: "center", background: "rgba(192,132,252,0.1)", color: "#c084fc", fontWeight: 700 }}>C</span><div><div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>ComfyUI</div><div style={{ fontSize: 10, color: "rgba(255,255,255,.28)" }}>Local server or Comfy Cloud API workflows</div></div>{hasApiKey && <span style={{ marginLeft: "auto", fontSize: 10, color: "#4ade80" }}>KEY SAVED</span>}</div>
+    <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="http://127.0.0.1:8188 or https://cloud.comfy.org" style={INPUT_STYLE} />
+    <div style={{ display: "flex", gap: 8 }}><input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder={hasApiKey ? "Replace API key (optional)" : "Comfy Cloud API key (optional for local)"} style={{ ...INPUT_STYLE, flex: 1 }} /><button onClick={save} disabled={saving} style={{ border: 0, borderRadius: 7, padding: "7px 14px", background: "rgba(192,132,252,.14)", color: "#d8b4fe", cursor: "pointer" }}>{saving ? "Saving…" : "Save"}</button></div>
+    {message && <div style={{ fontSize: 10, color: message === "Saved" ? "#4ade80" : "#f87171" }}>{message}</div>}
+  </div>;
+}
 
 function ApiKeysPanel({
   azureBaseUrl,
@@ -792,6 +832,8 @@ function ApiKeysPanel({
           </div>
         )}
       </div>
+
+      <ComfySettingsCard />
 
       {/* ──── Azure Foundry API key + endpoint ────────────────────────── */}
       <div
@@ -1587,6 +1629,24 @@ function TextModelsPanel({
   );
 }
 
+/* ─── Usage panel ───────────────────────────────────────────────────────────── */
+
+function UsagePanel() {
+  const [data, setData] = useState<{ totals: { quoted: number; actual: number; attempts: number; completed: number }; entries: Array<{ id: string; modelId: string; status: string; quotedCost?: number; attemptIndex: number; createdAt: string }> } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/ledger?limit=200").then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Unable to load usage."); setData(body); }).catch((reason) => setError((reason as Error).message));
+  }, []);
+  return <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    <div><h2 style={{ fontSize: 17, fontWeight: 600, color: "rgba(255,255,255,.9)", margin: 0 }}>Usage &amp; cost</h2><p style={{ fontSize: 12, color: "rgba(255,255,255,.3)", marginTop: 6 }}>WaveSpeed estimates are captured per attempt, including fallbacks. They remain estimates unless the provider reports a final charge.</p></div>
+    {error && <div style={{ color: "#f87171", fontSize: 12 }}>{error}</div>}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+      {[ ["Estimated spend", `$${(data?.totals.actual ?? 0).toFixed(4)}`], ["Quoted", `$${(data?.totals.quoted ?? 0).toFixed(4)}`], ["Attempts", String(data?.totals.attempts ?? 0)], ["Completed", String(data?.totals.completed ?? 0)] ].map(([label, value]) => <div key={label} style={{ border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, padding: 12, background: "rgba(255,255,255,.025)" }}><div style={{ fontSize: 10, color: "rgba(255,255,255,.35)" }}>{label}</div><div style={{ marginTop: 5, fontSize: 17, color: "white", fontWeight: 600 }}>{value}</div></div>)}
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{data?.entries.map((entry) => <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,.05)", padding: "9px 2px", fontSize: 11 }}><span style={{ width: 58, color: entry.status === "done" ? "#4ade80" : entry.status === "error" ? "#f87171" : "rgba(255,255,255,.45)" }}>{entry.status}</span><span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "rgba(255,255,255,.65)" }}>{entry.modelId}</span><span style={{ color: "rgba(255,255,255,.35)" }}>#{entry.attemptIndex + 1}</span><span style={{ width: 70, textAlign: "right", color: "rgba(255,255,255,.55)" }}>{entry.quotedCost == null ? "variable" : `$${entry.quotedCost.toFixed(4)}`}</span></div>)}</div>
+  </div>;
+}
+
 /* ─── Debug panel ───────────────────────────────────────────────────────────── */
 
 function DebugPanel() {
@@ -2026,6 +2086,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 onModelNameChange={handleAzureTextModelNameChange}
               />
             )}
+            {activeNav === "usage" && <UsagePanel />}
             {activeNav === "debug" && IS_DEBUG && <DebugPanel />}
           </div>
         </div>

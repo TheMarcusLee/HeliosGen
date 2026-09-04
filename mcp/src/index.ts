@@ -26,31 +26,32 @@ function summary(workflow: Workflow): JsonObject {
 }
 
 function createServer(): McpServer {
-  const server = new McpServer({ name: "heliosgen", version: "0.1.0" });
+  const server = new McpServer({ name: "heliosgen", version: "0.2.0" });
   const client = new HeliosClient();
 
   server.registerTool("helios_get_status", {
     title: "Get HeliosGen status",
     description: "Check whether the local HeliosGen app is reachable and report workflow, model, and Kie key status.",
     inputSchema: z.object({}),
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async () => {
-    const [spaces, models, key, waveSpeedKey] = await Promise.all([
+    const [spaces, models, key, waveSpeedKey, comfy] = await Promise.all([
       client.getWorkflows(),
       client.json<JsonObject>("/api/models"),
       client.json<{ hasToken: boolean }>("/api/settings/kie-key"),
       client.json<{ hasToken: boolean }>("/api/settings/wavespeed-key"),
+      client.json<{ hasApiKey: boolean; baseUrl: string }>("/api/settings/comfy"),
     ]);
     const textGroups = Array.isArray(models.text) ? models.text as JsonObject[] : [];
     const textCount = textGroups.reduce((count, group) => count + (Array.isArray(group.models) ? group.models.length : 0), 0);
-    return result({ reachable: true, baseUrl: client.baseUrl, kieKeyConfigured: key.hasToken, waveSpeedKeyConfigured: waveSpeedKey.hasToken, workflowCount: spaces.length, textModelCount: textCount, imageModelCount: Array.isArray(models.image) ? models.image.length : 0, videoModelCount: Array.isArray(models.video) ? models.video.length : 0 });
+    return result({ reachable: true, baseUrl: client.baseUrl, kieKeyConfigured: key.hasToken, waveSpeedKeyConfigured: waveSpeedKey.hasToken, comfyApiKeyConfigured: comfy.hasApiKey, comfyBaseUrl: comfy.baseUrl, workflowCount: spaces.length, textModelCount: textCount, imageModelCount: Array.isArray(models.image) ? models.image.length : 0, videoModelCount: Array.isArray(models.video) ? models.video.length : 0 });
   });
 
   server.registerTool("helios_list_models", {
     title: "List HeliosGen models",
     description: "List the configured text, image, or video models and their capabilities.",
     inputSchema: z.object({ type: z.enum(["text", "image", "video"]).optional().describe("Omit to return every model family.") }),
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ type }) => {
     const models = await client.json<JsonObject>("/api/models");
     return result(type ? { type, models: models[type] } : models);
@@ -60,7 +61,7 @@ function createServer(): McpServer {
     title: "List workflows",
     description: "Search and paginate local HeliosGen workflows, returning compact summaries.",
     inputSchema: z.object({ query: z.string().optional(), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(100).default(25) }),
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ query, offset, limit }) => {
     const all = await client.getWorkflows();
     const filtered = query ? all.filter((workflow) => workflow.name.toLowerCase().includes(query.toLowerCase()) || workflow.id.includes(query)) : all;
@@ -71,7 +72,7 @@ function createServer(): McpServer {
     title: "Get workflow",
     description: "Get a complete workflow graph, including nodes, edges, counters, and viewport.",
     inputSchema: z.object({ workflowId: z.string().min(1) }),
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ workflowId }) => {
     const workflow = (await client.getWorkflows()).find((candidate) => candidate.id === workflowId);
     if (!workflow) throw new Error(`Workflow not found: ${workflowId}`);
@@ -82,7 +83,7 @@ function createServer(): McpServer {
     title: "Get generation job",
     description: "Get the current state and output URL of an image or video generation job.",
     inputSchema: z.object({ taskId: z.string().min(1) }),
-    annotations: { readOnlyHint: true, openWorldHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ taskId }) => result(await client.json<JsonObject>(`/api/job-status?taskId=${encodeURIComponent(taskId)}`)));
 
   server.registerTool("helios_create_workflow", {
@@ -256,6 +257,10 @@ function createServer(): McpServer {
       modelId: z.string().min(3).max(240).describe("Exact WaveSpeed model ID."),
       mediaType: z.enum(["image", "video"]).describe("How HeliosGen should store and expose the completed media."),
       input: jsonObject.describe("WaveSpeed model parameters, including prompt and any model-specific image, size, duration, seed, or quality fields."),
+      fallbackModelIds: z.array(z.string().min(3).max(240)).max(8).default([]).describe("Ordered compatible fallback model IDs."),
+      maxCost: z.number().nonnegative().optional().describe("Maximum estimated USD spend across the primary model and attempted fallbacks."),
+      workflowId: z.string().max(240).optional(),
+      nodeId: z.string().max(240).optional(),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result(await client.json<JsonObject>("/api/wavespeed/generate", {
@@ -264,11 +269,94 @@ function createServer(): McpServer {
     body: JSON.stringify(input),
   })));
 
+  server.registerTool("helios_add_wavespeed_node", {
+    title: "Add schema-driven WaveSpeed node",
+    description: "Add a configured WaveSpeed image or video node to a workflow. The live model schema, defaults, pricing estimate, ordered fallbacks, and cost ceiling are stored with the node so it is immediately editable on the canvas.",
+    inputSchema: z.object({
+      workflowId: z.string().min(1),
+      modelId: z.string().min(3).max(240),
+      mediaType: z.enum(["image", "video"]),
+      position,
+      parameters: jsonObject.default({}),
+      fallbackModelIds: z.array(z.string().min(3).max(240)).max(8).default([]),
+      maxCost: z.number().nonnegative().optional(),
+      label: z.string().min(1).max(120).default("WaveSpeed"),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async ({ workflowId, modelId, mediaType, position: nodePosition, parameters, fallbackModelIds, maxCost, label }) => {
+    const response = await client.json<{ model: JsonObject }>(`/api/wavespeed/models?modelId=${encodeURIComponent(modelId)}&includeSchema=true`);
+    const model = response.model;
+    const id = `waveSpeedNode-${randomUUID()}`;
+    const workflow = await client.mutateWorkflow(workflowId, (current) => ({
+      ...current,
+      nodes: [...current.nodes, {
+        id, type: "waveSpeedNode", position: nodePosition, style: { width: 380, height: 560 },
+        data: {
+          label, status: "idle", waveSpeedFamily: mediaType, waveSpeedModelId: modelId,
+          waveSpeedModelName: model.name, waveSpeedModelType: model.type,
+          waveSpeedSchema: model.requestSchema, waveSpeedBasePrice: model.basePrice,
+          waveSpeedParameters: parameters, waveSpeedFallbacks: fallbackModelIds,
+          ...(maxCost !== undefined ? { waveSpeedMaxCost: maxCost } : {}),
+        },
+      }],
+    }));
+    return result({ nodeId: id, workflow: summary(workflow!), model });
+  });
+
+  server.registerTool("helios_list_generation_ledger", {
+    title: "List generation cost ledger",
+    description: "List recent WaveSpeed generation attempts and aggregated quoted/estimated spend. Filter by workflow or node to audit fallback attempts and costs.",
+    inputSchema: z.object({ workflowId: z.string().optional(), nodeId: z.string().optional(), limit: z.number().int().min(1).max(500).default(100) }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ workflowId, nodeId, limit }) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (workflowId) params.set("workflowId", workflowId);
+    if (nodeId) params.set("nodeId", nodeId);
+    return result(await client.json<JsonObject>(`/api/ledger?${params}`));
+  });
+
+  server.registerTool("helios_list_community_workflows", {
+    title: "List community workflows",
+    description: "Browse the Node Banana community workflow catalog with names, authors, tags, node counts, and download sizes. Large media-embedded workflows are clearly identified before import.",
+    inputSchema: z.object({ query: z.string().max(200).optional() }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  }, async ({ query }) => {
+    const body = await client.json<{ workflows?: JsonObject[] }>("/api/community-workflows");
+    const workflows = body.workflows ?? [];
+    const filtered = query ? workflows.filter((workflow) => JSON.stringify(workflow).toLowerCase().includes(query.toLowerCase())) : workflows;
+    return result({ count: filtered.length, workflows: filtered });
+  });
+
+  server.registerTool("helios_import_community_workflow", {
+    title: "Import community workflow",
+    description: "Download a Node Banana community workflow, convert supported nodes and edges into HeliosGen format, preserve provider model choices where possible, and save it as a new editable workflow. Files over 25 MB require allowLarge=true.",
+    inputSchema: z.object({ workflowId: z.string().min(1).max(180).describe("Community catalog ID."), allowLarge: z.boolean().default(false).describe("Explicitly allow downloading media-embedded files over 25 MB.") }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async ({ workflowId, allowLarge }) => result(await client.json<JsonObject>(`/api/community-workflows/${encodeURIComponent(workflowId)}/import`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowLarge }),
+  })));
+
+  server.registerTool("helios_run_comfy_workflow", {
+    title: "Run ComfyUI workflow",
+    description: "Execute an API-format ComfyUI workflow through the configured local server or Comfy Cloud endpoint. Bindings override exposed primitive/media inputs; completed files are copied into HeliosGen media storage.",
+    inputSchema: z.object({
+      workflow: jsonObject.describe("ComfyUI workflow exported with Save (API Format)."),
+      bindings: z.array(z.object({
+        id: z.string(), nodeId: z.string(), inputName: z.string(), nodeTitle: z.string(),
+        kind: z.enum(["prompt", "image", "video", "audio", "value"]),
+        value: z.json(), valueType: z.enum(["string", "number", "boolean"]),
+      }).strict()).default([]),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async (input) => result(await client.json<JsonObject>("/api/comfyui/run", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  })));
+
   server.registerTool("helios_wait_for_job", {
     title: "Wait for generation job",
     description: "Poll an image or video generation job until it completes, fails, disappears, or reaches the timeout.",
     inputSchema: z.object({ taskId: z.string().min(1), timeoutSeconds: z.number().int().min(1).max(600).default(300), pollSeconds: z.number().min(1).max(10).default(3) }),
-    annotations: { readOnlyHint: true, openWorldHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ taskId, timeoutSeconds, pollSeconds }) => {
     const deadline = Date.now() + timeoutSeconds * 1000;
     let state: JsonObject = { status: "pending" };

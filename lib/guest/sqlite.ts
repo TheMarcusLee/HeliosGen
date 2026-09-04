@@ -72,6 +72,44 @@ function createSchema(d: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS spaces (
       id TEXT PRIMARY KEY, name TEXT, data TEXT, updated_at INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS generation_ledger (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      workflow_id TEXT,
+      node_id TEXT,
+      provider TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      attempt_index INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL,
+      quoted_cost REAL,
+      actual_cost REAL,
+      cost_kind TEXT NOT NULL DEFAULT 'estimate',
+      currency TEXT NOT NULL DEFAULT 'USD',
+      error_msg TEXT,
+      metadata TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ledger_workflow
+      ON generation_ledger (workflow_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_ledger_task
+      ON generation_ledger (task_id, attempt_index);
+
+    CREATE TABLE IF NOT EXISTS wavespeed_run_plans (
+      task_id TEXT PRIMARY KEY,
+      media_type TEXT NOT NULL,
+      workflow_id TEXT,
+      node_id TEXT,
+      models_json TEXT NOT NULL,
+      current_index INTEGER NOT NULL DEFAULT 0,
+      prediction_id TEXT NOT NULL,
+      input_json TEXT NOT NULL,
+      max_cost REAL,
+      estimated_spend REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
 

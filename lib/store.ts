@@ -4,6 +4,8 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { edgeStyle } from "./edgeStyles";
 import { VIDEO_MODELS } from "./modelConfig";
 import { requestWorkflowSync } from "./workflowSyncBus";
+import type { WaveSpeedMediaFamily, WaveSpeedRequestSchema } from "./wavespeedTypes";
+import { createHistorySnapshot, sanitizeSpace, sanitizeWorkflowGraph } from "./graphIntegrity";
 import {
   Node,
   Edge,
@@ -23,6 +25,10 @@ export interface NodeData extends Record<string, unknown> {
   status?: NodeStatus;
   // shared
   prompt?: string;
+  variableName?: string;
+  template?: string;
+  unresolvedVars?: string[];
+  annotations?: unknown[];
   // comment / sticky-note node
   comment?: string;
   // generate node
@@ -63,6 +69,23 @@ export interface NodeData extends Record<string, unknown> {
   locked?: boolean;
   // pending job
   taskId?: string;
+  // schema-driven WaveSpeed provider node
+  waveSpeedFamily?: WaveSpeedMediaFamily;
+  waveSpeedModelId?: string;
+  waveSpeedModelName?: string;
+  waveSpeedModelType?: string;
+  waveSpeedSchema?: WaveSpeedRequestSchema;
+  waveSpeedParameters?: Record<string, unknown>;
+  waveSpeedFallbacks?: string[];
+  waveSpeedBasePrice?: number;
+  waveSpeedMaxCost?: number;
+  waveSpeedLastEstimatedCost?: number;
+  // imported ComfyUI API workflow node
+  comfyWorkflow?: unknown;
+  comfyWorkflowName?: string;
+  comfyBindings?: unknown[];
+  comfyOutputUrls?: string[];
+  comfyPromptId?: string;
 }
 
 /** Pick only the listed keys from an object; returns null if none are present. */
@@ -84,6 +107,10 @@ export function getNodeLabel(type: string, n: number): string {
     generateNode:        `Image Generator #${n}`,
     videoGeneratorNode:  `Video Generator #${n}`,
     commentNode:         `Comment #${n}`,
+    waveSpeedNode:       `WaveSpeed #${n}`,
+    templateNode:        `Template #${n}`,
+    comfyWorkflowNode:   `ComfyUI #${n}`,
+    annotationNode:      `Annotation #${n}`,
   };
   return map[type] ?? `Node #${n}`;
 }
@@ -249,7 +276,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         pushUndoSnapshot: () =>
           set((s) => ({
-            undoStack: [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }],
+            undoStack: [...s.undoStack.slice(-(MAX_UNDO - 1)), createHistorySnapshot(s.nodes, s.edges)],
             redoStack: [],
           })),
 
@@ -261,7 +288,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
               nodes:     snap.nodes,
               edges:     snap.edges,
               undoStack: s.undoStack.slice(0, -1),
-              redoStack: [...s.redoStack, { nodes: s.nodes, edges: s.edges }],
+              redoStack: [...s.redoStack, createHistorySnapshot(s.nodes, s.edges)],
               spaces:    syncSpace(s.spaces, s.activeSpaceId, snap.nodes, snap.edges, s.nodeCounters),
             };
           }),
@@ -273,7 +300,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
             return {
               nodes:     snap.nodes,
               edges:     snap.edges,
-              undoStack: [...s.undoStack, { nodes: s.nodes, edges: s.edges }],
+              undoStack: [...s.undoStack, createHistorySnapshot(s.nodes, s.edges)],
               redoStack: s.redoStack.slice(0, -1),
               spaces:    syncSpace(s.spaces, s.activeSpaceId, snap.nodes, snap.edges, s.nodeCounters),
             };
@@ -283,9 +310,10 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         createSpace: (name, template) =>
           set((s) => {
+            const clean = template ? sanitizeWorkflowGraph(template.nodes, template.edges) : null;
             const sp = makeSpace(name, template ? {
-              nodes:        template.nodes,
-              edges:        template.edges,
+              nodes:        clean!.nodes,
+              edges:        clean!.edges,
               nodeCounters: template.nodeCounters,
             } : undefined);
             const spaces = [
@@ -295,8 +323,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
             return {
               spaces,
               activeSpaceId: sp.id,
-              nodes:         template?.nodes        ?? [],
-              edges:         template?.edges        ?? [],
+              nodes:         clean?.nodes            ?? [],
+              edges:         clean?.edges            ?? [],
               nodeCounters:  template?.nodeCounters ?? {},
               undoStack:     [],
               redoStack:     [],
@@ -308,13 +336,14 @@ export const useWorkflowStore = create<WorkflowStore>()(
             if (id === s.activeSpaceId) return {};
             const target = s.spaces.find((sp) => sp.id === id);
             if (!target) return {};
+            const cleanTarget = sanitizeSpace(target);
             const spaces = syncSpace(s.spaces, s.activeSpaceId, s.nodes, s.edges, s.nodeCounters);
             return {
-              spaces,
+              spaces: spaces.map((space) => space.id === id ? cleanTarget : space),
               activeSpaceId: id,
-              nodes:         target.nodes,
-              edges:         target.edges,
-              nodeCounters:  target.nodeCounters,
+              nodes:         cleanTarget.nodes,
+              edges:         cleanTarget.edges,
+              nodeCounters:  cleanTarget.nodeCounters,
               undoStack:     [],
               redoStack:     [],
             };
@@ -344,10 +373,11 @@ export const useWorkflowStore = create<WorkflowStore>()(
           set((s) => {
             const original = s.spaces.find((sp) => sp.id === id);
             if (!original) return {};
+            const cleanOriginal = sanitizeSpace(original);
             const copy = makeSpace(`${original.name} (copy)`, {
-              nodes:        original.nodes,
-              edges:        original.edges,
-              nodeCounters: original.nodeCounters,
+              nodes:        cleanOriginal.nodes,
+              edges:        cleanOriginal.edges,
+              nodeCounters: cleanOriginal.nodeCounters,
             });
             const spaces = syncSpace(s.spaces, s.activeSpaceId, s.nodes, s.edges, s.nodeCounters);
             return { spaces: [...spaces, copy] };
@@ -409,7 +439,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         onConnect: (connection) => {
           set((s) => {
-            const undoStack = [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }];
+            const undoStack = [...s.undoStack.slice(-(MAX_UNDO - 1)), createHistorySnapshot(s.nodes, s.edges)];
             let colorKey: string | undefined;
             if (connection.targetHandle === "startFrame") {
               const targetNode = s.nodes.find((n) => n.id === connection.target);
@@ -438,7 +468,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         addNode: (node) => {
           set((s) => {
-            const undoStack    = [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }];
+            const undoStack    = [...s.undoStack.slice(-(MAX_UNDO - 1)), createHistorySnapshot(s.nodes, s.edges)];
             const type         = node.type ?? "unknown";
             const count        = (s.nodeCounters[type] ?? 0) + 1;
             const label        = getNodeLabel(type, count);
@@ -463,7 +493,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         insertEdge: (edge) => {
           set((s) => {
-            const undoStack = [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }];
+            const undoStack = [...s.undoStack.slice(-(MAX_UNDO - 1)), createHistorySnapshot(s.nodes, s.edges)];
             const edges = [...s.edges, edge];
             return {
               edges,
@@ -641,10 +671,10 @@ export const useWorkflowStore = create<WorkflowStore>()(
             // For each DB space, prefer whichever version is newer (local wins on tie).
             const merged = dbSpaces.map((dbSp) => {
               const local = localById.get(dbSp.id);
-              if (!local) return dbSp;
+              if (!local) return sanitizeSpace(dbSp);
               const localTs = local.updatedAt ?? local.createdAt ?? 0;
               const dbTs    = dbSp.updatedAt  ?? dbSp.createdAt  ?? 0;
-              return localTs >= dbTs ? local : dbSp;
+              return sanitizeSpace(localTs >= dbTs ? local : dbSp);
             });
 
             // Add local-only spaces (not yet in DB).
@@ -654,7 +684,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
             for (const sp of s.spaces) {
               if (!dbIds.has(sp.id)) {
                 if (sp.id === s.activeSpaceId || sp.nodes.length > 0 || sp.edges.length > 0) {
-                  merged.push(sp);
+                  merged.push(sanitizeSpace(sp));
                 }
               }
             }

@@ -9,6 +9,7 @@ import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { DEFAULT_TEXT_MODEL_ID, MODELS as TEXT_MODELS } from "@/lib/models";
 import { extractAssistantTextDelta } from "@/lib/assistantStream";
+import { resolveInputs } from "@/lib/executor";
 
 type AssistantNodeType = Node<NodeData, "assistantNode">;
 
@@ -21,6 +22,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
   const addNode = useWorkflowStore((s) => s.addNode);
   const insertEdge = useWorkflowStore((s) => s.insertEdge);
   const edges = useWorkflowStore((s) => s.edges);
+  const nodes = useWorkflowStore((s) => s.nodes);
   const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -82,7 +84,9 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
   useGeneratingBorderAnimation(cardRef, busy);
 
   const hasOutput = !!outputText;
-  const hasPrompt = !!localPrompt.trim();
+  const upstreamPrompt = resolveInputs(id, nodes, edges).prompt ?? "";
+  const effectivePrompt = upstreamPrompt || localPrompt;
+  const hasPrompt = !!effectivePrompt.trim();
   const sourceConnected = edges.some((e) => e.source === id);
 
   // Auto-switch to output as soon as generation starts (or finishes)
@@ -142,7 +146,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
         method: "POST",
         headers: assistantHeaders,
         body: JSON.stringify({
-          prompt: localPrompt,
+          prompt: effectivePrompt,
           model,
           systemPrompt:
             "You are a senior prompt engineer specializing in optimizing prompts for clarity, precision, and effectiveness. Your task is to take an existing user prompt and rewrite it to improve its structure, specificity, and performance for an AI model. Preserve the original intent while enhancing wording, removing ambiguity, and adding useful detail where appropriate. Do not change the task itself. Output only the improved prompt. Do not include any explanations, comments, formatting markers, or quotation marks.",
@@ -189,7 +193,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
       setLoading(false);
       abortRef.current = null;
     }
-  }, [busy, hasPrompt, localPrompt, id, updateNodeData]);
+  }, [busy, hasPrompt, effectivePrompt, id, updateNodeData, model]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -402,6 +406,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
       </div>
 
       {/* ── Assistant output handle ───────────────────────────────────── */}
+      <Handle type="target" position={Position.Left} id="prompt" style={{ top: "50%" }} title="Prompt input" />
       <Handle
         type="source"
         position={Position.Right}

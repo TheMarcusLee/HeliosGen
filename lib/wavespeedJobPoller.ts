@@ -4,8 +4,17 @@ import { jobEvents } from "./jobEvents";
 import { jobStore, type JobResult } from "./jobStore";
 import { mirrorToR2 } from "./storage";
 import { extractWaveSpeedOutputUrls, getWaveSpeedPrediction, WaveSpeedApiError } from "./wavespeed";
+import { submitWaveSpeedPrediction } from "./wavespeed";
+import {
+  getWaveSpeedRunPlan,
+  insertLedgerAttempt,
+  saveWaveSpeedRunPlan,
+  settleLedgerAttempt,
+} from "./guest/generationLedger";
+import { remapWaveSpeedInput, validateWaveSpeedInput } from "./wavespeedSchema";
 
 const TASK_PREFIX = "wavespeed:";
+const RUN_TASK_PREFIX = "wavespeed-run:";
 const MAX_POLL_MS = 30 * 60 * 1000;
 const FAILURE_STATES = new Set(["failed", "cancelled", "timeout", "deleted"]);
 const active = new Set<string>();
@@ -16,8 +25,12 @@ export function toWaveSpeedTaskId(predictionId: string): string {
   return `${TASK_PREFIX}${predictionId}`;
 }
 
+export function toWaveSpeedRunTaskId(runId: string): string {
+  return `${RUN_TASK_PREFIX}${runId}`;
+}
+
 export function isWaveSpeedTaskId(taskId: string): boolean {
-  return taskId.startsWith(TASK_PREFIX);
+  return taskId.startsWith(TASK_PREFIX) || taskId.startsWith(RUN_TASK_PREFIX);
 }
 
 function predictionIdFromTaskId(taskId: string): string {
@@ -47,11 +60,12 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function loop(taskId: string, kind: Kind): Promise<void> {
   const deadline = Date.now() + MAX_POLL_MS;
-  const predictionId = predictionIdFromTaskId(taskId);
   let intervalMs = 2_000;
 
   while (Date.now() < deadline) {
     await sleep(intervalMs);
+    const plan = getWaveSpeedRunPlan(taskId);
+    const predictionId = plan?.predictionId ?? predictionIdFromTaskId(taskId);
     let data: Record<string, unknown>;
     try {
       data = await getWaveSpeedPrediction(predictionId);
@@ -70,19 +84,103 @@ async function loop(taskId: string, kind: Kind): Promise<void> {
         return;
       }
       await settleSuccess(taskId, kind, urls);
+      if (plan) settleLedgerAttempt(taskId, plan.currentIndex, "done");
       return;
     }
     if (FAILURE_STATES.has(status)) {
-      settle(taskId, kind, {
-        status: "error",
-        error: String(data.error ?? `WaveSpeed task ended with status: ${status}`),
-      });
+      const message = String(data.error ?? `WaveSpeed task ended with status: ${status}`);
+      if (plan) {
+        settleLedgerAttempt(taskId, plan.currentIndex, "error", message);
+        const continued = await tryNextFallback(plan);
+        if (continued) {
+          intervalMs = 2_000;
+          continue;
+        }
+      }
+      settle(taskId, kind, { status: "error", error: message });
       return;
     }
     intervalMs = Math.min(10_000, intervalMs + 1_000);
   }
 
   settle(taskId, kind, { status: "error", error: "WaveSpeed generation timed out." });
+}
+
+async function tryNextFallback(plan: NonNullable<ReturnType<typeof getWaveSpeedRunPlan>>): Promise<boolean> {
+  const primary = plan.models[0];
+  let estimatedSpend = plan.estimatedSpend;
+  for (let nextIndex = plan.currentIndex + 1; nextIndex < plan.models.length; nextIndex++) {
+    const next = plan.models[nextIndex];
+    const nextQuote = next.basePrice ?? 0;
+    if (plan.maxCost !== undefined && estimatedSpend + nextQuote > plan.maxCost) {
+      insertLedgerAttempt({
+        taskId: plan.taskId,
+        workflowId: plan.workflowId,
+        nodeId: plan.nodeId,
+        modelId: next.modelId,
+        attemptIndex: nextIndex,
+        quotedCost: next.basePrice,
+        metadata: { reason: "cost_limit" },
+      });
+      settleLedgerAttempt(plan.taskId, nextIndex, "skipped", "Skipped because the run cost limit would be exceeded.");
+      continue;
+    }
+
+    const input = remapWaveSpeedInput(primary.requestSchema, next.requestSchema, plan.input);
+    const missing = validateWaveSpeedInput(next.requestSchema, input);
+    if (missing.length) {
+      insertLedgerAttempt({
+        taskId: plan.taskId,
+        workflowId: plan.workflowId,
+        nodeId: plan.nodeId,
+        modelId: next.modelId,
+        attemptIndex: nextIndex,
+        quotedCost: next.basePrice,
+        metadata: { reason: "missing_input", missing },
+      });
+      settleLedgerAttempt(plan.taskId, nextIndex, "skipped", `Missing remapped input: ${missing.join(", ")}`);
+      continue;
+    }
+
+    try {
+      const submitted = await submitWaveSpeedPrediction(next.modelId, input);
+      insertLedgerAttempt({
+        taskId: plan.taskId,
+        workflowId: plan.workflowId,
+        nodeId: plan.nodeId,
+        modelId: next.modelId,
+        attemptIndex: nextIndex,
+        quotedCost: next.basePrice,
+        metadata: { predictionId: submitted.predictionId, fallback: true },
+      });
+      estimatedSpend += nextQuote;
+      saveWaveSpeedRunPlan({
+        taskId: plan.taskId,
+        mediaType: plan.mediaType,
+        workflowId: plan.workflowId,
+        nodeId: plan.nodeId,
+        models: plan.models,
+        currentIndex: nextIndex,
+        predictionId: submitted.predictionId,
+        input: plan.input,
+        maxCost: plan.maxCost,
+        estimatedSpend,
+      });
+      return true;
+    } catch (error) {
+      insertLedgerAttempt({
+        taskId: plan.taskId,
+        workflowId: plan.workflowId,
+        nodeId: plan.nodeId,
+        modelId: next.modelId,
+        attemptIndex: nextIndex,
+        quotedCost: next.basePrice,
+        metadata: { fallback: true, submitFailed: true },
+      });
+      settleLedgerAttempt(plan.taskId, nextIndex, "error", error instanceof Error ? error.message : "Fallback submission failed.");
+    }
+  }
+  return false;
 }
 
 async function settleSuccess(taskId: string, kind: Kind, sourceUrls: string[]): Promise<void> {

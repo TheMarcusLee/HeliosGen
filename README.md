@@ -135,6 +135,12 @@ You only pay for what you generate.
 - Real-time generation history
 - 100% local — your data never leaves your machine
 - Bring your own Kie.ai and WaveSpeed keys
+- Live, schema-driven WaveSpeed image and video nodes
+- Ordered provider fallbacks with per-node cost ceilings and a local usage ledger
+- Node Banana community workflow browser and versioned converter
+- ComfyUI API-workflow nodes for local ComfyUI or Comfy Cloud
+- Prompt templates, non-destructive image annotations, and portable media exports
+- Writable local MCP for agent-driven workflow creation, editing, execution, and auditing
 - Modern responsive UI
 
 ---
@@ -155,9 +161,15 @@ You only pay for what you generate.
 - Grok Imagine, Grok Imagine 1.5 preview (X)
 - HappyHorse (Alibaba)
 
-WaveSpeed's live catalog is also available through the HeliosGen API and writable MCP. Agents can search the catalog, inspect each model's current request schema, start image or video jobs, and wait for locally mirrored results.
+WaveSpeed's live catalog is available in Settings, directly on schema-driven canvas nodes, through the HeliosGen API, and through the writable MCP. Controls are generated from each model's request schema. Nodes support compatible ordered fallbacks, an estimated-cost ceiling, and locally mirrored results.
 
-See [the Node Banana review and provider roadmap](docs/node-banana-review.md) for the architectural ideas adopted now and the next features planned for the canvas.
+The dashboard's community library imports and converts shared Node Banana workflows into editable HeliosGen graphs. ComfyUI nodes accept workflows exported with **Save (API Format)** and can execute against a local server or Comfy Cloud configured in Settings.
+
+See [the implemented Node Banana and provider roadmap](docs/node-banana-review.md) for design details and provenance.
+
+## Agent control with MCP
+
+Build the local stdio server with `pnpm mcp:build`, then configure your MCP client to launch `node /absolute/path/to/HeliosGen/mcp/dist/index.js`. Keep HeliosGen running (the MCP defaults to `http://127.0.0.1:3000`, configurable with `HELIOSGEN_BASE_URL`). The server exposes read and write tools for workflows and nodes, built-in and live WaveSpeed model discovery, provider generation, community imports, the generation ledger, and ComfyUI execution.
 
 ---
 

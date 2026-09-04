@@ -1,42 +1,42 @@
 <evaluation>
   <qa_pair>
-    <question>How many workflows are currently stored in HeliosGen?</question>
-    <answer>8</answer>
+    <question>Confirm that the local HeliosGen server is reachable, inspect every built-in text provider, and exclude the automatic Azure router. How many explicitly selectable text models remain? Answer with one integer.</question>
+    <answer>17</answer>
   </qa_pair>
   <qa_pair>
-    <question>Which imported workflow has exactly six image input nodes?</question>
-    <answer>Space 64 (import-mtamud8ng376)</answer>
+    <question>After checking server status and the complete text-model registry, identify the exact model ID marked as Anthropic's flagship in this build. Answer with the ID only.</question>
+    <answer>claude-opus-5</answer>
   </qa_pair>
   <qa_pair>
-    <question>How many nodes and edges are in the workflow named Reaction?</question>
-    <answer>8 nodes and 8 edges</answer>
+    <question>Inspect the full text registry and distinguish OpenAI's Responses transport from its legacy chat-completions transport. How many OpenAI models use Responses? Answer with one integer.</question>
+    <answer>5</answer>
   </qa_pair>
   <qa_pair>
-    <question>Which imported workflow has a video input node, and how many nodes does that workflow have in total?</question>
-    <answer>Space 65 (import-mte3dmitc1c5), with 5 nodes</answer>
+    <question>Compare the built-in image and video registries, then find the image model accepting the greatest number of reference images. What is its human-readable name?</question>
+    <answer>Nano Banana 2</answer>
   </qa_pair>
   <qa_pair>
-    <question>How many prompt nodes and video generator nodes are in workflow mtmf7gily8p1?</question>
-    <answer>8 prompt nodes and 4 video generator nodes</answer>
+    <question>Inspect all built-in video models. Among models that generate sound and accept at least ten reference videos, which one also accepts both explicit start and end frames? Answer with its human-readable name.</question>
+    <answer>Seedance 2.5</answer>
   </qa_pair>
   <qa_pair>
-    <question>Which two workflows each contain 11 nodes, 16 edges, and 8 generate nodes?</question>
-    <answer>Space 53 (import-mrkdrq75kpc0) and UGC Template (mtloo84v772r) (import-mtloo84v772r)</answer>
+    <question>Compare every built-in video provider and find the sound-disabled model whose default resolution is 2K and whose maximum duration is fifteen seconds. Answer with its human-readable name.</question>
+    <answer>H3</answer>
   </qa_pair>
   <qa_pair>
-    <question>How many text models are configured for each provider?</question>
-    <answer>Anthropic 5, OpenAI 6, Google 6, Azure 1</answer>
+    <question>Confirm the community catalog is available, compare every entry's byte size and node count, and identify the smallest workflow. Answer with its displayed name.</question>
+    <answer>Seedance 2 Parametric Prompt</answer>
   </qa_pair>
   <qa_pair>
-    <question>Is Claude Opus 5 available in the text model catalog, and is Claude Opus 4.8 present?</question>
-    <answer>Claude Opus 5 is available; Claude Opus 4.8 is not present</answer>
+    <question>Inspect the complete community catalog and compare all node counts. Which workflow has the most nodes? Answer with its displayed name.</question>
+    <answer>Bills Supra</answer>
   </qa_pair>
   <qa_pair>
-    <question>How many image models and video models are currently configured?</question>
-    <answer>9 image models and 17 video models</answer>
+    <question>Browse the complete community catalog, compare the authors, and identify the only workflow not authored by @ReflctWillie. Answer with its displayed name.</question>
+    <answer>Fashion I2V - Marco</answer>
   </qa_pair>
   <qa_pair>
-    <question>List the three GPT 5.6 variants configured in HeliosGen.</question>
-    <answer>GPT 5.6 Sol, GPT 5.6 Terra, and GPT 5.6 Luna</answer>
+    <question>Search the community catalog for workflows tagged with more than one provider, then compare their download sizes. Which is smaller? Answer with its displayed name.</question>
+    <answer>Apply Material - Ecom</answer>
   </qa_pair>
 </evaluation>

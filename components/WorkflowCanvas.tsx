@@ -38,11 +38,17 @@ import VideoGeneratorNode from "./nodes/VideoGeneratorNode";
 import AssistantNode from "./nodes/AssistantNode";
 import GroupNode from "./nodes/GroupNode";
 import CommentNode from "./nodes/CommentNode";
+import WaveSpeedNode from "./nodes/WaveSpeedNode";
+import TemplateNode, { resolveTemplateNode } from "./nodes/TemplateNode";
+import ComfyWorkflowNode, { runComfyCanvasNode } from "./nodes/ComfyWorkflowNode";
+import AnnotationNode from "./nodes/AnnotationNode";
 import NodePickerMenu, { DropState } from "./NodePickerMenu";
 import SelectionToolbar from "./SelectionToolbar";
 import CanvasToolbar from "./CanvasToolbar";
 import AddNodeMenu from "./AddNodeMenu";
 import { MessageSquare, Sparkles, Clapperboard } from "lucide-react";
+import { waveSpeedInputKind } from "@/lib/wavespeedSchema";
+import { runWaveSpeedCanvasNode } from "@/lib/wavespeedClient";
 
 // Local-only app: no auth token, kept so call sites don't churn.
 async function getAccessToken(): Promise<string | undefined> {
@@ -62,6 +68,10 @@ const nodeTypes = {
   assistantNode: AssistantNode,
   groupNode: GroupNode,
   commentNode: CommentNode,
+  waveSpeedNode: WaveSpeedNode,
+  templateNode: TemplateNode,
+  comfyWorkflowNode: ComfyWorkflowNode,
+  annotationNode: AnnotationNode,
 };
 
 const edgeTypes = {
@@ -151,6 +161,10 @@ function nodeLabel(type: string, existingNodes: Node<NodeData>[]): string {
     generateNode: "IMAGE GEN",
     videoGeneratorNode: "VIDEO GEN",
     assistantNode: "ASSISTANT",
+    waveSpeedNode: "WAVESPEED",
+    templateNode: "TEMPLATE",
+    comfyWorkflowNode: "COMFYUI",
+    annotationNode: "ANNOTATION",
   };
   if (type === "assistantNode") return "ASSISTANT";
   return `${names[type] ?? type} #${count}`;
@@ -162,6 +176,14 @@ function nodeAcceptsPromptInput(node: Node<NodeData>, edges: Edge[]): boolean {
   if (taken) return false;
 
   if (node.type === "generateNode") return true;
+  if (node.type === "assistantNode") return true;
+
+  if (node.type === "waveSpeedNode") {
+    const promptEntry = Object.entries(node.data.waveSpeedSchema?.properties ?? {})
+      .find(([name, property]) => waveSpeedInputKind(name, property) === "prompt");
+    if (!promptEntry) return false;
+    return !edges.some((edge) => edge.target === node.id && edge.targetHandle === `ws:${promptEntry[0]}`);
+  }
 
   if (node.type === "videoGeneratorNode") {
     const videoModelId = (node.data?.videoModel as string | undefined) ?? "kling-3.0";
@@ -968,6 +990,44 @@ export default function WorkflowCanvas() {
       const source = nodes.find((n) => n.id === connection.source);
       const target = nodes.find((n) => n.id === connection.target);
 
+      if (target?.type === "waveSpeedNode" && connection.targetHandle?.startsWith("ws:")) {
+        const parameterName = connection.targetHandle.slice(3);
+        const property = target.data.waveSpeedSchema?.properties?.[parameterName];
+        if (!property) return false;
+        const kind = waveSpeedInputKind(parameterName, property);
+        const sourceFamily = source?.type === "waveSpeedNode" ? source.data.waveSpeedFamily : undefined;
+        const compatible = kind === "prompt"
+          ? source?.type === "promptNode" || source?.type === "assistantNode"
+          : kind === "image"
+            ? source?.type === "imageInputNode" || source?.type === "generateNode" || (source?.type === "waveSpeedNode" && sourceFamily === "image") || source?.type === "videoInputNode"
+            : kind === "video"
+              ? source?.type === "videoInputNode" || source?.type === "videoGeneratorNode" || (source?.type === "waveSpeedNode" && sourceFamily === "video")
+              : false;
+        if (!compatible) return false;
+        const incoming = edges.filter((edge) => edge.target === connection.target && edge.targetHandle === connection.targetHandle);
+        if (property.type !== "array" && incoming.length >= 1) return false;
+        return !incoming.some((edge) => edge.source === connection.source && edge.sourceHandle === connection.sourceHandle);
+      }
+
+      if (target?.type === "templateNode" && connection.targetHandle === "text") {
+        return source?.type === "promptNode" || source?.type === "assistantNode" || source?.type === "templateNode";
+      }
+
+      if (target?.type === "comfyWorkflowNode" && connection.targetHandle?.startsWith("comfy:")) {
+        const bindingId = connection.targetHandle.slice(6);
+        const binding = (target.data.comfyBindings as Array<{ id: string; kind: string }> | undefined)?.find((candidate) => candidate.id === bindingId);
+        if (!binding) return false;
+        if (binding.kind === "prompt" && !["promptNode", "assistantNode", "templateNode"].includes(source?.type ?? "")) return false;
+        if (binding.kind === "image" && !["imageInputNode", "generateNode", "waveSpeedNode", "annotationNode"].includes(source?.type ?? "")) return false;
+        if (binding.kind === "video" && !["videoInputNode", "videoGeneratorNode", "waveSpeedNode"].includes(source?.type ?? "")) return false;
+        return !edges.some((edge) => edge.target === connection.target && edge.targetHandle === connection.targetHandle);
+      }
+
+      if (target?.type === "annotationNode" && connection.targetHandle === "image") {
+        if (!["imageInputNode", "generateNode", "waveSpeedNode", "annotationNode"].includes(source?.type ?? "")) return false;
+        return !edges.some((edge) => edge.target === connection.target && edge.targetHandle === "image");
+      }
+
       // Ref nodes are pure sources — nothing functional can connect into them.
       // Exception: the decorative input handles accept any wire but do nothing with it.
       if (target?.type === "imageInputNode" || target?.type === "videoInputNode") {
@@ -1135,12 +1195,24 @@ export default function WorkflowCanvas() {
     setLog([]);
     push("Running workflow…");
     const order = topoSort(nodes, edges);
+    if (order.length < nodes.length) {
+      push("Workflow contains a cycle. Remove the circular connection before running.", false);
+      addToast("Workflow contains a circular connection", "error");
+      setIsRunning(false);
+      return;
+    }
 
     for (const nodeId of order) {
       const node = nodes.find((n) => n.id === nodeId) as Node<NodeData> | undefined;
       if (!node) continue;
 
       // ── Image generator ─────────────────────────────────────────────────────
+      if (node.type === "templateNode") {
+        const rendered = resolveTemplateNode(node.id);
+        updateNodeData(node.id, { outputText: rendered.output, unresolvedVars: rendered.unresolved, status: "done" });
+        push(`[${node.id}] rendered${rendered.unresolved.length ? ` with unresolved variables: ${rendered.unresolved.join(", ")}` : ""}`, rendered.unresolved.length === 0);
+      }
+
       if (node.type === "generateNode") {
         // Extract frames from VideoInputNodes on the image handle that lack a capturedFrameUrl.
         // Uses trimEnd if set (end frame), otherwise trimStart ?? 0 (start / first frame).
@@ -1300,6 +1372,46 @@ export default function WorkflowCanvas() {
           updateNodeData(nodeId, { status: "error", errorMsg: msg });
           push(`[${node.id}] error: ${msg}`, false);
         }
+      }
+
+      // ── Schema-driven WaveSpeed provider ──────────────────────────────────
+      if (node.type === "waveSpeedNode") {
+        if (!node.data.waveSpeedModelId) {
+          push(`[${node.id}] skipped — choose a WaveSpeed model`, false);
+          continue;
+        }
+        if (debugMode) {
+          push(`[DEBUG] ${node.id} — WaveSpeed request logged to console`);
+          console.log(`[DEBUG] waveSpeedNode=${node.id}`, node.data);
+          continue;
+        }
+        push(`[${node.id}] ${String(node.data.waveSpeedModelName ?? node.data.waveSpeedModelId)}…`);
+        updateNodeData(nodeId, { status: "running", imageUrl: undefined, videoUrl: undefined, errorMsg: undefined });
+        try {
+          const state = useWorkflowStore.getState();
+          const freshNode = state.nodes.find((candidate) => candidate.id === nodeId)!;
+          const result = await runWaveSpeedCanvasNode({ node: freshNode, nodes: state.nodes, edges: state.edges, workflowId: state.activeSpaceId });
+          updateNodeData(nodeId, {
+            status: "done",
+            taskId: result.taskId,
+            imageUrl: result.imageUrl,
+            videoUrl: result.videoUrl,
+            waveSpeedLastEstimatedCost: result.estimatedCost,
+          });
+          push(`[${node.id}] done`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          updateNodeData(nodeId, { status: "error", errorMsg: message });
+          push(`[${node.id}] error: ${message}`, false);
+        }
+      }
+
+      if (node.type === "comfyWorkflowNode") {
+        if (debugMode) { push(`[DEBUG] ${node.id} — ComfyUI workflow ready`); continue; }
+        push(`[${node.id}] running ComfyUI workflow…`);
+        updateNodeData(nodeId, { status: "running", errorMsg: undefined });
+        try { await runComfyCanvasNode(nodeId); push(`[${node.id}] done`); }
+        catch (error) { const message = error instanceof Error ? error.message : String(error); updateNodeData(nodeId, { status: "error", errorMsg: message }); push(`[${node.id}] error: ${message}`, false); }
       }
 
       // ── Video generator (Kling 3.0) ─────────────────────────────────────────
@@ -1468,7 +1580,7 @@ export default function WorkflowCanvas() {
   }, []);
 
   const canRun = !isRunning && nodes.some(
-    (n) => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "assistantNode"
+    (n) => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "assistantNode" || n.type === "waveSpeedNode" || n.type === "templateNode" || n.type === "comfyWorkflowNode"
   );
 
   const computedNodes = useMemo(() => {

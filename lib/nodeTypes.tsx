@@ -1,6 +1,6 @@
 // Shared node type definitions — imported by both Sidebar and NodePickerMenu
 import React from "react";
-import { MessageSquare, Image, Film, Sparkles, Bot, Clapperboard, StickyNote } from "lucide-react";
+import { MessageSquare, Image, Film, Sparkles, Bot, Clapperboard, StickyNote, Waves, Braces, Workflow, PenTool } from "lucide-react";
 
 export type NodeCategory = "generators" | "resources";
 
@@ -15,6 +15,10 @@ export const NODE_META: Record<
   assistantNode:      { accent: "#FBBF24", bg: "#1c1000",  bigIcon: <Bot           size={18} strokeWidth={1.7} /> },
   videoGeneratorNode: { accent: "#5EEAD4", bg: "#042f2e",  bigIcon: <Clapperboard  size={18} strokeWidth={1.7} /> },
   commentNode:        { accent: "#FACC15", bg: "#2a2005",  bigIcon: <StickyNote    size={18} strokeWidth={1.7} /> },
+  waveSpeedNode:      { accent: "#22d3ee", bg: "#083344",  bigIcon: <Waves         size={18} strokeWidth={1.7} /> },
+  templateNode:       { accent: "#a78bfa", bg: "#2e1065",  bigIcon: <Braces        size={18} strokeWidth={1.7} /> },
+  comfyWorkflowNode:  { accent: "#c084fc", bg: "#3b0764",  bigIcon: <Workflow      size={18} strokeWidth={1.7} /> },
+  annotationNode:     { accent: "#fb7185", bg: "#4c0519",  bigIcon: <PenTool       size={18} strokeWidth={1.7} /> },
 };
 
 export const NODES: Array<{
@@ -26,6 +30,30 @@ export const NODES: Array<{
   description: string;
 }> = [
     /* ── Generators ─────────────────────────────────────────────────────────── */
+    {
+      type: "waveSpeedNode",
+      category: "generators",
+      canReceiveConnection: true,
+      icon: <Waves size={14} strokeWidth={1.5} />,
+      label: "WaveSpeed",
+      description: "1,000+ schema-driven image and video models",
+    },
+    {
+      type: "comfyWorkflowNode",
+      category: "generators",
+      canReceiveConnection: true,
+      icon: <Workflow size={14} strokeWidth={1.5} />,
+      label: "ComfyUI Workflow",
+      description: "Import and execute an API-format ComfyUI graph",
+    },
+    {
+      type: "templateNode",
+      category: "generators",
+      canReceiveConnection: true,
+      icon: <Braces size={14} strokeWidth={1.5} />,
+      label: "Prompt Template",
+      description: "Compose named text variables into a reusable prompt",
+    },
     {
       type: "assistantNode",
       category: "generators",
@@ -109,6 +137,14 @@ export const NODES: Array<{
       description: "Upload a video · max 100 MB",
     },
     {
+      type: "annotationNode",
+      category: "resources",
+      canReceiveConnection: true,
+      icon: <PenTool size={14} strokeWidth={1.5} />,
+      label: "Image Annotation",
+      description: "Draw arrows, shapes, notes, and export a flattened copy",
+    },
+    {
       type: "commentNode",
       category: "resources",
       canReceiveConnection: false,
@@ -153,6 +189,10 @@ export const NODE_SIZE: Record<string, { w: number; h: number }> = {
   imageInputNode: { w: 200, h: 160 },
   videoInputNode: { w: 220, h: 180 },
   commentNode: { w: 260, h: 160 },
+  waveSpeedNode: { w: 380, h: 560 },
+  templateNode: { w: 340, h: 300 },
+  comfyWorkflowNode: { w: 400, h: 600 },
+  annotationNode: { w: 320, h: 320 },
 };
 
 export const FALLBACK_SIZE = { w: 280, h: 280 };

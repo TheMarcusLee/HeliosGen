@@ -8,6 +8,7 @@ import { makeUGCTemplate } from "@/lib/templates";
 import { timeAgo } from "@/lib/useSpaceSync";
 import { WorkflowHero } from "@/components/WorkflowHero";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
+import CommunityWorkflowBrowser from "@/components/CommunityWorkflowBrowser";
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -633,6 +634,7 @@ export default function WorkflowDashboard() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [communityOpen, setCommunityOpen] = useState(false);
 
   const openSpace = (id: string) => {
     switchSpace(id);
@@ -747,6 +749,9 @@ export default function WorkflowDashboard() {
           </div>
 
           <div style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "10px" }}>
+            <button className="wsd-import-btn" onClick={() => setCommunityOpen(true)}>
+              Community library
+            </button>
             <input
               ref={fileInputRef}
               type="file"
@@ -784,6 +789,7 @@ export default function WorkflowDashboard() {
         </section>
 
       </div>
+      <CommunityWorkflowBrowser open={communityOpen} onOpenChange={setCommunityOpen} onImported={(id) => router.push(`/workflow/${id}`)} />
     </div>
   );
 }

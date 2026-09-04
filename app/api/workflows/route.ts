@@ -6,6 +6,9 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSpaces, saveSpaces, type GuestSpace } from "@/lib/guest/spaces";
+import { sanitizeWorkflowGraph } from "@/lib/graphIntegrity";
+import type { NodeData } from "@/lib/store";
+import type { Edge, Node } from "@xyflow/react";
 
 export const runtime = "nodejs";
 
@@ -24,6 +27,9 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "spaces[] required" }, { status: 400 });
   }
 
-  saveSpaces(body.spaces);
+  saveSpaces(body.spaces.map((space) => {
+    const clean = sanitizeWorkflowGraph(space.nodes as Node<NodeData>[], space.edges as Edge[]);
+    return { ...space, nodes: clean.nodes, edges: clean.edges };
+  }));
   return NextResponse.json({ ok: true });
 }

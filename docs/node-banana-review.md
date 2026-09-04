@@ -53,15 +53,17 @@ CloneMe Studio is not a node-workflow library, but it has a useful production pi
 5. **Provider transaction ledger.** Record provider, operation, estimate/actual cost, status, and output provenance for every run.
 6. **SFW/adult routing as workflow metadata.** Provider/model selection should be explicit and auditable; do not infer capability from a model name. Provider rules still apply, and workflows must reject child sexual content and non-consensual intimate imagery.
 
-## Best ideas to port next
+## Roadmap implementation status
 
-1. **Schema-driven provider nodes.** Build image and video node controls from each provider's request schema. This is the right way to expose the full WaveSpeed catalog in the canvas without hard-coded fields per model.
-2. **Per-run cost capture.** Persist quoted and actual provider cost alongside every generation. Surface workflow and node totals before execution.
-3. **Ordered fallback models.** Let a node specify a primary model and compatible fallbacks, with explicit rules for retryable provider failures and budget ceilings.
-4. **ComfyUI workflow nodes.** Import a ComfyUI schema and turn its inputs/outputs into typed HeliosGen handles while preserving the original workflow JSON.
-5. **Portable workflow media.** Externalize embedded blobs when exporting, then restore or relink them during import. This keeps workflow files small and shareable.
-6. **Annotation node.** Add non-destructive paint, mask, and markup controls as a first-class workflow input.
-7. **Graph integrity and history hardening.** Port the ideas behind orphan-edge cleanup and blob-aware undo snapshots so long editing sessions remain safe and memory-bounded.
+1. ✅ **Schema-driven provider nodes.** WaveSpeed image/video canvas controls are generated from the authenticated live request schema, including required typed handles, enums, numeric limits, booleans, defaults, and disabled provider-managed fields.
+2. ✅ **Per-run cost capture.** SQLite records every WaveSpeed attempt, quoted/estimated spend, final state, workflow/node provenance, and fallback skips. Settings includes aggregate and recent usage views.
+3. ✅ **Ordered fallback models.** Nodes accept compatible ordered fallbacks and a maximum estimated spend. Inputs are semantically remapped between schemas, incompatible attempts are skipped with audit entries, and processing continues through the ordered list.
+4. ✅ **Community catalog and converter.** The dashboard browses the hosted Node Banana library and a versioned converter maps supported nodes and semantic handles, while preserving unsupported content as notes with warnings.
+5. ✅ **ComfyUI workflow nodes.** API-format workflows expose typed primitive/media handles and execute against a configured local ComfyUI server or Comfy Cloud, with outputs copied to HeliosGen storage.
+6. ✅ **Portable workflow media.** Export archives externalize media and imports restore it, keeping workflows self-contained across machines.
+7. ✅ **Annotation node.** Rectangle, ellipse, arrow, freehand, and text overlays remain non-destructive until the user exports a flattened PNG.
+8. ✅ **Graph integrity and history hardening.** Workflow writes and imports remove orphan/self/duplicate edges, group membership is repaired, cycles fail safely before execution, and undo snapshots omit large blob URLs and volatile job state.
+9. ✅ **Writable MCP.** Agents can inspect and mutate complete workflow graphs, discover and run WaveSpeed models, set fallbacks/cost ceilings, audit the ledger, import community workflows, run ComfyUI workflows, and wait for generation results.
 
 ## Ideas not to copy directly
 
@@ -69,7 +71,7 @@ CloneMe Studio is not a node-workflow library, but it has a useful production pi
 - Do not replace HeliosGen's SQLite and file-backed job recovery with browser-only state.
 - Do not couple provider discovery to React components. The same catalog and schema layer must serve the canvas, gallery, HTTP routes, and MCP.
 
-## Proposed implementation order
+## Delivered implementation order
 
 1. Schema-to-control renderer for WaveSpeed image/video nodes.
 2. Cost fields and generation ledger migration.
@@ -77,3 +79,4 @@ CloneMe Studio is not a node-workflow library, but it has a useful production pi
 4. Node Banana community catalog browser and versioned converter.
 5. ComfyUI node import.
 6. Annotation tools.
+7. Graph/history hardening and writable MCP coverage.

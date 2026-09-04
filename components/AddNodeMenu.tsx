@@ -19,7 +19,7 @@ const SECTIONS: Array<{ id: string; label: string; nodeTypes: string[] }> = [
   {
     id: "generators",
     label: "GENERATORS",
-    nodeTypes: ["generateNode", "videoGeneratorNode", "assistantNode"],
+    nodeTypes: ["waveSpeedNode", "comfyWorkflowNode", "generateNode", "videoGeneratorNode", "assistantNode", "templateNode"],
   },
   {
     id: "resources",
@@ -29,7 +29,7 @@ const SECTIONS: Array<{ id: string; label: string; nodeTypes: string[] }> = [
   {
     id: "annotate",
     label: "ANNOTATE",
-    nodeTypes: ["commentNode"],
+    nodeTypes: ["annotationNode", "commentNode"],
   },
 ];
 
@@ -101,6 +101,10 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
         videoGeneratorNode: "VIDEO GEN",
         assistantNode: "ASSISTANT",
         commentNode: "COMMENT",
+        waveSpeedNode: "WAVESPEED",
+        templateNode: "TEMPLATE",
+        comfyWorkflowNode: "COMFYUI",
+        annotationNode: "ANNOTATION",
       };
       const label = `${DISPLAY[type] ?? type} #${count}`;
 

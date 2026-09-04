@@ -267,6 +267,15 @@ export function deleteWaveSpeedApiKey(): void {
   deleteSetting("wavespeed_api_key");
 }
 
+export function getComfyApiKey(): string | null {
+  return getSetting("comfy_api_key") || process.env.COMFY_API_KEY || null;
+}
+
+export function setComfyApiKey(key: string): void { setSetting("comfy_api_key", key); }
+export function deleteComfyApiKey(): void { deleteSetting("comfy_api_key"); }
+export function getComfyBaseUrl(): string | null { return getSetting("comfy_base_url") || process.env.COMFY_BASE_URL || null; }
+export function setComfyBaseUrl(url: string): void { setSetting("comfy_base_url", url); }
+
 // ── Folders ────────────────────────────────────────────────────────────────
 
 function rowToFolder(r: Record<string, unknown>): FolderRecord {

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 import { jobStore } from "@/lib/jobStore";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { MEDIA_DIR } from "@/lib/guest/paths";
-import { isValidWaveSpeedModelId, submitWaveSpeedPrediction, WaveSpeedApiError } from "@/lib/wavespeed";
-import { pollWaveSpeedJob, toWaveSpeedTaskId } from "@/lib/wavespeedJobPoller";
+import { isValidWaveSpeedModelId, listWaveSpeedModels, submitWaveSpeedPrediction, WaveSpeedApiError } from "@/lib/wavespeed";
+import { areWaveSpeedModelsFallbackCompatible, validateWaveSpeedInput } from "@/lib/wavespeedSchema";
+import { insertLedgerAttempt, saveWaveSpeedRunPlan } from "@/lib/guest/generationLedger";
+import { pollWaveSpeedJob, toWaveSpeedRunTaskId } from "@/lib/wavespeedJobPoller";
 
 const RESERVED_INPUTS = new Set(["webhook", "webhook_url", "enable_sync_mode", "sync_mode"]);
 const MAX_LOCAL_MEDIA_BYTES = 15 * 1024 * 1024;
@@ -69,9 +72,64 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'mediaType must be either "image" or "video".' }, { status: 400 });
     }
     const input = await resolveLocalMedia(sanitizeInput(body.input)) as Record<string, unknown>;
+    const allModels = await listWaveSpeedModels();
+    const primary = allModels.find((candidate) => candidate.modelId === modelId);
+    if (!primary) return NextResponse.json({ error: `WaveSpeed model not found: ${modelId}` }, { status: 404 });
+    const missing = validateWaveSpeedInput(primary.requestSchema, input);
+    if (missing.length) {
+      return NextResponse.json({ error: `Missing required WaveSpeed input${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}` }, { status: 400 });
+    }
+
+    const fallbackIds = Array.isArray(body.fallbackModelIds)
+      ? [...new Set(body.fallbackModelIds.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean))].slice(0, 8)
+      : [];
+    const models = [primary];
+    for (const fallbackId of fallbackIds) {
+      if (!isValidWaveSpeedModelId(fallbackId)) {
+        return NextResponse.json({ error: `Invalid fallback model ID: ${fallbackId}` }, { status: 400 });
+      }
+      const fallback = allModels.find((candidate) => candidate.modelId === fallbackId);
+      if (!fallback) return NextResponse.json({ error: `Fallback model not found: ${fallbackId}` }, { status: 404 });
+      if (!areWaveSpeedModelsFallbackCompatible(primary, fallback)) {
+        return NextResponse.json({ error: `Fallback model is not schema-compatible with ${modelId}: ${fallbackId}` }, { status: 400 });
+      }
+      models.push(fallback);
+    }
+
+    const maxCost = typeof body.maxCost === "number" && Number.isFinite(body.maxCost) && body.maxCost >= 0
+      ? body.maxCost
+      : undefined;
+    const firstQuote = primary.basePrice ?? 0;
+    if (maxCost !== undefined && firstQuote > maxCost) {
+      return NextResponse.json({ error: `Estimated cost $${firstQuote.toFixed(4)} exceeds this node's $${maxCost.toFixed(4)} limit.` }, { status: 400 });
+    }
     const prompt = typeof input.prompt === "string" ? input.prompt : "";
     const { predictionId, status } = await submitWaveSpeedPrediction(modelId, input);
-    const taskId = toWaveSpeedTaskId(predictionId);
+    const taskId = toWaveSpeedRunTaskId(randomUUID());
+    const workflowId = typeof body.workflowId === "string" ? body.workflowId.slice(0, 240) : undefined;
+    const nodeId = typeof body.nodeId === "string" ? body.nodeId.slice(0, 240) : undefined;
+
+    saveWaveSpeedRunPlan({
+      taskId,
+      mediaType,
+      workflowId,
+      nodeId,
+      models,
+      currentIndex: 0,
+      predictionId,
+      input,
+      maxCost,
+      estimatedSpend: firstQuote,
+    });
+    insertLedgerAttempt({
+      taskId,
+      workflowId,
+      nodeId,
+      modelId,
+      attemptIndex: 0,
+      quotedCost: primary.basePrice,
+      metadata: { predictionId, mediaType },
+    });
 
     jobStore.set(taskId, { status: "pending", type: mediaType, userId: GUEST_USER_ID });
     guestDb.insertGeneration({
@@ -85,7 +143,11 @@ export async function POST(req: NextRequest) {
     });
     pollWaveSpeedJob(taskId, mediaType);
 
-    return NextResponse.json({ taskId, provider: "wavespeed", predictionId, status, modelId });
+    return NextResponse.json({
+      taskId, provider: "wavespeed", predictionId, status, modelId,
+      estimatedCost: primary.basePrice ?? null,
+      fallbackCount: models.length - 1,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "WaveSpeed generation request failed.";
     const status = error instanceof WaveSpeedApiError && error.httpStatus === 401

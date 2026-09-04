@@ -1,37 +1,20 @@
 import { getWaveSpeedApiKey } from "./guest/db";
+import type {
+  WaveSpeedMediaFamily,
+  WaveSpeedModel,
+  WaveSpeedRequestSchema,
+} from "./wavespeedTypes";
+
+export type {
+  WaveSpeedMediaFamily,
+  WaveSpeedModel,
+  WaveSpeedRequestProperty,
+  WaveSpeedRequestSchema,
+} from "./wavespeedTypes";
 
 const BASE_URL = "https://api.wavespeed.ai/api/v3";
 const MODEL_CACHE_MS = 60 * 60 * 1000;
 const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*(\/[A-Za-z0-9][A-Za-z0-9_.-]*)+$/;
-
-export interface WaveSpeedRequestProperty {
-  type?: string;
-  description?: string;
-  default?: unknown;
-  enum?: unknown[];
-  minimum?: number;
-  maximum?: number;
-  items?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-export interface WaveSpeedRequestSchema {
-  type?: string;
-  properties?: Record<string, WaveSpeedRequestProperty>;
-  required?: string[];
-  [key: string]: unknown;
-}
-
-export interface WaveSpeedModel {
-  modelId: string;
-  name: string;
-  description: string;
-  type: string;
-  basePrice?: number;
-  requestSchema?: WaveSpeedRequestSchema;
-}
-
-export type WaveSpeedMediaFamily = "image" | "video";
 
 const IMAGE_OUTPUT_TYPES = new Set([
   "image-to-image",

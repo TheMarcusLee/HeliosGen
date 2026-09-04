@@ -1,5 +1,7 @@
 import { Node, Edge } from "@xyflow/react";
 import { NodeData } from "./store";
+import type { WaveSpeedRequestSchema } from "./wavespeedTypes";
+import { waveSpeedInputKind } from "./wavespeedSchema";
 
 /** Topological sort — returns node ids in execution order */
 export function topoSort(nodes: Node<NodeData>[], edges: Edge[]): string[] {
@@ -11,6 +13,7 @@ export function topoSort(nodes: Node<NodeData>[], edges: Edge[]): string[] {
     inDegree[n.id] = 0;
   }
   for (const e of edges) {
+    if (!(e.source in adj) || !(e.target in inDegree)) continue;
     adj[e.source].push(e.target);
     inDegree[e.target] = (inDegree[e.target] || 0) + 1;
   }
@@ -37,7 +40,7 @@ export function topoSort(nodes: Node<NodeData>[], edges: Edge[]): string[] {
 export function buildPipelineWaves(nodes: Node<NodeData>[], edges: Edge[]): string[][] {
   const genIds = new Set(
     nodes
-      .filter(n => n.type === "generateNode" || n.type === "videoGeneratorNode")
+      .filter(n => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "waveSpeedNode" || n.type === "comfyWorkflowNode")
       .map(n => n.id)
   );
   if (genIds.size === 0) return [];
@@ -62,6 +65,58 @@ export function buildPipelineWaves(nodes: Node<NodeData>[], edges: Edge[]): stri
     for (const id of wave) remaining.delete(id);
   }
   return waves;
+}
+
+function resolveTextValue(src: Node<NodeData>): string | undefined {
+  return (src.data.outputText ?? src.data.prompt ?? src.data.localPrompt) as string | undefined;
+}
+
+function resolveVideoUrl(src: Node<NodeData>): string | undefined {
+  return (src.data.videoUrl ?? (src.data.waveSpeedFamily === "video" ? src.data.r2Url : undefined)) as string | undefined;
+}
+
+function resolveAudioUrl(src: Node<NodeData>): string | undefined {
+  return (src.data.audioUrl ?? src.data.r2Url) as string | undefined;
+}
+
+/** Resolve connections into a schema-generated WaveSpeed node. */
+export function resolveWaveSpeedConnectedInputs(
+  nodeId: string,
+  schema: WaveSpeedRequestSchema | undefined,
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  const properties = schema?.properties ?? {};
+  for (const edge of edges.filter((candidate) => candidate.target === nodeId && candidate.targetHandle?.startsWith("ws:"))) {
+    const requestedName = edge.targetHandle!.slice(3);
+    const requestedKind = ["prompt", "image", "video", "audio"].includes(requestedName) ? requestedName : null;
+    const name = properties[requestedName]
+      ? requestedName
+      : Object.keys(properties).find((candidate) => requestedKind && waveSpeedInputKind(candidate, properties[candidate]) === requestedKind) ?? requestedName;
+    const property = properties[name];
+    if (!property) continue;
+    const source = nodes.find((candidate) => candidate.id === edge.source);
+    if (!source) continue;
+    const kind = waveSpeedInputKind(name, property);
+    const value = kind === "prompt"
+      ? resolveTextValue(source)
+      : kind === "image"
+        ? resolveImageUrl(source, edge.sourceHandle)
+        : kind === "video"
+          ? resolveVideoUrl(source)
+          : kind === "audio"
+            ? resolveAudioUrl(source)
+            : undefined;
+    if (value === undefined) continue;
+    if (property.type === "array") {
+      const current = Array.isArray(output[name]) ? output[name] as unknown[] : [];
+      output[name] = [...current, value];
+    } else if (output[name] === undefined) {
+      output[name] = value;
+    }
+  }
+  return output;
 }
 
 const FRAME_OUT_HANDLES = new Set(["startFrameOut", "endFrameOut", "imagePickOut"]);
@@ -129,6 +184,9 @@ export function resolveInputs(
     }
     if (src.type === "assistantNode") {
       result.prompt = src.data.outputText as string | undefined;
+    }
+    if (src.type === "templateNode") {
+      result.prompt = (src.data.outputText ?? src.data.template) as string | undefined;
     }
 
     // "image" handle — multi-image input for generateNode (up to 14)
