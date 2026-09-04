@@ -87,6 +87,7 @@ function createSchema(d: DatabaseSync): void {
       cost_kind TEXT NOT NULL DEFAULT 'estimate',
       currency TEXT NOT NULL DEFAULT 'USD',
       error_msg TEXT,
+      output_url TEXT,
       metadata TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -110,7 +111,43 @@ function createSchema(d: DatabaseSync): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS identity_assets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      trigger_word TEXT NOT NULL DEFAULT '',
+      base_prompts TEXT NOT NULL DEFAULT '[]',
+      references_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS identity_asset_versions (
+      asset_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (asset_id, version),
+      FOREIGN KEY (asset_id) REFERENCES identity_assets(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS batch_runs (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT,
+      node_id TEXT,
+      identity_asset_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      concurrency INTEGER NOT NULL DEFAULT 2,
+      status TEXT NOT NULL DEFAULT 'idle',
+      analysis TEXT,
+      items_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_batch_workflow ON batch_runs (workflow_id, created_at DESC);
   `);
+  const ledgerColumns = new Set((d.prepare("PRAGMA table_info(generation_ledger)").all() as { name: string }[]).map((column) => column.name));
+  if (!ledgerColumns.has("output_url")) d.exec("ALTER TABLE generation_ledger ADD COLUMN output_url TEXT");
 }
 
 // ── one-time JSON import ────────────────────────────────────────────────────

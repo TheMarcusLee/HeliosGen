@@ -10,6 +10,7 @@ import { isValidWaveSpeedModelId, listWaveSpeedModels, submitWaveSpeedPrediction
 import { areWaveSpeedModelsFallbackCompatible, validateWaveSpeedInput } from "@/lib/wavespeedSchema";
 import { insertLedgerAttempt, saveWaveSpeedRunPlan } from "@/lib/guest/generationLedger";
 import { pollWaveSpeedJob, toWaveSpeedRunTaskId } from "@/lib/wavespeedJobPoller";
+import { validateContentRoute } from "@/lib/cloneMe";
 
 const RESERVED_INPUTS = new Set(["webhook", "webhook_url", "enable_sync_mode", "sync_mode"]);
 const MAX_LOCAL_MEDIA_BYTES = 15 * 1024 * 1024;
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Estimated cost $${firstQuote.toFixed(4)} exceeds this node's $${maxCost.toFixed(4)} limit.` }, { status: 400 });
     }
     const prompt = typeof input.prompt === "string" ? input.prompt : "";
+    const workflowMetadata = validateContentRoute({ prompt, metadata: body.workflowMetadata, provider: "wavespeed", modelId });
     const { predictionId, status } = await submitWaveSpeedPrediction(modelId, input);
     const taskId = toWaveSpeedRunTaskId(randomUUID());
     const workflowId = typeof body.workflowId === "string" ? body.workflowId.slice(0, 240) : undefined;
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest) {
       modelId,
       attemptIndex: 0,
       quotedCost: primary.basePrice,
-      metadata: { predictionId, mediaType },
+      metadata: { predictionId, mediaType, contentClass: workflowMetadata.contentClass, route: workflowMetadata.routes[workflowMetadata.contentClass] },
     });
 
     jobStore.set(taskId, { status: "pending", type: mediaType, userId: GUEST_USER_ID });

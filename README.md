@@ -140,6 +140,10 @@ You only pay for what you generate.
 - Node Banana community workflow browser and versioned converter
 - ComfyUI API-workflow nodes for local ComfyUI or Comfy Cloud
 - Prompt templates, non-destructive image annotations, and portable media exports
+- Versioned identity assets with reusable face/body references, trigger words, and base prompts
+- One-click scene-replacement and pose × outfit production workflow templates
+- Persistent concurrent batch queues with pause, resume, retries, and explicit item states
+- Explicit SFW/adult provider routing with consent assurances and server-side safety enforcement
 - Writable local MCP for agent-driven workflow creation, editing, execution, and auditing
 - Modern responsive UI
 
@@ -165,11 +169,13 @@ WaveSpeed's live catalog is available in Settings, directly on schema-driven can
 
 The dashboard's community library imports and converts shared Node Banana workflows into editable HeliosGen graphs. ComfyUI nodes accept workflows exported with **Save (API Format)** and can execute against a local server or Comfy Cloud configured in Settings.
 
+CloneMe-style production pipelines are built in. Create **Scene replacement** or **Pose × outfit batch** from the dashboard, save reusable versioned identities on the canvas, and configure an explicit provider/model route from the workflow's **Routing** control. Batch jobs persist their queue state and reuse a single Opus 5 scene analysis across every pose/outfit combination.
+
 See [the implemented Node Banana and provider roadmap](docs/node-banana-review.md) for design details and provenance.
 
 ## Agent control with MCP
 
-Build the local stdio server with `pnpm mcp:build`, then configure your MCP client to launch `node /absolute/path/to/HeliosGen/mcp/dist/index.js`. Keep HeliosGen running (the MCP defaults to `http://127.0.0.1:3000`, configurable with `HELIOSGEN_BASE_URL`). The server exposes read and write tools for workflows and nodes, built-in and live WaveSpeed model discovery, provider generation, community imports, the generation ledger, and ComfyUI execution.
+Build the local stdio server with `pnpm mcp:build`, then configure your MCP client to launch `node /absolute/path/to/HeliosGen/mcp/dist/index.js`. Keep HeliosGen running (the MCP defaults to `http://127.0.0.1:3000`, configurable with `HELIOSGEN_BASE_URL`). The server exposes 37 read/write tools for workflows and nodes, identity assets and their versions, CloneMe templates and batch plans, explicit content routing, built-in and live WaveSpeed model discovery, provider generation, community imports, the generation ledger, and ComfyUI execution.
 
 ---
 

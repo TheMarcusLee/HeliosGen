@@ -83,8 +83,8 @@ async function loop(taskId: string, kind: Kind): Promise<void> {
         settle(taskId, kind, { status: "error", error: "WaveSpeed completed but returned no media URL." });
         return;
       }
-      await settleSuccess(taskId, kind, urls);
-      if (plan) settleLedgerAttempt(taskId, plan.currentIndex, "done");
+      const outputUrl = await settleSuccess(taskId, kind, urls);
+      if (plan) settleLedgerAttempt(taskId, plan.currentIndex, "done", undefined, outputUrl);
       return;
     }
     if (FAILURE_STATES.has(status)) {
@@ -183,7 +183,7 @@ async function tryNextFallback(plan: NonNullable<ReturnType<typeof getWaveSpeedR
   return false;
 }
 
-async function settleSuccess(taskId: string, kind: Kind, sourceUrls: string[]): Promise<void> {
+async function settleSuccess(taskId: string, kind: Kind, sourceUrls: string[]): Promise<string> {
   const folder = kind === "video" ? "videos" : "images";
   let storedUrls = sourceUrls;
   try {
@@ -194,6 +194,7 @@ async function settleSuccess(taskId: string, kind: Kind, sourceUrls: string[]): 
   settle(taskId, kind, kind === "video"
     ? { status: "done", videoUrl: storedUrls[0] }
     : { status: "done", imageUrl: storedUrls[0], imageUrls: storedUrls });
+  return storedUrls[0];
 }
 
 function settle(taskId: string, kind: Kind, result: JobResult): void {

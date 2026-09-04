@@ -15,6 +15,7 @@ import { jobStore, type JobResult } from "./jobStore";
 import { jobEvents } from "./jobEvents";
 import { mirrorToR2 } from "./storage";
 import * as guestDb from "./guest/db";
+import { settleProviderLedgerTask } from "./guest/generationLedger";
 
 const BASE = "https://api.kie.ai";
 const POLL_INTERVAL_MS = 3_000;
@@ -158,6 +159,7 @@ function settle(taskId: string, kind: Kind, result: JobResult): void {
   jobEvents.emit(`job:${taskId}`, result);
 
   if (result.status === "done") {
+    settleProviderLedgerTask(taskId, "done", undefined, undefined, kind === "video" ? result.videoUrl : result.imageUrl);
     guestDb.updateGeneration(
       taskId,
       kind === "video"
@@ -165,6 +167,7 @@ function settle(taskId: string, kind: Kind, result: JobResult): void {
         : { status: "done", image_url: result.imageUrl, image_urls: result.imageUrls },
     );
   } else if (result.status === "error") {
+    settleProviderLedgerTask(taskId, "error", result.error);
     guestDb.updateGeneration(taskId, { status: "error", error_msg: result.error });
   }
 }

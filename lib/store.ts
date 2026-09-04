@@ -5,6 +5,7 @@ import { edgeStyle } from "./edgeStyles";
 import { VIDEO_MODELS } from "./modelConfig";
 import { requestWorkflowSync } from "./workflowSyncBus";
 import type { WaveSpeedMediaFamily, WaveSpeedRequestSchema } from "./wavespeedTypes";
+import { DEFAULT_WORKFLOW_METADATA, type IdentityAsset, type WorkflowMetadata } from "./cloneMe";
 import { createHistorySnapshot, sanitizeSpace, sanitizeWorkflowGraph } from "./graphIntegrity";
 import {
   Node,
@@ -25,6 +26,7 @@ export interface NodeData extends Record<string, unknown> {
   status?: NodeStatus;
   // shared
   prompt?: string;
+  systemPrompt?: string;
   variableName?: string;
   template?: string;
   unresolvedVars?: string[];
@@ -86,6 +88,19 @@ export interface NodeData extends Record<string, unknown> {
   comfyBindings?: unknown[];
   comfyOutputUrls?: string[];
   comfyPromptId?: string;
+  // CloneMe production primitives
+  identityAssetId?: string;
+  identitySnapshot?: IdentityAsset;
+  batchRunId?: string;
+  batchProvider?: "wavespeed" | "kie";
+  batchModelId?: string;
+  batchPoses?: string[];
+  batchOutfits?: string[];
+  batchScene?: string;
+  batchAnalysis?: string;
+  batchConcurrency?: number;
+  batchItems?: unknown[];
+  batchPaused?: boolean;
 }
 
 /** Pick only the listed keys from an object; returns null if none are present. */
@@ -111,6 +126,8 @@ export function getNodeLabel(type: string, n: number): string {
     templateNode:        `Template #${n}`,
     comfyWorkflowNode:   `ComfyUI #${n}`,
     annotationNode:      `Annotation #${n}`,
+    identityMatrixNode:  `Identity Matrix #${n}`,
+    batchQueueNode:      `Batch Queue #${n}`,
   };
   return map[type] ?? `Node #${n}`;
 }
@@ -126,6 +143,7 @@ export interface Space {
   createdAt: number;
   updatedAt?: number;
   viewport?: { x: number; y: number; zoom: number };
+  metadata?: WorkflowMetadata;
 }
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -138,6 +156,7 @@ function makeSpace(name: string, partial?: Partial<Space>): Space {
     edges:        [],
     nodeCounters: {},
     createdAt:    Date.now(),
+    metadata:     structuredClone(DEFAULT_WORKFLOW_METADATA),
     ...partial,
   };
 }
@@ -206,9 +225,10 @@ interface WorkflowStore {
   redo: () => void;
 
   // ── Space actions
-  createSpace:    (name: string, template?: { nodes: Node<NodeData>[]; edges: Edge[]; nodeCounters: Record<string, number> }) => void;
+  createSpace:    (name: string, template?: { nodes: Node<NodeData>[]; edges: Edge[]; nodeCounters: Record<string, number>; metadata?: WorkflowMetadata }) => void;
   switchSpace:    (id: string)   => void;
   renameSpace:    (id: string, name: string) => void;
+  updateWorkflowMetadata: (metadata: WorkflowMetadata) => void;
   deleteSpace:    (id: string)   => void;
   duplicateSpace: (id: string)   => void;
 
@@ -315,6 +335,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
               nodes:        clean!.nodes,
               edges:        clean!.edges,
               nodeCounters: template.nodeCounters,
+              metadata: template.metadata ?? structuredClone(DEFAULT_WORKFLOW_METADATA),
             } : undefined);
             const spaces = [
               ...syncSpace(s.spaces, s.activeSpaceId, s.nodes, s.edges, s.nodeCounters),
@@ -354,6 +375,13 @@ export const useWorkflowStore = create<WorkflowStore>()(
             spaces: s.spaces.map((sp) => (sp.id === id ? { ...sp, name } : sp)),
           })),
 
+        updateWorkflowMetadata: (metadata) => {
+          set((s) => ({
+            spaces: s.spaces.map((sp) => sp.id === s.activeSpaceId ? { ...sp, metadata, updatedAt: Date.now() } : sp),
+          }));
+          requestWorkflowSync();
+        },
+
         deleteSpace: (id) =>
           set((s) => {
             if (s.spaces.length <= 1) return {}; // must have at least one
@@ -378,6 +406,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
               nodes:        cleanOriginal.nodes,
               edges:        cleanOriginal.edges,
               nodeCounters: cleanOriginal.nodeCounters,
+              metadata: cleanOriginal.metadata,
             });
             const spaces = syncSpace(s.spaces, s.activeSpaceId, s.nodes, s.edges, s.nodeCounters);
             return { spaces: [...spaces, copy] };

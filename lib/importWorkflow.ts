@@ -11,6 +11,7 @@
  */
 import type { Edge, Node } from "@xyflow/react";
 import type { NodeData } from "./store";
+import type { WorkflowMetadata } from "./cloneMe";
 import { WORKFLOW_FORMAT } from "./exportWorkflow";
 
 const ASSET_PREFIX = "assets/";
@@ -107,6 +108,7 @@ export interface ImportedWorkflow {
   edges: Edge[];
   nodeCounters: Record<string, number>;
   viewport?: { x: number; y: number; zoom: number };
+  metadata?: WorkflowMetadata;
   assetCount: number;
   skipped: number;
 }
@@ -126,6 +128,7 @@ export async function importWorkflowZip(file: File): Promise<ImportedWorkflow> {
       edges?: Edge[];
       nodeCounters?: Record<string, number>;
       viewport?: { x: number; y: number; zoom: number };
+      metadata?: WorkflowMetadata;
     };
   };
   try {
@@ -172,6 +175,7 @@ export async function importWorkflowZip(file: File): Promise<ImportedWorkflow> {
     edges: Array.isArray(wf.edges) ? wf.edges : [],
     nodeCounters: wf.nodeCounters ?? {},
     viewport: wf.viewport,
+    metadata: wf.metadata,
     assetCount: pathToUrl.size,
     skipped,
   };

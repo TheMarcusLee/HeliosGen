@@ -15,6 +15,8 @@ import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { validateContentRoute, type WorkflowMetadata } from "@/lib/cloneMe";
+import { insertProviderLedgerAttempt, settleProviderLedgerTask } from "@/lib/guest/generationLedger";
 
 const BASE   = "https://api.kie.ai";
 const CREATE = `${BASE}/api/v1/jobs/createTask`;
@@ -278,6 +280,9 @@ export async function POST(req: NextRequest) {
     azureCustomHeight,
     codexProvider,
     debugOnly,
+    workflowId,
+    nodeId,
+    workflowMetadata,
   } = (await req.json()) as {
     model?:              string;
     prompt?:             string;
@@ -292,6 +297,9 @@ export async function POST(req: NextRequest) {
     azureCustomHeight?:  number;
     codexProvider?:      boolean;    // route through the server's local codex-imagegen CLI
     debugOnly?:          boolean;
+    workflowId?:         string;
+    nodeId?:             string;
+    workflowMetadata?:   WorkflowMetadata;
   };
 
   if (debugOnly) {
@@ -304,6 +312,13 @@ export async function POST(req: NextRequest) {
 
   const cfg = IMAGE_MODELS.find((m) => m.id === model);
   if (!cfg) return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
+  const provider = azureBaseUrl && azureDeployment ? "azure" : codexProvider ? "codex" : "kie";
+  let workflowPolicy: WorkflowMetadata;
+  try {
+    workflowPolicy = validateContentRoute({ prompt, metadata: workflowMetadata, provider, modelId: model });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+  }
 
   let r2ImageUrls: string[] = [];
   try {
@@ -333,6 +348,7 @@ export async function POST(req: NextRequest) {
     const truncatedPrompt = prompt.slice(0, cfg.apiInput.promptMaxLength ?? 32000);
 
     const azureTaskId = `azure-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    insertProviderLedgerAttempt({ taskId: azureTaskId, workflowId, nodeId, provider: "azure", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
     jobStore.set(azureTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
     const azureUserId = currentUserId;
@@ -406,6 +422,7 @@ export async function POST(req: NextRequest) {
             displayError = code ? (friendlyErrors[code] ?? code) : displayError;
           } catch { /* not JSON */ }
           jobStore.set(azureTaskId, { status: "error", error: displayError });
+          settleProviderLedgerTask(azureTaskId, "error", displayError);
           return;
         }
 
@@ -413,12 +430,14 @@ export async function POST(req: NextRequest) {
         const b64 = azureJson?.data?.[0]?.b64_json as string | undefined;
         if (!b64) {
           jobStore.set(azureTaskId, { status: "error", error: "Azure returned no image data" });
+          settleProviderLedgerTask(azureTaskId, "error", "Azure returned no image data");
           return;
         }
 
         const buf      = Buffer.from(b64, "base64");
         const imageUrl = await uploadBuffer(buf, "image/png", "generated");
         jobStore.set(azureTaskId, { status: "done", imageUrl });
+        settleProviderLedgerTask(azureTaskId, "done", undefined, undefined, imageUrl);
 
         guestDb.insertGeneration({
           task_id: azureTaskId, user_id: azureUserId, generation_type: "image",
@@ -431,6 +450,7 @@ export async function POST(req: NextRequest) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[azure] background error:", msg, e);
         jobStore.set(azureTaskId, { status: "error", error: msg });
+        settleProviderLedgerTask(azureTaskId, "error", msg);
       }
     })();
 
@@ -442,6 +462,7 @@ export async function POST(req: NextRequest) {
   // session on this host — so there's no key lookup here, unlike the other branches.
   if (codexProvider) {
     const codexTaskId = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    insertProviderLedgerAttempt({ taskId: codexTaskId, workflowId, nodeId, provider: "codex", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
     jobStore.set(codexTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
     const codexUserId = currentUserId;
@@ -472,6 +493,7 @@ export async function POST(req: NextRequest) {
         const outBuf   = await runCodexImagegen({ prompt: codexPrompt, images, size });
         const imageUrl = await uploadBuffer(outBuf, "image/png", "generated");
         jobStore.set(codexTaskId, { status: "done", imageUrl });
+        settleProviderLedgerTask(codexTaskId, "done", undefined, undefined, imageUrl);
 
         guestDb.insertGeneration({
           task_id: codexTaskId, user_id: codexUserId, generation_type: "image",
@@ -482,6 +504,7 @@ export async function POST(req: NextRequest) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[codex] background error:", msg, e);
         jobStore.set(codexTaskId, { status: "error", error: cleanCodexError(msg) });
+        settleProviderLedgerTask(codexTaskId, "error", cleanCodexError(msg));
       }
     })();
 
@@ -542,6 +565,7 @@ export async function POST(req: NextRequest) {
     if (!taskId) throw new Error("No task ID in response");
 
     jobStore.set(taskId, { status: "pending", userId: currentUserId ?? undefined });
+    insertProviderLedgerAttempt({ taskId, workflowId, nodeId, provider: "kie", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
 
     guestDb.insertGeneration({
       task_id: taskId, user_id: currentUserId, generation_type: "image",

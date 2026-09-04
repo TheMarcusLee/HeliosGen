@@ -978,6 +978,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     }
 
     // Build full payload first so debug log matches what gets sent
+    const workflowState = useWorkflowStore.getState();
+    const workflowMetadata = workflowState.spaces.find((space) => space.id === workflowState.activeSpaceId)?.metadata;
+    const provenance = { workflowId: workflowState.activeSpaceId, nodeId: id, workflowMetadata };
     const payload: Record<string, unknown> = isVeo ? {
       videoModel: videoModelId,
       prompt: finalPrompt,
@@ -986,6 +989,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       veoMode,
       startFrameUrl: finalStartFrameUrl,
       endFrameUrl: finalEndFrameUrl,
+      ...provenance,
       referenceImageUrls: veoMode === "references" ? orderedResources.map(r => r.url).slice(0, 3) : undefined,
     } : {
       videoModel: videoModelId,
@@ -1005,6 +1009,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       referenceVideoUrls: upstream.referenceVideoUrls.slice(0, maxRefVideos),
       referenceAudioUrls: upstream.referenceAudioUrls.slice(0, maxRefAudios),
       ...(cfg.supportsSeeds && seed ? { seed } : {}),
+      ...provenance,
     };
 
     if (debugMode) {

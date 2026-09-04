@@ -27,6 +27,7 @@ import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
 import { sha256Hex } from "@/lib/assetHash";
+import { Button } from "@/components/ui/button";
 
 import { motion } from "motion/react";
 import TypewriterHeading from "@/components/ui/TypewriterHeading";
@@ -42,11 +43,15 @@ import WaveSpeedNode from "./nodes/WaveSpeedNode";
 import TemplateNode, { resolveTemplateNode } from "./nodes/TemplateNode";
 import ComfyWorkflowNode, { runComfyCanvasNode } from "./nodes/ComfyWorkflowNode";
 import AnnotationNode from "./nodes/AnnotationNode";
+import IdentityMatrixNode from "./nodes/IdentityMatrixNode";
+import BatchQueueNode from "./nodes/BatchQueueNode";
+import WorkflowPolicyDialog from "./WorkflowPolicyDialog";
 import NodePickerMenu, { DropState } from "./NodePickerMenu";
 import SelectionToolbar from "./SelectionToolbar";
 import CanvasToolbar from "./CanvasToolbar";
 import AddNodeMenu from "./AddNodeMenu";
 import { MessageSquare, Sparkles, Clapperboard } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { waveSpeedInputKind } from "@/lib/wavespeedSchema";
 import { runWaveSpeedCanvasNode } from "@/lib/wavespeedClient";
 
@@ -72,6 +77,8 @@ const nodeTypes = {
   templateNode: TemplateNode,
   comfyWorkflowNode: ComfyWorkflowNode,
   annotationNode: AnnotationNode,
+  identityMatrixNode: IdentityMatrixNode,
+  batchQueueNode: BatchQueueNode,
 };
 
 const edgeTypes = {
@@ -165,6 +172,8 @@ function nodeLabel(type: string, existingNodes: Node<NodeData>[]): string {
     templateNode: "TEMPLATE",
     comfyWorkflowNode: "COMFYUI",
     annotationNode: "ANNOTATION",
+    identityMatrixNode: "IDENTITY MATRIX",
+    batchQueueNode: "BATCH QUEUE",
   };
   if (type === "assistantNode") return "ASSISTANT";
   return `${names[type] ?? type} #${count}`;
@@ -215,6 +224,7 @@ export default function WorkflowCanvas() {
   const updateNodeDataRef = useRef(updateNodeData);
   updateNodeDataRef.current = updateNodeData;
   const [activeTool, setActiveTool] = useState<"select" | "hand">("select");
+  const [policyOpen, setPolicyOpen] = useState(false);
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
@@ -997,9 +1007,9 @@ export default function WorkflowCanvas() {
         const kind = waveSpeedInputKind(parameterName, property);
         const sourceFamily = source?.type === "waveSpeedNode" ? source.data.waveSpeedFamily : undefined;
         const compatible = kind === "prompt"
-          ? source?.type === "promptNode" || source?.type === "assistantNode"
+          ? source?.type === "promptNode" || source?.type === "assistantNode" || source?.type === "templateNode" || source?.type === "identityMatrixNode"
           : kind === "image"
-            ? source?.type === "imageInputNode" || source?.type === "generateNode" || (source?.type === "waveSpeedNode" && sourceFamily === "image") || source?.type === "videoInputNode"
+            ? source?.type === "imageInputNode" || source?.type === "identityMatrixNode" || source?.type === "generateNode" || (source?.type === "waveSpeedNode" && sourceFamily === "image") || source?.type === "videoInputNode"
             : kind === "video"
               ? source?.type === "videoInputNode" || source?.type === "videoGeneratorNode" || (source?.type === "waveSpeedNode" && sourceFamily === "video")
               : false;
@@ -1010,7 +1020,7 @@ export default function WorkflowCanvas() {
       }
 
       if (target?.type === "templateNode" && connection.targetHandle === "text") {
-        return source?.type === "promptNode" || source?.type === "assistantNode" || source?.type === "templateNode";
+        return source?.type === "promptNode" || source?.type === "assistantNode" || source?.type === "templateNode" || source?.type === "identityMatrixNode";
       }
 
       if (target?.type === "comfyWorkflowNode" && connection.targetHandle?.startsWith("comfy:")) {
@@ -1028,6 +1038,16 @@ export default function WorkflowCanvas() {
         return !edges.some((edge) => edge.target === connection.target && edge.targetHandle === "image");
       }
 
+      if (target?.type === "batchQueueNode") {
+        if (connection.targetHandle === "identity") return source?.type === "identityMatrixNode";
+        if (connection.targetHandle === "analysis") return ["promptNode", "assistantNode", "templateNode"].includes(source?.type ?? "");
+        return false;
+      }
+
+      if (target?.type === "assistantNode" && connection.targetHandle === "image") {
+        return ["imageInputNode", "identityMatrixNode", "generateNode", "waveSpeedNode", "annotationNode"].includes(source?.type ?? "");
+      }
+
       // Ref nodes are pure sources — nothing functional can connect into them.
       // Exception: the decorative input handles accept any wire but do nothing with it.
       if (target?.type === "imageInputNode" || target?.type === "videoInputNode") {
@@ -1038,7 +1058,9 @@ export default function WorkflowCanvas() {
       if (
         connection.targetHandle === "prompt" &&
         source?.type !== "promptNode" &&
-        source?.type !== "assistantNode"
+        source?.type !== "assistantNode" &&
+        source?.type !== "templateNode" &&
+        source?.type !== "identityMatrixNode"
       ) return false;
 
       // videoRef handle only accepts video nodes
@@ -1246,7 +1268,8 @@ export default function WorkflowCanvas() {
         const imageUrls = upstream.imageUrls;
         const aspectRatio = node.data.aspectRatio ?? "1:1";
         const quality = node.data.quality ?? "1k";
-        const payload = { prompt, imageUrls, model: node.data.model, aspectRatio, quality };
+        const activeWorkflow = useWorkflowStore.getState().spaces.find((space) => space.id === useWorkflowStore.getState().activeSpaceId);
+        const payload = { prompt, imageUrls, model: node.data.model, aspectRatio, quality, workflowId: activeWorkflow?.id, nodeId, workflowMetadata: activeWorkflow?.metadata };
 
         if (!prompt?.trim()) {
           const promptNodeId = edges.find(
@@ -1318,6 +1341,7 @@ export default function WorkflowCanvas() {
       if (node.type === "assistantNode") {
         const upstream = resolveInputs(nodeId, nodes as Node<NodeData>[], edges);
         const prompt = upstream.prompt ?? (node.data.localPrompt as string | undefined) ?? "";
+        const imageUrls = upstream.imageUrls;
 
         if (!prompt.trim()) {
           push(`[${node.id}] skipped — prompt is empty`, false);
@@ -1340,7 +1364,8 @@ export default function WorkflowCanvas() {
             body: JSON.stringify({
               prompt,
               model: node.data.model ?? DEFAULT_TEXT_MODEL_ID,
-              systemPrompt: "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind.",
+              systemPrompt: String(node.data.systemPrompt ?? "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind."),
+              imageUrls,
             }),
           });
           if (!res.ok) {
@@ -1390,7 +1415,7 @@ export default function WorkflowCanvas() {
         try {
           const state = useWorkflowStore.getState();
           const freshNode = state.nodes.find((candidate) => candidate.id === nodeId)!;
-          const result = await runWaveSpeedCanvasNode({ node: freshNode, nodes: state.nodes, edges: state.edges, workflowId: state.activeSpaceId });
+          const result = await runWaveSpeedCanvasNode({ node: freshNode, nodes: state.nodes, edges: state.edges, workflowId: state.activeSpaceId, workflowMetadata: state.spaces.find((space) => space.id === state.activeSpaceId)?.metadata });
           updateNodeData(nodeId, {
             status: "done",
             taskId: result.taskId,
@@ -1429,6 +1454,9 @@ export default function WorkflowCanvas() {
           resources: upstream.resources,
           sound, duration, aspectRatio,
           mode: klingMode,
+          workflowId: useWorkflowStore.getState().activeSpaceId,
+          nodeId,
+          workflowMetadata: useWorkflowStore.getState().spaces.find((space) => space.id === useWorkflowStore.getState().activeSpaceId)?.metadata,
         };
 
         if (!prompt.trim()) {
@@ -1737,6 +1765,8 @@ export default function WorkflowCanvas() {
           onExport={handleExport}
           exporting={exporting}
         />
+        <Button type="button" variant="outline" className="absolute right-4 top-4" onClick={() => setPolicyOpen(true)}><ShieldCheck data-icon="inline-start" />Routing</Button>
+        <WorkflowPolicyDialog open={policyOpen} onOpenChange={setPolicyOpen} />
 
 
         {/* ── Alignment guide lines ────────────────────────────────────────────── */}

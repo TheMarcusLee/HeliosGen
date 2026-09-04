@@ -4,6 +4,8 @@ import { annotationBounds, annotationPath } from "../lib/annotations";
 import { applyComfyBindings, deriveComfyBindings, extractComfyOutputFiles, validateComfyApiWorkflow } from "../lib/comfyWorkflow";
 import { convertNodeBananaWorkflow } from "../lib/nodeBananaConverter";
 import { renderPromptTemplate } from "../lib/templateVariables";
+import { buildPoseOutfitMatrix, validateContentRoute } from "../lib/cloneMe";
+import { makePoseOutfitBatchTemplate, makeSceneReplacementTemplate } from "../lib/templates";
 
 const comfyWorkflow = {
   "1": { class_type: "CLIPTextEncode", inputs: { text: "portrait", clip: ["3", 0] }, _meta: { title: "Positive prompt" } },
@@ -68,4 +70,39 @@ test("computes stable annotation geometry", () => {
   assert.deepEqual(annotationBounds([]), { x: 0, y: 0, width: 0, height: 0 });
   assert.deepEqual(annotationBounds([{ x: 7, y: 9 }, { x: 2, y: 4 }]), { x: 2, y: 4, width: 5, height: 5 });
   assert.equal(annotationPath([{ x: 1.04, y: 2.06 }, { x: 3, y: 4 }]), "M1.0,2.1 L3.0,4.0");
+});
+
+test("builds a pose/outfit cross-product from one shared analysis", () => {
+  const items = buildPoseOutfitMatrix({
+    identity: { triggerWord: "AVA_PERSON", basePrompts: ["Editorial realism"] },
+    poses: ["standing", "seated"],
+    outfits: ["black dress", "linen suit", "streetwear"],
+    analysis: "Soft window light, 50mm portrait",
+  });
+  assert.equal(items.length, 6);
+  assert.equal(items.every((item) => item.prompt.includes("Soft window light, 50mm portrait")), true);
+  assert.equal(new Set(items.map((item) => `${item.pose}/${item.outfit}`)).size, 6);
+});
+
+test("requires exact audited routing and adult consent assurances", () => {
+  const metadata = { contentClass: "adult" as const, routes: { adult: { provider: "wavespeed" as const, modelId: "vendor/model" } }, adultAssurances: { allSubjectsAdults: true, consentVerified: true } };
+  assert.equal(validateContentRoute({ prompt: "adult editorial portrait", metadata, provider: "wavespeed", modelId: "vendor/model" }).contentClass, "adult");
+  assert.throws(() => validateContentRoute({ prompt: "adult editorial portrait", metadata, provider: "kie", modelId: "vendor/model" }), /locked/);
+  assert.throws(() => validateContentRoute({ prompt: "deepfake nude without her consent", metadata, provider: "wavespeed", modelId: "vendor/model" }), /non-consensual/);
+  assert.throws(() => validateContentRoute({ prompt: "rape fantasy portrait", metadata, provider: "wavespeed", modelId: "vendor/model" }), /non-consensual/);
+  assert.throws(() => validateContentRoute({ prompt: "explicit nude minor", metadata, provider: "wavespeed", modelId: "vendor/model" }), /minors/);
+  assert.throws(() => validateContentRoute({ prompt: "nude 16-year-old", metadata, provider: "wavespeed", modelId: "vendor/model" }), /minors/);
+  assert.throws(() => validateContentRoute({ prompt: "general portrait", metadata: { contentClass: "sfw", routingRequired: true, routes: {} }, provider: "kie", modelId: "nano-banana-2" }), /explicit provider/);
+});
+
+test("ships executable CloneMe scene and batch workflow templates", () => {
+  const scene = makeSceneReplacementTemplate();
+  assert.deepEqual(scene.nodes.map((node) => node.type), ["identityMatrixNode", "imageInputNode", "promptNode", "assistantNode", "templateNode", "generateNode", "commentNode"]);
+  assert.equal(scene.edges.some((edge) => edge.target === "clone-analysis" && edge.targetHandle === "image"), true);
+  assert.equal(scene.edges.some((edge) => edge.source === "clone-identity" && edge.sourceHandle === "referencesOut" && edge.target === "clone-generate"), true);
+  assert.deepEqual(scene.metadata.routes.sfw, { provider: "kie", modelId: "nano-banana-2" });
+  const batch = makePoseOutfitBatchTemplate();
+  assert.equal(batch.nodes.some((node) => node.type === "batchQueueNode"), true);
+  assert.equal(batch.edges.some((edge) => edge.targetHandle === "identity"), true);
+  assert.equal(batch.edges.some((edge) => edge.targetHandle === "analysis"), true);
 });

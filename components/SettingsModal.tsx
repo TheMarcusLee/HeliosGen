@@ -1632,18 +1632,18 @@ function TextModelsPanel({
 /* ─── Usage panel ───────────────────────────────────────────────────────────── */
 
 function UsagePanel() {
-  const [data, setData] = useState<{ totals: { quoted: number; actual: number; attempts: number; completed: number }; entries: Array<{ id: string; modelId: string; status: string; quotedCost?: number; attemptIndex: number; createdAt: string }> } | null>(null);
+  const [data, setData] = useState<{ totals: { quoted: number; actual: number; attempts: number; completed: number }; entries: Array<{ id: string; provider: string; modelId: string; status: string; quotedCost?: number; attemptIndex: number; createdAt: string }> } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     fetch("/api/ledger?limit=200").then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Unable to load usage."); setData(body); }).catch((reason) => setError((reason as Error).message));
   }, []);
   return <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-    <div><h2 style={{ fontSize: 17, fontWeight: 600, color: "rgba(255,255,255,.9)", margin: 0 }}>Usage &amp; cost</h2><p style={{ fontSize: 12, color: "rgba(255,255,255,.3)", marginTop: 6 }}>WaveSpeed estimates are captured per attempt, including fallbacks. They remain estimates unless the provider reports a final charge.</p></div>
+    <div><h2 style={{ fontSize: 17, fontWeight: 600, color: "rgba(255,255,255,.9)", margin: 0 }}>Usage &amp; cost</h2><p style={{ fontSize: 12, color: "rgba(255,255,255,.3)", marginTop: 6 }}>Every provider transaction records routing, status, workflow/node provenance, and known or estimated cost. WaveSpeed fallback attempts are recorded separately.</p></div>
     {error && <div style={{ color: "#f87171", fontSize: 12 }}>{error}</div>}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
       {[ ["Estimated spend", `$${(data?.totals.actual ?? 0).toFixed(4)}`], ["Quoted", `$${(data?.totals.quoted ?? 0).toFixed(4)}`], ["Attempts", String(data?.totals.attempts ?? 0)], ["Completed", String(data?.totals.completed ?? 0)] ].map(([label, value]) => <div key={label} style={{ border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, padding: 12, background: "rgba(255,255,255,.025)" }}><div style={{ fontSize: 10, color: "rgba(255,255,255,.35)" }}>{label}</div><div style={{ marginTop: 5, fontSize: 17, color: "white", fontWeight: 600 }}>{value}</div></div>)}
     </div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{data?.entries.map((entry) => <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,.05)", padding: "9px 2px", fontSize: 11 }}><span style={{ width: 58, color: entry.status === "done" ? "#4ade80" : entry.status === "error" ? "#f87171" : "rgba(255,255,255,.45)" }}>{entry.status}</span><span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "rgba(255,255,255,.65)" }}>{entry.modelId}</span><span style={{ color: "rgba(255,255,255,.35)" }}>#{entry.attemptIndex + 1}</span><span style={{ width: 70, textAlign: "right", color: "rgba(255,255,255,.55)" }}>{entry.quotedCost == null ? "variable" : `$${entry.quotedCost.toFixed(4)}`}</span></div>)}</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{data?.entries.map((entry) => <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,.05)", padding: "9px 2px", fontSize: 11 }}><span style={{ width: 58, color: entry.status === "done" ? "#4ade80" : entry.status === "error" ? "#f87171" : "rgba(255,255,255,.45)" }}>{entry.status}</span><span style={{ width: 70, color: "rgba(255,255,255,.35)" }}>{entry.provider}</span><span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "rgba(255,255,255,.65)" }}>{entry.modelId}</span><span style={{ color: "rgba(255,255,255,.35)" }}>#{entry.attemptIndex + 1}</span><span style={{ width: 70, textAlign: "right", color: "rgba(255,255,255,.55)" }}>{entry.quotedCost == null ? "variable" : `$${entry.quotedCost.toFixed(4)}`}</span></div>)}</div>
   </div>;
 }
 

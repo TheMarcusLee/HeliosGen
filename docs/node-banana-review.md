@@ -42,28 +42,28 @@ The small Seedance example confirms the important conversion map:
 - `promptConstructor` has no native equivalent yet and needs a template/variable node
 - Node Banana's indexed handles (`text-0`, `image-2`) need semantic HeliosGen handle mapping
 
-## CloneMe Studio ideas worth bringing into HeliosGen
+## CloneMe Studio production pipeline — implemented
 
-CloneMe Studio is not a node-workflow library, but it has a useful production pipeline to express as reusable HeliosGen templates:
+CloneMe Studio is not a node-workflow library, but its production pipeline is now expressed as native, reusable HeliosGen capabilities:
 
-1. **Identity matrix input.** Keep multiple face/body references plus a trigger word and reusable base prompts as one versioned identity asset.
-2. **Scene replacement workflow.** Target scene → vision analysis → identity-aware prompt construction → provider generation → gallery output.
-3. **Pose/outfit batch workflow.** Cross-product selected poses and outfits into a queue without repeating vision analysis.
-4. **Concurrent queue with explicit states.** Idle → analysis → generation → completed/error, with bounded concurrency, pause, and retries.
-5. **Provider transaction ledger.** Record provider, operation, estimate/actual cost, status, and output provenance for every run.
-6. **SFW/adult routing as workflow metadata.** Provider/model selection should be explicit and auditable; do not infer capability from a model name. Provider rules still apply, and workflows must reject child sexual content and non-consensual intimate imagery.
+1. ✅ **Identity matrix input.** The Identity Matrix canvas node saves multiple face/body references, a trigger word, and reusable base prompts as one identity asset. Every edit creates an immutable version, and workflows retain the embedded snapshot even if the saved asset later changes.
+2. ✅ **Scene replacement workflow.** The dashboard template connects a target scene to Opus 5 vision analysis, combines that result with the selected identity, sends the identity-aware prompt and references to generation, and records the gallery/ledger provenance.
+3. ✅ **Pose/outfit batch workflow.** The dashboard template creates the cross-product of selected poses and outfits while reusing one scene analysis for the complete batch.
+4. ✅ **Concurrent queue with explicit states.** Batch runs and items persist in SQLite with `idle`, `analysis`, `generation`, `paused`, `completed`, and `error` states; concurrency is bounded from 1–8 and the canvas supports pause, resume, and error-only retry.
+5. ✅ **Provider transaction ledger.** WaveSpeed, Kie, Azure, Codex, and ComfyUI submissions record provider, operation/model, estimate/actual cost fields, status, routing context, workflow/node attribution, task IDs, output URLs, and fallback provenance.
+6. ✅ **SFW/adult routing as workflow metadata.** Workflows carry explicit content class and provider/model routes through save, duplicate, import, and export. Adult routes require recorded adult/consent assurances. Server routes reject child sexual content and non-consensual intimate imagery and enforce the configured route instead of guessing from model names.
 
 ## Roadmap implementation status
 
 1. ✅ **Schema-driven provider nodes.** WaveSpeed image/video canvas controls are generated from the authenticated live request schema, including required typed handles, enums, numeric limits, booleans, defaults, and disabled provider-managed fields.
-2. ✅ **Per-run cost capture.** SQLite records every WaveSpeed attempt, quoted/estimated spend, final state, workflow/node provenance, and fallback skips. Settings includes aggregate and recent usage views.
+2. ✅ **Per-run cost capture.** SQLite records provider attempts across WaveSpeed, Kie, Azure, Codex, and ComfyUI, including quoted/estimated spend, final state, workflow/node provenance, and fallback skips. Settings includes aggregate and recent usage views.
 3. ✅ **Ordered fallback models.** Nodes accept compatible ordered fallbacks and a maximum estimated spend. Inputs are semantically remapped between schemas, incompatible attempts are skipped with audit entries, and processing continues through the ordered list.
 4. ✅ **Community catalog and converter.** The dashboard browses the hosted Node Banana library and a versioned converter maps supported nodes and semantic handles, while preserving unsupported content as notes with warnings.
 5. ✅ **ComfyUI workflow nodes.** API-format workflows expose typed primitive/media handles and execute against a configured local ComfyUI server or Comfy Cloud, with outputs copied to HeliosGen storage.
 6. ✅ **Portable workflow media.** Export archives externalize media and imports restore it, keeping workflows self-contained across machines.
 7. ✅ **Annotation node.** Rectangle, ellipse, arrow, freehand, and text overlays remain non-destructive until the user exports a flattened PNG.
 8. ✅ **Graph integrity and history hardening.** Workflow writes and imports remove orphan/self/duplicate edges, group membership is repaired, cycles fail safely before execution, and undo snapshots omit large blob URLs and volatile job state.
-9. ✅ **Writable MCP.** Agents can inspect and mutate complete workflow graphs, discover and run WaveSpeed models, set fallbacks/cost ceilings, audit the ledger, import community workflows, run ComfyUI workflows, and wait for generation results.
+9. ✅ **Writable MCP.** Agents can inspect and mutate complete workflow graphs, identities and their immutable versions, CloneMe templates, content routing, and batch plans; discover and run WaveSpeed models; set fallbacks/cost ceilings; audit the ledger; import community workflows; run ComfyUI workflows; and wait for generation results.
 
 ## Ideas not to copy directly
 
@@ -80,3 +80,4 @@ CloneMe Studio is not a node-workflow library, but it has a useful production pi
 5. ComfyUI node import.
 6. Annotation tools.
 7. Graph/history hardening and writable MCP coverage.
+8. CloneMe identity assets, production templates, persistent batch queues, explicit routing, and provider-wide provenance.

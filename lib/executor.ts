@@ -99,10 +99,11 @@ export function resolveWaveSpeedConnectedInputs(
     const source = nodes.find((candidate) => candidate.id === edge.source);
     if (!source) continue;
     const kind = waveSpeedInputKind(name, property);
+    const imageValues = kind === "image" ? resolveImageUrls(source, edge.sourceHandle) : [];
     const value = kind === "prompt"
       ? resolveTextValue(source)
       : kind === "image"
-        ? resolveImageUrl(source, edge.sourceHandle)
+        ? imageValues[0]
         : kind === "video"
           ? resolveVideoUrl(source)
           : kind === "audio"
@@ -111,7 +112,7 @@ export function resolveWaveSpeedConnectedInputs(
     if (value === undefined) continue;
     if (property.type === "array") {
       const current = Array.isArray(output[name]) ? output[name] as unknown[] : [];
-      output[name] = [...current, value];
+      output[name] = [...current, ...(kind === "image" ? imageValues : [value])];
     } else if (output[name] === undefined) {
       output[name] = value;
     }
@@ -134,6 +135,10 @@ function resolveVideoNodeFrameUrl(src: Node<NodeData>, sourceHandle: string | nu
  *  Frame-specific handles (startFrameOut / endFrameOut / imagePickOut) return only
  *  their designated frame — no fallback to unrelated image fields. */
 function resolveImageUrl(src: Node<NodeData>, sourceHandle: string | null | undefined): string | undefined {
+  if (src.type === "identityMatrixNode" && sourceHandle?.startsWith("identity:")) {
+    const index = Number(sourceHandle.slice("identity:".length));
+    return src.data.identitySnapshot?.references[index]?.url;
+  }
   if (FRAME_OUT_HANDLES.has(sourceHandle ?? "")) {
     return resolveVideoNodeFrameUrl(src, sourceHandle);
   }
@@ -142,6 +147,14 @@ function resolveImageUrl(src: Node<NodeData>, sourceHandle: string | null | unde
     ?? src.data.r2Url
     ?? src.data.inputImage
     ?? src.data.imageUrl) as string | undefined;
+}
+
+function resolveImageUrls(src: Node<NodeData>, sourceHandle: string | null | undefined): string[] {
+  if (src.type === "identityMatrixNode" && sourceHandle === "referencesOut") {
+    return (src.data.identitySnapshot?.references ?? []).map((reference) => reference.url).filter(Boolean);
+  }
+  const value = resolveImageUrl(src, sourceHandle);
+  return value ? [value] : [];
 }
 
 /** Resolve upstream prompt + images for a target node */
@@ -188,11 +201,14 @@ export function resolveInputs(
     if (src.type === "templateNode") {
       result.prompt = (src.data.outputText ?? src.data.template) as string | undefined;
     }
+    if (src.type === "identityMatrixNode") {
+      result.prompt = resolveTextValue(src);
+    }
 
     // "image" handle — multi-image input for generateNode (up to 14)
     if (edge.targetHandle === "image") {
-      const imgSrc = resolveImageUrl(src, edge.sourceHandle);
-      if (imgSrc) {
+      const imageSources = resolveImageUrls(src, edge.sourceHandle);
+      for (const imgSrc of imageSources) {
         result.imageUrls.push(imgSrc);
         result.imageNodeLabels.push((src.data.label as string | undefined) ?? "");
       }

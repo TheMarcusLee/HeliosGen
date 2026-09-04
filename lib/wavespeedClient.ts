@@ -2,6 +2,7 @@ import type { Edge, Node } from "@xyflow/react";
 import type { NodeData } from "./store";
 import { buildWaveSpeedInput, validateWaveSpeedInput } from "./wavespeedSchema";
 import { resolveWaveSpeedConnectedInputs } from "./executor";
+import type { WorkflowMetadata } from "./cloneMe";
 
 export interface WaveSpeedRunResult {
   taskId: string;
@@ -16,6 +17,7 @@ export async function runWaveSpeedCanvasNode(input: {
   nodes: Node<NodeData>[];
   edges: Edge[];
   workflowId?: string;
+  workflowMetadata?: WorkflowMetadata;
 }): Promise<WaveSpeedRunResult> {
   const schema = input.node.data.waveSpeedSchema;
   const parameters = (input.node.data.waveSpeedParameters ?? {}) as Record<string, unknown>;
@@ -38,6 +40,7 @@ export async function runWaveSpeedCanvasNode(input: {
       maxCost: input.node.data.waveSpeedMaxCost,
       workflowId: input.workflowId,
       nodeId: input.node.id,
+      workflowMetadata: input.workflowMetadata,
     }),
   });
   const submitted = await response.json() as Record<string, unknown>;

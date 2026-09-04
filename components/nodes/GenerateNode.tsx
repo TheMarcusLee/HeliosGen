@@ -647,12 +647,18 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       catch { return false; }
     })();
 
+    const workflowState = useWorkflowStore.getState();
+    const workflowMetadata = workflowState.spaces.find((space) => space.id === workflowState.activeSpaceId)?.metadata;
+
     const payload = {
       model,
       prompt: resolvedPrompt,
       imageUrls: orderedUrls,
       aspectRatio,
       quality,
+      workflowId: workflowState.activeSpaceId,
+      nodeId: id,
+      workflowMetadata,
       ...(isAzure ? {
         azureBaseUrl, azureDeployment, azureQuality, azureResolution,
         ...(aspectRatio === "custom" ? {
@@ -1598,4 +1604,3 @@ function NodeProviderIcon({ provider }: { provider: string }) {
       return null;
   }
 }
-

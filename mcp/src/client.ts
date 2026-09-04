@@ -9,6 +9,7 @@ export interface Workflow {
   createdAt: number;
   updatedAt?: number;
   viewport?: { x: number; y: number; zoom: number };
+  metadata?: JsonObject;
 }
 
 export class HeliosClient {

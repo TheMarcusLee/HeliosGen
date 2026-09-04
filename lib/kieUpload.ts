@@ -41,7 +41,7 @@ function isLocalMedia(url: string): boolean {
 }
 
 /** Read a `/generated/...` path or a `data:` URL into a base64 data URL. */
-async function toDataUrl(input: string): Promise<string> {
+export async function localMediaToDataUrl(input: string): Promise<string> {
   if (input.startsWith("data:")) return input;
 
   const rel = input.replace(/^\/generated\//, "").replace(/^\/+/, "");
@@ -55,7 +55,7 @@ async function toDataUrl(input: string): Promise<string> {
 const uploadCache = new Map<string, Promise<string>>();
 
 async function doUpload(input: string, apiKey: string): Promise<string> {
-  const base64Data = await toDataUrl(input);
+  const base64Data = await localMediaToDataUrl(input);
   const res = await fetch(UPLOAD_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

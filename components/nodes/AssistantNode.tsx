@@ -85,6 +85,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
 
   const hasOutput = !!outputText;
   const upstreamPrompt = resolveInputs(id, nodes, edges).prompt ?? "";
+  const upstreamImages = resolveInputs(id, nodes, edges).imageUrls;
   const effectivePrompt = upstreamPrompt || localPrompt;
   const hasPrompt = !!effectivePrompt.trim();
   const sourceConnected = edges.some((e) => e.source === id);
@@ -148,8 +149,8 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
         body: JSON.stringify({
           prompt: effectivePrompt,
           model,
-          systemPrompt:
-            "You are a senior prompt engineer specializing in optimizing prompts for clarity, precision, and effectiveness. Your task is to take an existing user prompt and rewrite it to improve its structure, specificity, and performance for an AI model. Preserve the original intent while enhancing wording, removing ambiguity, and adding useful detail where appropriate. Do not change the task itself. Output only the improved prompt. Do not include any explanations, comments, formatting markers, or quotation marks.",
+          imageUrls: upstreamImages,
+          systemPrompt: String(data.systemPrompt ?? "You are a senior prompt engineer specializing in optimizing prompts for clarity, precision, and effectiveness. Rewrite the user prompt while preserving intent. Output only the improved prompt with no explanation."),
         }),
         signal: controller.signal,
       });
@@ -193,7 +194,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
       setLoading(false);
       abortRef.current = null;
     }
-  }, [busy, hasPrompt, effectivePrompt, id, updateNodeData, model]);
+  }, [busy, data.systemPrompt, hasPrompt, effectivePrompt, id, updateNodeData, model, upstreamImages]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -406,7 +407,8 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
       </div>
 
       {/* ── Assistant output handle ───────────────────────────────────── */}
-      <Handle type="target" position={Position.Left} id="prompt" style={{ top: "50%" }} title="Prompt input" />
+      <Handle type="target" position={Position.Left} id="prompt" style={{ top: "42%" }} title="Prompt input" />
+      <Handle type="target" position={Position.Left} id="image" style={{ top: "68%" }} title="Vision image input" />
       <Handle
         type="source"
         position={Position.Right}

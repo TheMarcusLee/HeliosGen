@@ -19,12 +19,12 @@ const SECTIONS: Array<{ id: string; label: string; nodeTypes: string[] }> = [
   {
     id: "generators",
     label: "GENERATORS",
-    nodeTypes: ["waveSpeedNode", "comfyWorkflowNode", "generateNode", "videoGeneratorNode", "assistantNode", "templateNode"],
+    nodeTypes: ["waveSpeedNode", "batchQueueNode", "comfyWorkflowNode", "generateNode", "videoGeneratorNode", "assistantNode", "templateNode"],
   },
   {
     id: "resources",
     label: "INPUTS",
-    nodeTypes: ["promptNode"],
+    nodeTypes: ["identityMatrixNode", "promptNode"],
   },
   {
     id: "annotate",
@@ -105,6 +105,8 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
         templateNode: "TEMPLATE",
         comfyWorkflowNode: "COMFYUI",
         annotationNode: "ANNOTATION",
+        identityMatrixNode: "IDENTITY MATRIX",
+        batchQueueNode: "BATCH QUEUE",
       };
       const label = `${DISPLAY[type] ?? type} #${count}`;
 

@@ -7,6 +7,8 @@ import { VIDEO_MODELS } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { validateContentRoute } from "@/lib/cloneMe";
+import { insertProviderLedgerAttempt } from "@/lib/guest/generationLedger";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -58,6 +60,12 @@ export async function POST(req: NextRequest) {
 
   const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
   if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
+  let workflowPolicy;
+  try {
+    workflowPolicy = validateContentRoute({ prompt, metadata: body.workflowMetadata, provider: "kie", modelId: videoModel });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+  }
 
   const resolution = rawResolution || cfg.defaultResolution || "480p";
   const { apiInput } = cfg;
@@ -444,6 +452,14 @@ export async function POST(req: NextRequest) {
 
   // Register as pending so the frontend can poll job-status
   jobStore.set(taskId, { status: "pending", type: "video", userId: userId ?? undefined });
+  insertProviderLedgerAttempt({
+    taskId,
+    workflowId: typeof body.workflowId === "string" ? body.workflowId : undefined,
+    nodeId: typeof body.nodeId === "string" ? body.nodeId : undefined,
+    provider: "kie",
+    modelId: videoModel,
+    metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] },
+  });
 
   const referenceUrls: string[] = apiInput.useMotionControl
     ? [

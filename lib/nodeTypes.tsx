@@ -1,6 +1,6 @@
 // Shared node type definitions — imported by both Sidebar and NodePickerMenu
 import React from "react";
-import { MessageSquare, Image, Film, Sparkles, Bot, Clapperboard, StickyNote, Waves, Braces, Workflow, PenTool } from "lucide-react";
+import { MessageSquare, Image, Film, Sparkles, Bot, Clapperboard, StickyNote, Waves, Braces, Workflow, PenTool, UserRound, ListChecks } from "lucide-react";
 
 export type NodeCategory = "generators" | "resources";
 
@@ -19,6 +19,8 @@ export const NODE_META: Record<
   templateNode:       { accent: "#a78bfa", bg: "#2e1065",  bigIcon: <Braces        size={18} strokeWidth={1.7} /> },
   comfyWorkflowNode:  { accent: "#c084fc", bg: "#3b0764",  bigIcon: <Workflow      size={18} strokeWidth={1.7} /> },
   annotationNode:     { accent: "#fb7185", bg: "#4c0519",  bigIcon: <PenTool       size={18} strokeWidth={1.7} /> },
+  identityMatrixNode: { accent: "#f472b6", bg: "#500724",  bigIcon: <UserRound     size={18} strokeWidth={1.7} /> },
+  batchQueueNode:     { accent: "#f59e0b", bg: "#451a03",  bigIcon: <ListChecks    size={18} strokeWidth={1.7} /> },
 };
 
 export const NODES: Array<{
@@ -29,6 +31,14 @@ export const NODES: Array<{
   label: string;
   description: string;
 }> = [
+    {
+      type: "batchQueueNode",
+      category: "generators",
+      canReceiveConnection: true,
+      icon: <ListChecks size={14} strokeWidth={1.5} />,
+      label: "Pose × Outfit Queue",
+      description: "Bounded concurrent identity batch with pause and retry",
+    },
     /* ── Generators ─────────────────────────────────────────────────────────── */
     {
       type: "waveSpeedNode",
@@ -107,6 +117,14 @@ export const NODES: Array<{
       ),
       label: "Text",
       description: "Standalone text source",
+    },
+    {
+      type: "identityMatrixNode",
+      category: "resources",
+      canReceiveConnection: false,
+      icon: <UserRound size={14} strokeWidth={1.5} />,
+      label: "Identity Matrix",
+      description: "Versioned face/body references, trigger, and base prompts",
     },
     {
       type: "imageInputNode",
@@ -193,6 +211,8 @@ export const NODE_SIZE: Record<string, { w: number; h: number }> = {
   templateNode: { w: 340, h: 300 },
   comfyWorkflowNode: { w: 400, h: 600 },
   annotationNode: { w: 320, h: 320 },
+  identityMatrixNode: { w: 400, h: 620 },
+  batchQueueNode: { w: 420, h: 680 },
 };
 
 export const FALLBACK_SIZE = { w: 280, h: 280 };

@@ -147,6 +147,7 @@ export default function WaveSpeedNode({ id, data, selected }: NodeProps<WaveSpee
         nodes: state.nodes,
         edges: state.edges,
         workflowId: state.activeSpaceId,
+        workflowMetadata: state.spaces.find((space) => space.id === state.activeSpaceId)?.metadata,
       });
       updateNodeData(id, {
         status: "done",

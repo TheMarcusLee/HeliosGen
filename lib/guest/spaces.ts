@@ -1,4 +1,5 @@
 import { db } from "./sqlite";
+import type { WorkflowMetadata } from "../cloneMe";
 
 /**
  * Local persistence for workflow "spaces" (node canvases). SQLite-backed
@@ -13,6 +14,7 @@ export interface GuestSpace {
   createdAt: number;
   updatedAt?: number;
   viewport?: { x: number; y: number; zoom: number };
+  metadata?: WorkflowMetadata;
 }
 
 export function getSpaces(): GuestSpace[] {

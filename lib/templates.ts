@@ -1,6 +1,7 @@
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./store";
 import { edgeStyle } from "./edgeStyles";
+import type { WorkflowMetadata } from "./cloneMe";
 
 // ── UGC starter: 4× Image Gen → 4× Video Gen ─────────────────────────────────
 // Two independent columns, each stacked vertically:
@@ -264,5 +265,68 @@ export function makeUGCTemplate(): {
     nodes,
     edges,
     nodeCounters: { promptNode: 8, generateNode: 4, videoGeneratorNode: 4, imageInputNode: 1 },
+  };
+}
+
+export function makeSceneReplacementTemplate(): {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  nodeCounters: Record<string, number>;
+  metadata: WorkflowMetadata;
+} {
+  const nodes: Node<NodeData>[] = [
+    { id: "clone-identity", type: "identityMatrixNode", position: { x: 0, y: 0 }, style: { width: 400, height: 620 }, data: { label: "IDENTITY", status: "idle", variableName: "identity" } },
+    { id: "clone-scene", type: "imageInputNode", position: { x: 0, y: 700 }, style: { width: 260 }, data: { label: "TARGET SCENE", status: "idle" } },
+    { id: "clone-analysis-instruction", type: "promptNode", position: { x: 470, y: 700 }, style: { width: 360, height: 220 }, data: { label: "VISION INSTRUCTION", status: "idle", prompt: "Analyze the target scene for camera angle, composition, lighting, lens/depth of field, pose, wardrobe, environment, and color grade. Describe only the visual facts needed to recreate it with another adult subject." } },
+    { id: "clone-analysis", type: "assistantNode", position: { x: 900, y: 620 }, style: { width: 320, height: 300 }, data: { label: "SCENE ANALYSIS", status: "idle", variableName: "analysis", model: "claude-opus-5", systemPrompt: "You are a precise visual analyst. Analyze the supplied image and answer the user's requested visual categories. Do not identify people or infer sensitive traits. Return concise production-ready scene facts only." } },
+    { id: "clone-template", type: "templateNode", position: { x: 900, y: 180 }, style: { width: 380, height: 330 }, data: { label: "IDENTITY PROMPT", status: "idle", template: "@identity\n\nRecreate this target scene with the referenced adult identity.\n@analysis\n\nPreserve identity and natural anatomy. Match the scene composition without copying text, logos, or watermarks." } },
+    { id: "clone-generate", type: "generateNode", position: { x: 1380, y: 250 }, style: { width: 320, height: 420 }, data: { label: "GALLERY OUTPUT", status: "idle", model: "nano-banana-2", aspectRatio: "9:16", quality: "2k" } },
+    { id: "clone-note", type: "commentNode", position: { x: 1380, y: 720 }, style: { width: 320, height: 150 }, data: { label: "OUTPUT", status: "idle", comment: "Successful generations are written to the Gallery automatically with workflow and provider provenance." } },
+  ];
+  const edge = (id: string, source: string, target: string, targetHandle: string, sourceHandle?: string): Edge => ({ id, source, target, sourceHandle, targetHandle, animated: false, style: edgeStyle(targetHandle) });
+  return {
+    nodes,
+    edges: [
+      edge("clone-e-instruction", "clone-analysis-instruction", "clone-analysis", "prompt"),
+      edge("clone-e-scene-vision", "clone-scene", "clone-analysis", "image"),
+      edge("clone-e-identity-prompt", "clone-identity", "clone-template", "text", "promptOut"),
+      edge("clone-e-analysis-template", "clone-analysis", "clone-template", "text"),
+      edge("clone-e-template-generate", "clone-template", "clone-generate", "prompt", "textOut"),
+      edge("clone-e-identity-references", "clone-identity", "clone-generate", "image", "referencesOut"),
+      edge("clone-e-scene-generate", "clone-scene", "clone-generate", "image"),
+    ],
+    nodeCounters: { identityMatrixNode: 1, imageInputNode: 1, promptNode: 1, assistantNode: 1, templateNode: 1, generateNode: 1, commentNode: 1 },
+    metadata: { contentClass: "sfw", routingRequired: true, routes: { sfw: { provider: "kie", modelId: "nano-banana-2" } } },
+  };
+}
+
+export function makePoseOutfitBatchTemplate(): {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  nodeCounters: Record<string, number>;
+  metadata: WorkflowMetadata;
+} {
+  const scene = makeSceneReplacementTemplate();
+  const keep = new Set(["clone-identity", "clone-scene", "clone-analysis-instruction", "clone-analysis"]);
+  const nodes = scene.nodes.filter((node) => keep.has(node.id));
+  nodes.push({
+    id: "clone-batch", type: "batchQueueNode", position: { x: 1380, y: 300 }, style: { width: 420, height: 680 },
+    data: {
+      label: "POSE × OUTFIT QUEUE", status: "idle", batchProvider: "wavespeed", batchConcurrency: 3,
+      batchPoses: ["Standing, three-quarter view", "Seated, looking into camera", "Walking toward camera"],
+      batchOutfits: ["Black evening look", "White linen set", "Casual premium streetwear"],
+      batchScene: "Recreate the analyzed target scene while varying only pose and outfit.",
+    },
+  });
+  const edges = scene.edges.filter((edge) => keep.has(edge.source) && keep.has(edge.target));
+  edges.push(
+    { id: "clone-e-identity-batch", source: "clone-identity", sourceHandle: "promptOut", target: "clone-batch", targetHandle: "identity", animated: false, style: edgeStyle("image") },
+    { id: "clone-e-analysis-batch", source: "clone-analysis", target: "clone-batch", targetHandle: "analysis", animated: false, style: edgeStyle("prompt") },
+  );
+  return {
+    nodes,
+    edges,
+    nodeCounters: { identityMatrixNode: 1, imageInputNode: 1, promptNode: 1, assistantNode: 1, batchQueueNode: 1 },
+    metadata: { contentClass: "sfw", routingRequired: true, routes: {} },
   };
 }

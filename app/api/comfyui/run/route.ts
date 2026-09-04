@@ -7,6 +7,8 @@ import { extname, join } from "node:path";
 import { applyComfyBindings, extractComfyOutputFiles, type ComfyBinding } from "@/lib/comfyWorkflow";
 import { getComfyApiKey, getComfyBaseUrl } from "@/lib/guest/db";
 import { MEDIA_DIR } from "@/lib/guest/paths";
+import { validateContentRoute } from "@/lib/cloneMe";
+import { insertProviderLedgerAttempt, settleProviderLedgerTask } from "@/lib/guest/generationLedger";
 
 function normalizedBaseUrl(): { base: string; prefix: string; cloud: boolean } {
   const configured = getComfyBaseUrl() || "http://127.0.0.1:8188";
@@ -48,12 +50,16 @@ async function safeMediaSourceUrl(raw: string, requestOrigin: string): Promise<s
 }
 
 export async function POST(req: NextRequest) {
+  let ledgerTaskId: string | undefined;
   try {
-    const body = await req.json() as { workflow?: unknown; bindings?: ComfyBinding[] };
+    const body = await req.json() as { workflow?: unknown; bindings?: ComfyBinding[]; workflowId?: string; nodeId?: string; workflowName?: string; workflowMetadata?: unknown };
     const { base, prefix, cloud } = normalizedBaseUrl();
     const apiKey = getComfyApiKey();
     if (cloud && !apiKey) return NextResponse.json({ error: "Add a Comfy Cloud API key in Settings or configure COMFY_API_KEY." }, { status: 401 });
     const bindings = Array.isArray(body.bindings) ? body.bindings.map((binding) => ({ ...binding })) : [];
+    const promptText = bindings.filter((binding) => binding.kind === "prompt").map((binding) => String(binding.value ?? "")).join("\n");
+    const modelId = body.workflowName?.trim() || "comfyui-workflow";
+    const workflowMetadata = validateContentRoute({ prompt: promptText, metadata: body.workflowMetadata, provider: "comfyui", modelId });
     for (const binding of bindings) {
       if (!(["image", "video", "audio"] as string[]).includes(binding.kind) || typeof binding.value !== "string") continue;
       const sourceUrl = await safeMediaSourceUrl(binding.value, req.nextUrl.origin);
@@ -83,6 +89,8 @@ export async function POST(req: NextRequest) {
     });
     const submitted = await submit.json() as { prompt_id?: string; error?: string; node_errors?: unknown };
     if (!submit.ok || !submitted.prompt_id) throw new Error(submitted.error ?? `ComfyUI rejected the workflow (${submit.status}).`);
+    insertProviderLedgerAttempt({ taskId: submitted.prompt_id, workflowId: body.workflowId, nodeId: body.nodeId, provider: "comfyui", modelId, metadata: { contentClass: workflowMetadata.contentClass, route: workflowMetadata.routes[workflowMetadata.contentClass] } });
+    ledgerTaskId = submitted.prompt_id;
 
     let history: unknown = null;
     for (let attempt = 0; attempt < 300; attempt++) {
@@ -114,8 +122,10 @@ export async function POST(req: NextRequest) {
     const first = urls[0];
     const video = /\.(mp4|webm|mov)$/i.test(first);
     const audio = /\.(mp3|wav|m4a|ogg)$/i.test(first);
+    settleProviderLedgerTask(submitted.prompt_id, "done", undefined, undefined, first);
     return NextResponse.json({ promptId: submitted.prompt_id, urls, ...(video ? { videoUrl: first } : audio ? { audioUrl: first } : { imageUrl: first }) });
   } catch (error) {
+    if (ledgerTaskId) settleProviderLedgerTask(ledgerTaskId, "error", error instanceof Error ? error.message : "ComfyUI execution failed.");
     return NextResponse.json({ error: error instanceof Error ? error.message : "ComfyUI execution failed." }, { status: 502 });
   }
 }

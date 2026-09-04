@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import NextImage from "next/image";
 import { useRouter } from "next/navigation";
 import { useWorkflowStore, Space } from "@/lib/store";
-import { makeUGCTemplate } from "@/lib/templates";
+import { makePoseOutfitBatchTemplate, makeSceneReplacementTemplate, makeUGCTemplate } from "@/lib/templates";
 import { timeAgo } from "@/lib/useSpaceSync";
 import { WorkflowHero } from "@/components/WorkflowHero";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
@@ -656,6 +656,7 @@ export default function WorkflowDashboard() {
         nodes: wf.nodes,
         edges: wf.edges,
         nodeCounters: wf.nodeCounters,
+        metadata: wf.metadata,
       });
       const newId = useWorkflowStore.getState().activeSpaceId;
       if (wf.viewport) useWorkflowStore.getState().saveViewport(wf.viewport);
@@ -699,6 +700,12 @@ export default function WorkflowDashboard() {
   const handleResetTemplate = (e: React.MouseEvent) => {
     e.stopPropagation();
     spawnFreshTemplate();
+  };
+
+  const spawnCloneMeTemplate = (kind: "scene" | "batch") => {
+    const name = kind === "scene" ? "Identity Scene Replacement" : "Identity Pose × Outfit Batch";
+    createSpace(name, kind === "scene" ? makeSceneReplacementTemplate() : makePoseOutfitBatchTemplate());
+    router.push(`/workflow/${useWorkflowStore.getState().activeSpaceId}`);
   };
 
   const sorted = [...spaces]
@@ -749,6 +756,8 @@ export default function WorkflowDashboard() {
           </div>
 
           <div style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "10px" }}>
+            <button className="wsd-import-btn" onClick={() => spawnCloneMeTemplate("scene")}>Scene replacement</button>
+            <button className="wsd-import-btn" onClick={() => spawnCloneMeTemplate("batch")}>Pose × outfit batch</button>
             <button className="wsd-import-btn" onClick={() => setCommunityOpen(true)}>
               Community library
             </button>

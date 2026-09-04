@@ -147,6 +147,7 @@ export async function buildWorkflowZip(space: Space): Promise<{ blob: Blob; resu
       nodeCounters: space.nodeCounters,
       viewport: space.viewport,
       createdAt: space.createdAt,
+      metadata: space.metadata,
     },
   };
 

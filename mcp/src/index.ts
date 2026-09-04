@@ -6,6 +6,14 @@ import { HeliosClient, type JsonObject, type Workflow } from "./client.js";
 
 const jsonObject = z.record(z.string(), z.json());
 const position = z.object({ x: z.number(), y: z.number() });
+const providerRoute = z.object({ provider: z.enum(["kie", "wavespeed", "comfyui", "azure", "codex"]), modelId: z.string().min(1).max(240) }).strict();
+const workflowMetadata = z.object({
+  contentClass: z.enum(["sfw", "adult"]),
+  routingRequired: z.boolean().optional(),
+  routes: z.object({ sfw: providerRoute.optional(), adult: providerRoute.optional() }).strict(),
+  adultAssurances: z.object({ allSubjectsAdults: z.boolean(), consentVerified: z.boolean() }).strict().optional(),
+}).strict();
+const identityReference = z.object({ url: z.string().url(), kind: z.enum(["face", "body"]), label: z.string().max(80).optional() }).strict();
 
 function result(value: JsonObject) {
   return {
@@ -26,7 +34,7 @@ function summary(workflow: Workflow): JsonObject {
 }
 
 function createServer(): McpServer {
-  const server = new McpServer({ name: "heliosgen", version: "0.2.0" });
+  const server = new McpServer({ name: "heliosgen-mcp-server", version: "0.3.0" });
   const client = new HeliosClient();
 
   server.registerTool("helios_get_status", {
@@ -261,6 +269,7 @@ function createServer(): McpServer {
       maxCost: z.number().nonnegative().optional().describe("Maximum estimated USD spend across the primary model and attempted fallbacks."),
       workflowId: z.string().max(240).optional(),
       nodeId: z.string().max(240).optional(),
+      workflowMetadata: workflowMetadata.optional().describe("Audited SFW/adult routing metadata. Adult requests require assurances and an exact matching provider/model route."),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result(await client.json<JsonObject>("/api/wavespeed/generate", {
@@ -303,9 +312,100 @@ function createServer(): McpServer {
     return result({ nodeId: id, workflow: summary(workflow!), model });
   });
 
+  server.registerTool("helios_list_identity_assets", {
+    title: "List identity assets",
+    description: "List reusable versioned identity matrices containing face/body references, a trigger word, and base prompts. This is read-only and omits version history.",
+    inputSchema: z.object({ offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(100).default(25) }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ offset, limit }) => {
+    const body = await client.json<{ identities?: JsonObject[] }>("/api/identities");
+    const all = body.identities ?? [];
+    return result({ total: all.length, count: all.slice(offset, offset + limit).length, offset, identities: all.slice(offset, offset + limit), hasMore: offset + limit < all.length, nextOffset: offset + limit < all.length ? offset + limit : null });
+  });
+
+  server.registerTool("helios_get_identity_asset", {
+    title: "Get identity asset",
+    description: "Get the current identity matrix and every immutable prior version for provenance or rollback planning.",
+    inputSchema: z.object({ identityId: z.string().min(1) }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ identityId }) => result(await client.json<JsonObject>(`/api/identities/${encodeURIComponent(identityId)}`)));
+
+  server.registerTool("helios_create_identity_asset", {
+    title: "Create identity asset",
+    description: "Create version 1 of a reusable identity matrix. References must be URLs already accessible to the configured generation provider.",
+    inputSchema: z.object({ name: z.string().min(1).max(120), triggerWord: z.string().max(120).default(""), basePrompts: z.array(z.string().min(1).max(2000)).max(20).default([]), references: z.array(identityReference).max(24).default([]) }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async (input) => result(await client.json<JsonObject>("/api/identities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
+
+  server.registerTool("helios_update_identity_asset", {
+    title: "Create new identity version",
+    description: "Replace the current identity matrix fields and append an immutable version-history snapshot. Existing workflows retain their embedded snapshot until deliberately refreshed.",
+    inputSchema: z.object({ identityId: z.string().min(1), name: z.string().min(1).max(120), triggerWord: z.string().max(120).default(""), basePrompts: z.array(z.string().min(1).max(2000)).max(20).default([]), references: z.array(identityReference).max(24).default([]) }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ identityId, ...input }) => result(await client.json<JsonObject>(`/api/identities/${encodeURIComponent(identityId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
+
+  server.registerTool("helios_delete_identity_asset", {
+    title: "Delete identity asset",
+    description: "Permanently delete an identity asset and its version history. Workflow nodes keep their embedded snapshot, but can no longer refresh from the deleted asset.",
+    inputSchema: z.object({ identityId: z.string().min(1) }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, async ({ identityId }) => result(await client.json<JsonObject>(`/api/identities/${encodeURIComponent(identityId)}`, { method: "DELETE" })));
+
+  server.registerTool("helios_create_clone_workflow", {
+    title: "Create CloneMe production workflow",
+    description: "Create an editable identity scene-replacement or pose/outfit batch workflow from the built-in production templates.",
+    inputSchema: z.object({ templateId: z.enum(["scene-replacement", "pose-outfit-batch"]), name: z.string().min(1).max(120).optional() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async (input) => result(await client.json<JsonObject>("/api/clone-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
+
+  server.registerTool("helios_set_workflow_routing", {
+    title: "Set workflow content routing",
+    description: "Save explicit SFW/adult provider routing with a workflow. Only set adult assurances when the user has explicitly confirmed all subjects are adults and every real person consented. Generation still rejects child sexual content and non-consensual intimate imagery.",
+    inputSchema: z.object({ workflowId: z.string().min(1), metadata: workflowMetadata }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ workflowId, metadata }) => {
+    if (!metadata.routes[metadata.contentClass]) throw new Error(`Routing requires an exact ${metadata.contentClass.toUpperCase()} provider/model pair.`);
+    if (metadata.contentClass === "adult" && (!metadata.routes.adult || !metadata.adultAssurances?.allSubjectsAdults || !metadata.adultAssurances?.consentVerified)) throw new Error("Adult routing requires an exact adult route plus both user-confirmed assurances.");
+    const savedMetadata = { ...metadata, routingRequired: true };
+    const workflow = await client.mutateWorkflow(workflowId, (current) => ({ ...current, metadata: savedMetadata }));
+    return result({ workflow: summary(workflow!), metadata: savedMetadata });
+  });
+
+  server.registerTool("helios_list_identity_batches", {
+    title: "List identity batches",
+    description: "List persisted pose/outfit batch runs and their explicit idle, analysis, generation, paused, completed, or error states.",
+    inputSchema: z.object({ workflowId: z.string().optional() }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ workflowId }) => result(await client.json<JsonObject>(`/api/batches${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ""}`)));
+
+  server.registerTool("helios_get_identity_batch", {
+    title: "Get identity batch",
+    description: "Get one persisted pose/outfit batch including every item prompt, attempt count, state, output, and error.",
+    inputSchema: z.object({ batchId: z.string().min(1) }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ batchId }) => result(await client.json<JsonObject>(`/api/batches?id=${encodeURIComponent(batchId)}`)));
+
+  server.registerTool("helios_create_identity_batch", {
+    title: "Create identity batch plan",
+    description: "Create and persist the cross-product of poses and outfits using one precomputed scene analysis. This plans the queue; use WaveSpeed generation plus helios_update_identity_batch to execute and record individual items from an agent.",
+    inputSchema: z.object({ workflowId: z.string().min(1), nodeId: z.string().optional(), identityAssetId: z.string().min(1), provider: z.enum(["wavespeed", "kie"]), modelId: z.string().min(1).max(240), poses: z.array(z.string().min(1)).min(1).max(50), outfits: z.array(z.string().min(1)).min(1).max(50), scene: z.string().max(4000).optional(), analysis: z.string().max(12000).optional(), extra: z.string().max(4000).optional(), concurrency: z.number().int().min(1).max(8).default(2) }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async (input) => {
+    const workflow = (await client.getWorkflows()).find((candidate) => candidate.id === input.workflowId);
+    if (!workflow) throw new Error(`Workflow not found: ${input.workflowId}`);
+    return result(await client.json<JsonObject>("/api/batches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, workflowMetadata: workflow.metadata }) }));
+  });
+
+  server.registerTool("helios_update_identity_batch", {
+    title: "Update identity batch state",
+    description: "Pause/resume a batch or update one item's generation state, attempts, task ID, output URL, or error while an agent executes the persisted plan.",
+    inputSchema: z.object({ batchId: z.string().min(1), status: z.enum(["idle", "analysis", "generation", "paused", "completed", "error"]).optional(), itemId: z.string().optional(), itemPatch: z.object({ status: z.enum(["idle", "analysis", "generation", "completed", "error"]).optional(), attempts: z.number().int().min(0).optional(), taskId: z.string().optional(), outputUrl: z.string().url().optional(), error: z.string().optional() }).strict().optional() }).strict().refine((value) => value.status !== undefined || (value.itemId && value.itemPatch), "Provide a batch status or an item update."),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ batchId, status, itemId, itemPatch }) => result(await client.json<JsonObject>("/api/batches", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: batchId, status, itemId, itemPatch }) })));
+
   server.registerTool("helios_list_generation_ledger", {
     title: "List generation cost ledger",
-    description: "List recent WaveSpeed generation attempts and aggregated quoted/estimated spend. Filter by workflow or node to audit fallback attempts and costs.",
+    description: "List recent provider generation attempts and aggregated quoted/estimated spend. Filter by workflow or node to audit routing, fallbacks, provenance, and costs across WaveSpeed, Kie, Azure, Codex, and ComfyUI.",
     inputSchema: z.object({ workflowId: z.string().optional(), nodeId: z.string().optional(), limit: z.number().int().min(1).max(500).default(100) }).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ workflowId, nodeId, limit }) => {

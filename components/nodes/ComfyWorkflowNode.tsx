@@ -40,7 +40,8 @@ export async function runComfyCanvasNode(id: string): Promise<void> {
             : undefined;
     if (value !== undefined) binding.value = value;
   }
-  const response = await fetch("/api/comfyui/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflow: node.data.comfyWorkflow, bindings }) });
+  const activeWorkflow = state.spaces.find((space) => space.id === state.activeSpaceId);
+  const response = await fetch("/api/comfyui/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflow: node.data.comfyWorkflow, bindings, workflowId: state.activeSpaceId, nodeId: id, workflowName: node.data.comfyWorkflowName, workflowMetadata: activeWorkflow?.metadata }) });
   const body = await response.json() as Record<string, unknown>;
   if (!response.ok) throw new Error(String(body.error ?? "ComfyUI execution failed."));
   state.updateNodeData(id, { status: "done", imageUrl: body.imageUrl as string | undefined, videoUrl: body.videoUrl as string | undefined, audioUrl: body.audioUrl as string | undefined, comfyOutputUrls: body.urls as string[] | undefined, comfyPromptId: body.promptId as string | undefined });
