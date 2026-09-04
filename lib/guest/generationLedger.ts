@@ -9,6 +9,7 @@ export interface GenerationLedgerEntry {
   taskId: string;
   workflowId?: string;
   nodeId?: string;
+  identityAssetId?: string;
   provider: string;
   modelId: string;
   attemptIndex: number;
@@ -29,6 +30,7 @@ export interface WaveSpeedRunPlan {
   mediaType: "image" | "video";
   workflowId?: string;
   nodeId?: string;
+  identityAssetId?: string;
   models: WaveSpeedModel[];
   currentIndex: number;
   predictionId: string;
@@ -47,6 +49,7 @@ function rowToLedger(row: Record<string, unknown>): GenerationLedgerEntry {
     taskId: row.task_id as string,
     workflowId: (row.workflow_id as string) || undefined,
     nodeId: (row.node_id as string) || undefined,
+    identityAssetId: (row.identity_asset_id as string) || undefined,
     provider: row.provider as string,
     modelId: row.model_id as string,
     attemptIndex: Number(row.attempt_index),
@@ -67,6 +70,7 @@ export function insertLedgerAttempt(input: {
   taskId: string;
   workflowId?: string;
   nodeId?: string;
+  identityAssetId?: string;
   modelId: string;
   attemptIndex: number;
   quotedCost?: number;
@@ -79,6 +83,7 @@ export function insertProviderLedgerAttempt(input: {
   taskId: string;
   workflowId?: string;
   nodeId?: string;
+  identityAssetId?: string;
   provider: string;
   modelId: string;
   attemptIndex?: number;
@@ -90,11 +95,11 @@ export function insertProviderLedgerAttempt(input: {
   const timestamp = now();
   db().prepare(`
     INSERT INTO generation_ledger
-      (id, task_id, workflow_id, node_id, provider, model_id, attempt_index, status,
+      (id, task_id, workflow_id, node_id, identity_asset_id, provider, model_id, attempt_index, status,
        quoted_cost, cost_kind, currency, metadata, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'USD', ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'USD', ?, ?, ?)
   `).run(
-    id, input.taskId, input.workflowId ?? null, input.nodeId ?? null, input.provider, input.modelId,
+    id, input.taskId, input.workflowId ?? null, input.nodeId ?? null, input.identityAssetId ?? null, input.provider, input.modelId,
     input.attemptIndex ?? 0, input.quotedCost ?? null, input.actualCost == null ? "estimate" : "actual",
     input.metadata ? JSON.stringify(input.metadata) : null, timestamp, timestamp,
   );
@@ -130,16 +135,16 @@ export function saveWaveSpeedRunPlan(plan: Omit<WaveSpeedRunPlan, "createdAt" | 
   const timestamp = now();
   db().prepare(`
     INSERT INTO wavespeed_run_plans
-      (task_id, media_type, workflow_id, node_id, models_json, current_index,
+      (task_id, media_type, workflow_id, node_id, identity_asset_id, models_json, current_index,
        prediction_id, input_json, max_cost, estimated_spend, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(task_id) DO UPDATE SET
-      models_json = excluded.models_json, current_index = excluded.current_index,
+      identity_asset_id = excluded.identity_asset_id, models_json = excluded.models_json, current_index = excluded.current_index,
       prediction_id = excluded.prediction_id, input_json = excluded.input_json,
       max_cost = excluded.max_cost, estimated_spend = excluded.estimated_spend,
       updated_at = excluded.updated_at
   `).run(
-    plan.taskId, plan.mediaType, plan.workflowId ?? null, plan.nodeId ?? null,
+    plan.taskId, plan.mediaType, plan.workflowId ?? null, plan.nodeId ?? null, plan.identityAssetId ?? null,
     JSON.stringify(plan.models), plan.currentIndex, plan.predictionId,
     JSON.stringify(plan.input), plan.maxCost ?? null, plan.estimatedSpend,
     timestamp, timestamp,
@@ -155,6 +160,7 @@ export function getWaveSpeedRunPlan(taskId: string): WaveSpeedRunPlan | null {
     mediaType: row.media_type as "image" | "video",
     workflowId: (row.workflow_id as string) || undefined,
     nodeId: (row.node_id as string) || undefined,
+    identityAssetId: (row.identity_asset_id as string) || undefined,
     models: JSON.parse(row.models_json as string) as WaveSpeedModel[],
     currentIndex: Number(row.current_index),
     predictionId: row.prediction_id as string,
@@ -166,7 +172,7 @@ export function getWaveSpeedRunPlan(taskId: string): WaveSpeedRunPlan | null {
   };
 }
 
-export function listLedger(options?: { workflowId?: string; nodeId?: string; limit?: number }): {
+export function listLedger(options?: { workflowId?: string; nodeId?: string; identityAssetId?: string; limit?: number }): {
   entries: GenerationLedgerEntry[];
   totals: { quoted: number; actual: number; attempts: number; completed: number };
 } {
@@ -174,6 +180,7 @@ export function listLedger(options?: { workflowId?: string; nodeId?: string; lim
   const params: unknown[] = [];
   if (options?.workflowId) { where.push("workflow_id = ?"); params.push(options.workflowId); }
   if (options?.nodeId) { where.push("node_id = ?"); params.push(options.nodeId); }
+  if (options?.identityAssetId) { where.push("identity_asset_id = ?"); params.push(options.identityAssetId); }
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const limit = Math.min(500, Math.max(1, options?.limit ?? 100));
   const rows = db().prepare(`SELECT * FROM generation_ledger ${clause} ORDER BY created_at DESC LIMIT ?`)

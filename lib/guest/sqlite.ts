@@ -78,6 +78,7 @@ function createSchema(d: DatabaseSync): void {
       task_id TEXT NOT NULL,
       workflow_id TEXT,
       node_id TEXT,
+      identity_asset_id TEXT,
       provider TEXT NOT NULL,
       model_id TEXT NOT NULL,
       attempt_index INTEGER NOT NULL DEFAULT 0,
@@ -102,6 +103,7 @@ function createSchema(d: DatabaseSync): void {
       media_type TEXT NOT NULL,
       workflow_id TEXT,
       node_id TEXT,
+      identity_asset_id TEXT,
       models_json TEXT NOT NULL,
       current_index INTEGER NOT NULL DEFAULT 0,
       prediction_id TEXT NOT NULL,
@@ -119,6 +121,7 @@ function createSchema(d: DatabaseSync): void {
       trigger_word TEXT NOT NULL DEFAULT '',
       base_prompts TEXT NOT NULL DEFAULT '[]',
       references_json TEXT NOT NULL DEFAULT '[]',
+      defaults_json TEXT NOT NULL DEFAULT '{"contentClass":"sfw","aspectRatio":"9:16"}',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -148,6 +151,12 @@ function createSchema(d: DatabaseSync): void {
   `);
   const ledgerColumns = new Set((d.prepare("PRAGMA table_info(generation_ledger)").all() as { name: string }[]).map((column) => column.name));
   if (!ledgerColumns.has("output_url")) d.exec("ALTER TABLE generation_ledger ADD COLUMN output_url TEXT");
+  if (!ledgerColumns.has("identity_asset_id")) d.exec("ALTER TABLE generation_ledger ADD COLUMN identity_asset_id TEXT");
+  d.exec("CREATE INDEX IF NOT EXISTS idx_ledger_identity ON generation_ledger (identity_asset_id, created_at DESC)");
+  const waveSpeedPlanColumns = new Set((d.prepare("PRAGMA table_info(wavespeed_run_plans)").all() as { name: string }[]).map((column) => column.name));
+  if (!waveSpeedPlanColumns.has("identity_asset_id")) d.exec("ALTER TABLE wavespeed_run_plans ADD COLUMN identity_asset_id TEXT");
+  const identityColumns = new Set((d.prepare("PRAGMA table_info(identity_assets)").all() as { name: string }[]).map((column) => column.name));
+  if (!identityColumns.has("defaults_json")) d.exec("ALTER TABLE identity_assets ADD COLUMN defaults_json TEXT NOT NULL DEFAULT '{\"contentClass\":\"sfw\",\"aspectRatio\":\"9:16\"}'");
 }
 
 // ── one-time JSON import ────────────────────────────────────────────────────

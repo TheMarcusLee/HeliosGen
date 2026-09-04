@@ -8,7 +8,7 @@ import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyfl
 import CornerResizer from "./CornerResizer";
 import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { resolveInputs } from "@/lib/executor";
+import { resolveIdentityAssetId, resolveInputs } from "@/lib/executor";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { browserNotify, requestNotificationPermission } from "@/lib/browserNotify";
 
@@ -659,6 +659,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       workflowId: workflowState.activeSpaceId,
       nodeId: id,
       workflowMetadata,
+      identityAssetId: resolveIdentityAssetId(id, workflowState.nodes as Node<NodeData>[], workflowState.edges),
       ...(isAzure ? {
         azureBaseUrl, azureDeployment, azureQuality, azureResolution,
         ...(aspectRatio === "custom" ? {

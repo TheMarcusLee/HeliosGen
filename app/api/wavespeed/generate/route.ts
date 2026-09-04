@@ -110,12 +110,14 @@ export async function POST(req: NextRequest) {
     const taskId = toWaveSpeedRunTaskId(randomUUID());
     const workflowId = typeof body.workflowId === "string" ? body.workflowId.slice(0, 240) : undefined;
     const nodeId = typeof body.nodeId === "string" ? body.nodeId.slice(0, 240) : undefined;
+    const identityAssetId = typeof body.identityAssetId === "string" ? body.identityAssetId.slice(0, 240) : undefined;
 
     saveWaveSpeedRunPlan({
       taskId,
       mediaType,
       workflowId,
       nodeId,
+      identityAssetId,
       models,
       currentIndex: 0,
       predictionId,
@@ -127,6 +129,7 @@ export async function POST(req: NextRequest) {
       taskId,
       workflowId,
       nodeId,
+      identityAssetId,
       modelId,
       attemptIndex: 0,
       quotedCost: primary.basePrice,

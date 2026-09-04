@@ -123,8 +123,10 @@ export default function BatchQueueNode({ id, data, selected }: NodeProps<BatchNo
           if (!item) return;
           current = await persistItem(current.id, item.id, { status: "generation", attempts: item.attempts + 1 });
           try {
-            const requestInput = await providerInput(item.prompt, identity, current.modelId);
-            const response = await fetch("/api/wavespeed/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modelId: current.modelId, mediaType: "image", input: requestInput, workflowId: current.workflowId, nodeId: current.nodeId, workflowMetadata: workflow?.metadata }) });
+            const isWaveSpeed = current.provider === "wavespeed";
+            const response = isWaveSpeed
+              ? await fetch("/api/wavespeed/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modelId: current.modelId, mediaType: "image", input: await providerInput(item.prompt, identity, current.modelId), workflowId: current.workflowId, nodeId: current.nodeId, workflowMetadata: workflow?.metadata, identityAssetId: identity.id }) })
+              : await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: current.modelId, prompt: item.prompt, imageUrls: identity.references.map((reference) => reference.url), aspectRatio: identity.defaults.aspectRatio ?? "9:16", quality: "2k", workflowId: current.workflowId, nodeId: current.nodeId, workflowMetadata: workflow?.metadata, identityAssetId: identity.id }) });
             const submitted = await response.json() as { taskId?: string; error?: string };
             if (!response.ok || !submitted.taskId) throw new Error(submitted.error ?? "Generation failed.");
             const outputUrl = await new Promise<string>((resolve, reject) => {
@@ -176,7 +178,8 @@ export default function BatchQueueNode({ id, data, selected }: NodeProps<BatchNo
       <div className="nodrag nowheel min-h-0 flex-1 overflow-y-auto p-3">
         <FieldGroup>
           <Field><FieldLabel>Identity</FieldLabel><Select value={identityAssetId} onValueChange={(value) => updateNodeData(id, { identityAssetId: value ?? undefined })} disabled={readOnly || !!connectedIdentityId}><SelectTrigger><SelectValue placeholder="Choose identity…" /></SelectTrigger><SelectContent><SelectGroup>{identities.map((identity) => <SelectItem key={identity.id} value={identity.id}>{identity.name} · v{identity.version}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
-          <Field><FieldLabel>WaveSpeed model ID</FieldLabel><Input value={String(data.batchModelId ?? "")} disabled={readOnly} onChange={(event) => updateNodeData(id, { batchModelId: event.target.value, batchProvider: "wavespeed" })} placeholder="provider/model" /></Field>
+          <Field><FieldLabel>Provider</FieldLabel><Select value={data.batchProvider ?? "wavespeed"} onValueChange={(value) => updateNodeData(id, { batchProvider: value === "kie" ? "kie" : "wavespeed" })} disabled={readOnly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="wavespeed">WaveSpeed</SelectItem><SelectItem value="kie">Kie.ai</SelectItem></SelectGroup></SelectContent></Select></Field>
+          <Field><FieldLabel>Model ID</FieldLabel><Input value={String(data.batchModelId ?? "")} disabled={readOnly} onChange={(event) => updateNodeData(id, { batchModelId: event.target.value })} placeholder="provider/model" /></Field>
           <Field><FieldLabel>Scene</FieldLabel><Textarea value={String(data.batchScene ?? "")} disabled={readOnly} onChange={(event) => updateNodeData(id, { batchScene: event.target.value })} placeholder="Shared scene or campaign setup" /></Field>
           <Field><FieldLabel>Poses · one per line</FieldLabel><Textarea value={lines(data.batchPoses, []).join("\n")} disabled={readOnly} onChange={(event) => updateNodeData(id, { batchPoses: event.target.value.split("\n") })} placeholder="Standing, three-quarter view\nSeated, looking at camera" /></Field>
           <Field><FieldLabel>Outfits · one per line</FieldLabel><Textarea value={lines(data.batchOutfits, []).join("\n")} disabled={readOnly} onChange={(event) => updateNodeData(id, { batchOutfits: event.target.value.split("\n") })} placeholder="Black evening dress\nWhite linen suit" /></Field>

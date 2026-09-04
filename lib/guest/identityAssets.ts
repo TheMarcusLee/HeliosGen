@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./sqlite";
-import type { IdentityAsset, IdentityReference } from "../cloneMe";
+import { normalizeIdentityDefaults, type IdentityAsset, type IdentityReference } from "../cloneMe";
 
-type IdentityInput = Pick<IdentityAsset, "name" | "triggerWord" | "basePrompts" | "references">;
+type IdentityInput = Pick<IdentityAsset, "name" | "triggerWord" | "basePrompts" | "references" | "defaults">;
 
 function parseArray<T>(value: unknown): T[] {
   if (typeof value !== "string") return [];
   try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed as T[] : []; } catch { return []; }
+}
+
+function parseObject(value: unknown): unknown {
+  if (typeof value !== "string") return undefined;
+  try { return JSON.parse(value); } catch { return undefined; }
 }
 
 function fromRow(row: Record<string, unknown>): IdentityAsset {
@@ -17,6 +22,7 @@ function fromRow(row: Record<string, unknown>): IdentityAsset {
     triggerWord: String(row.trigger_word ?? ""),
     basePrompts: parseArray<string>(row.base_prompts),
     references: parseArray<IdentityReference>(row.references_json),
+    defaults: normalizeIdentityDefaults(parseObject(row.defaults_json)),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -34,6 +40,7 @@ function clean(input: IdentityInput): IdentityInput {
     triggerWord: input.triggerWord.trim().slice(0, 120),
     basePrompts: input.basePrompts.map((value) => value.trim()).filter(Boolean).slice(0, 20),
     references,
+    defaults: normalizeIdentityDefaults(input.defaults),
   };
 }
 
@@ -54,7 +61,12 @@ export function getIdentityAsset(id: string): IdentityAsset | null {
 
 export function listIdentityVersions(id: string): IdentityAsset[] {
   const rows = db().prepare("SELECT snapshot_json FROM identity_asset_versions WHERE asset_id = ? ORDER BY version DESC").all(id) as { snapshot_json: string }[];
-  return rows.flatMap((row) => { try { return [JSON.parse(row.snapshot_json) as IdentityAsset]; } catch { return []; } });
+  return rows.flatMap((row) => {
+    try {
+      const parsed = JSON.parse(row.snapshot_json) as IdentityAsset;
+      return [{ ...parsed, defaults: normalizeIdentityDefaults(parsed.defaults) }];
+    } catch { return []; }
+  });
 }
 
 export function createIdentityAsset(input: IdentityInput): IdentityAsset {
@@ -62,9 +74,9 @@ export function createIdentityAsset(input: IdentityInput): IdentityAsset {
   const id = randomUUID();
   const timestamp = new Date().toISOString();
   db().prepare(`INSERT INTO identity_assets
-    (id, name, version, trigger_word, base_prompts, references_json, created_at, updated_at)
-    VALUES (?, ?, 1, ?, ?, ?, ?, ?)`)
-    .run(id, value.name, value.triggerWord, JSON.stringify(value.basePrompts), JSON.stringify(value.references), timestamp, timestamp);
+    (id, name, version, trigger_word, base_prompts, references_json, defaults_json, created_at, updated_at)
+    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)`)
+    .run(id, value.name, value.triggerWord, JSON.stringify(value.basePrompts), JSON.stringify(value.references), JSON.stringify(value.defaults), timestamp, timestamp);
   const asset = getIdentityAsset(id)!;
   saveVersion(asset);
   return asset;
@@ -75,8 +87,8 @@ export function updateIdentityAsset(id: string, input: IdentityInput): IdentityA
   if (!current) throw new Error(`Identity asset not found: ${id}`);
   const value = clean(input);
   const timestamp = new Date().toISOString();
-  db().prepare(`UPDATE identity_assets SET name = ?, version = ?, trigger_word = ?, base_prompts = ?, references_json = ?, updated_at = ? WHERE id = ?`)
-    .run(value.name, current.version + 1, value.triggerWord, JSON.stringify(value.basePrompts), JSON.stringify(value.references), timestamp, id);
+  db().prepare(`UPDATE identity_assets SET name = ?, version = ?, trigger_word = ?, base_prompts = ?, references_json = ?, defaults_json = ?, updated_at = ? WHERE id = ?`)
+    .run(value.name, current.version + 1, value.triggerWord, JSON.stringify(value.basePrompts), JSON.stringify(value.references), JSON.stringify(value.defaults), timestamp, id);
   const asset = getIdentityAsset(id)!;
   saveVersion(asset);
   return asset;

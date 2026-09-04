@@ -52,7 +52,7 @@ async function safeMediaSourceUrl(raw: string, requestOrigin: string): Promise<s
 export async function POST(req: NextRequest) {
   let ledgerTaskId: string | undefined;
   try {
-    const body = await req.json() as { workflow?: unknown; bindings?: ComfyBinding[]; workflowId?: string; nodeId?: string; workflowName?: string; workflowMetadata?: unknown };
+    const body = await req.json() as { workflow?: unknown; bindings?: ComfyBinding[]; workflowId?: string; nodeId?: string; identityAssetId?: string; workflowName?: string; workflowMetadata?: unknown };
     const { base, prefix, cloud } = normalizedBaseUrl();
     const apiKey = getComfyApiKey();
     if (cloud && !apiKey) return NextResponse.json({ error: "Add a Comfy Cloud API key in Settings or configure COMFY_API_KEY." }, { status: 401 });
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     });
     const submitted = await submit.json() as { prompt_id?: string; error?: string; node_errors?: unknown };
     if (!submit.ok || !submitted.prompt_id) throw new Error(submitted.error ?? `ComfyUI rejected the workflow (${submit.status}).`);
-    insertProviderLedgerAttempt({ taskId: submitted.prompt_id, workflowId: body.workflowId, nodeId: body.nodeId, provider: "comfyui", modelId, metadata: { contentClass: workflowMetadata.contentClass, route: workflowMetadata.routes[workflowMetadata.contentClass] } });
+    insertProviderLedgerAttempt({ taskId: submitted.prompt_id, workflowId: body.workflowId, nodeId: body.nodeId, identityAssetId: body.identityAssetId, provider: "comfyui", modelId, metadata: { contentClass: workflowMetadata.contentClass, route: workflowMetadata.routes[workflowMetadata.contentClass] } });
     ledgerTaskId = submitted.prompt_id;
 
     let history: unknown = null;

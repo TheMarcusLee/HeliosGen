@@ -23,7 +23,7 @@ import { VIDEO_MODELS } from "@/lib/modelConfig";
 import { DEFAULT_TEXT_MODEL_ID } from "@/lib/models";
 import { extractAssistantTextDelta } from "@/lib/assistantStream";
 import CuttableEdge from "@/components/edges/CuttableEdge";
-import { topoSort, resolveInputs } from "@/lib/executor";
+import { resolveIdentityAssetId, topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
 import { sha256Hex } from "@/lib/assetHash";
@@ -1269,7 +1269,17 @@ export default function WorkflowCanvas() {
         const aspectRatio = node.data.aspectRatio ?? "1:1";
         const quality = node.data.quality ?? "1k";
         const activeWorkflow = useWorkflowStore.getState().spaces.find((space) => space.id === useWorkflowStore.getState().activeSpaceId);
-        const payload = { prompt, imageUrls, model: node.data.model, aspectRatio, quality, workflowId: activeWorkflow?.id, nodeId, workflowMetadata: activeWorkflow?.metadata };
+        const payload = {
+          prompt,
+          imageUrls,
+          model: node.data.model,
+          aspectRatio,
+          quality,
+          workflowId: activeWorkflow?.id,
+          nodeId,
+          workflowMetadata: activeWorkflow?.metadata,
+          identityAssetId: resolveIdentityAssetId(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges),
+        };
 
         if (!prompt?.trim()) {
           const promptNodeId = edges.find(
@@ -1457,6 +1467,7 @@ export default function WorkflowCanvas() {
           workflowId: useWorkflowStore.getState().activeSpaceId,
           nodeId,
           workflowMetadata: useWorkflowStore.getState().spaces.find((space) => space.id === useWorkflowStore.getState().activeSpaceId)?.metadata,
+          identityAssetId: resolveIdentityAssetId(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges),
         };
 
         if (!prompt.trim()) {

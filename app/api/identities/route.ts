@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createIdentityAsset, listIdentityAssets } from "@/lib/guest/identityAssets";
-import type { IdentityReference } from "@/lib/cloneMe";
+import { normalizeIdentityDefaults, type IdentityReference } from "@/lib/cloneMe";
 
 export const runtime = "nodejs";
 
@@ -14,6 +14,7 @@ function input(body: Record<string, unknown>) {
       const item = value as Partial<IdentityReference>;
       return typeof item.url === "string" && (item.kind === "face" || item.kind === "body");
     }) : [],
+    defaults: normalizeIdentityDefaults(body.defaults),
   };
 }
 

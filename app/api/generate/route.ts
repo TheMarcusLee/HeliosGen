@@ -282,6 +282,7 @@ export async function POST(req: NextRequest) {
     debugOnly,
     workflowId,
     nodeId,
+    identityAssetId,
     workflowMetadata,
   } = (await req.json()) as {
     model?:              string;
@@ -299,6 +300,7 @@ export async function POST(req: NextRequest) {
     debugOnly?:          boolean;
     workflowId?:         string;
     nodeId?:             string;
+    identityAssetId?:    string;
     workflowMetadata?:   WorkflowMetadata;
   };
 
@@ -348,7 +350,7 @@ export async function POST(req: NextRequest) {
     const truncatedPrompt = prompt.slice(0, cfg.apiInput.promptMaxLength ?? 32000);
 
     const azureTaskId = `azure-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    insertProviderLedgerAttempt({ taskId: azureTaskId, workflowId, nodeId, provider: "azure", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
+    insertProviderLedgerAttempt({ taskId: azureTaskId, workflowId, nodeId, identityAssetId, provider: "azure", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
     jobStore.set(azureTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
     const azureUserId = currentUserId;
@@ -462,7 +464,7 @@ export async function POST(req: NextRequest) {
   // session on this host — so there's no key lookup here, unlike the other branches.
   if (codexProvider) {
     const codexTaskId = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    insertProviderLedgerAttempt({ taskId: codexTaskId, workflowId, nodeId, provider: "codex", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
+    insertProviderLedgerAttempt({ taskId: codexTaskId, workflowId, nodeId, identityAssetId, provider: "codex", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
     jobStore.set(codexTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
     const codexUserId = currentUserId;
@@ -565,7 +567,7 @@ export async function POST(req: NextRequest) {
     if (!taskId) throw new Error("No task ID in response");
 
     jobStore.set(taskId, { status: "pending", userId: currentUserId ?? undefined });
-    insertProviderLedgerAttempt({ taskId, workflowId, nodeId, provider: "kie", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
+    insertProviderLedgerAttempt({ taskId, workflowId, nodeId, identityAssetId, provider: "kie", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
 
     guestDb.insertGeneration({
       task_id: taskId, user_id: currentUserId, generation_type: "image",

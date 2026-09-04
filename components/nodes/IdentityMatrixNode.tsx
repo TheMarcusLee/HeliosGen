@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkflowStore, type NodeData } from "@/lib/store";
-import type { IdentityAsset, IdentityReference, IdentityReferenceKind } from "@/lib/cloneMe";
+import { DEFAULT_IDENTITY_DEFAULTS, type IdentityAsset, type IdentityReference, type IdentityReferenceKind } from "@/lib/cloneMe";
 import { duplicateWorkflowNode } from "@/lib/duplicateWorkflowNode";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import CornerResizer from "./CornerResizer";
@@ -19,7 +19,7 @@ import { Plus, Upload, X } from "lucide-react";
 
 type IdentityNodeType = Node<NodeData, "identityMatrixNode">;
 
-const emptyDraft = { name: "", triggerWord: "", basePrompts: [] as string[], references: [] as IdentityReference[] };
+const emptyDraft = { name: "", triggerWord: "", basePrompts: [] as string[], references: [] as IdentityReference[], defaults: DEFAULT_IDENTITY_DEFAULTS };
 
 export default function IdentityMatrixNode({ id, data, selected }: NodeProps<IdentityNodeType>) {
   const readOnly = useReadOnly();
@@ -29,7 +29,7 @@ export default function IdentityMatrixNode({ id, data, selected }: NodeProps<Ide
   const [identities, setIdentities] = useState<IdentityAsset[]>([]);
   const [draft, setDraft] = useState(() => data.identitySnapshot ? {
     name: data.identitySnapshot.name, triggerWord: data.identitySnapshot.triggerWord,
-    basePrompts: data.identitySnapshot.basePrompts, references: data.identitySnapshot.references,
+    basePrompts: data.identitySnapshot.basePrompts, references: data.identitySnapshot.references, defaults: data.identitySnapshot.defaults ?? DEFAULT_IDENTITY_DEFAULTS,
   } : emptyDraft);
   const [saving, setSaving] = useState(false);
   const [referenceKind, setReferenceKind] = useState<IdentityReferenceKind>("face");
@@ -54,7 +54,7 @@ export default function IdentityMatrixNode({ id, data, selected }: NodeProps<Ide
     if (!identityId) return;
     const identity = identities.find((item) => item.id === identityId);
     if (!identity) return;
-    setDraft({ name: identity.name, triggerWord: identity.triggerWord, basePrompts: identity.basePrompts, references: identity.references });
+    setDraft({ name: identity.name, triggerWord: identity.triggerWord, basePrompts: identity.basePrompts, references: identity.references, defaults: identity.defaults ?? DEFAULT_IDENTITY_DEFAULTS });
     updateNodeData(id, { identityAssetId: identity.id, identitySnapshot: identity, outputText: [identity.triggerWord, ...identity.basePrompts].filter(Boolean).join("\n") });
   }, [id, identities, updateNodeData]);
 

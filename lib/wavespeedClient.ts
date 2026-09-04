@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { NodeData } from "./store";
 import { buildWaveSpeedInput, validateWaveSpeedInput } from "./wavespeedSchema";
-import { resolveWaveSpeedConnectedInputs } from "./executor";
+import { resolveIdentityAssetId, resolveWaveSpeedConnectedInputs } from "./executor";
 import type { WorkflowMetadata } from "./cloneMe";
 
 export interface WaveSpeedRunResult {
@@ -41,6 +41,7 @@ export async function runWaveSpeedCanvasNode(input: {
       workflowId: input.workflowId,
       nodeId: input.node.id,
       workflowMetadata: input.workflowMetadata,
+      identityAssetId: resolveIdentityAssetId(input.node.id, input.nodes, input.edges),
     }),
   });
   const submitted = await response.json() as Record<string, unknown>;

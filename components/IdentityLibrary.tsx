@@ -1,0 +1,462 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import {
+  ArrowUpRight,
+  Boxes,
+  Copy,
+  Download,
+  FileJson,
+  Images,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+  ScanFace,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Upload,
+  UserRoundSearch,
+  WandSparkles,
+  X,
+} from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_IDENTITY_DEFAULTS, type IdentityAsset, type IdentityDefaults, type IdentityReference, type IdentityReferenceKind, type WorkflowProvider } from "@/lib/cloneMe";
+import { useWorkflowStore, type Space } from "@/lib/store";
+import { cn } from "@/lib/utils";
+
+interface LedgerEntry {
+  id: string;
+  identityAssetId?: string;
+  provider: string;
+  modelId: string;
+  status: "pending" | "done" | "error" | "skipped";
+  outputUrl?: string;
+  quotedCost?: number;
+  actualCost?: number;
+  createdAt: string;
+}
+
+interface IdentityDraft {
+  name: string;
+  triggerWord: string;
+  basePrompts: string[];
+  references: IdentityReference[];
+  defaults: IdentityDefaults;
+}
+
+const PROVIDERS: Array<{ value: WorkflowProvider | "workflow-default"; label: string }> = [
+  { value: "workflow-default", label: "Choose per workflow" },
+  { value: "kie", label: "Kie.ai" },
+  { value: "wavespeed", label: "WaveSpeed" },
+  { value: "comfyui", label: "ComfyUI" },
+  { value: "azure", label: "Azure Foundry" },
+  { value: "codex", label: "Codex CLI" },
+];
+
+const ASPECT_RATIOS = ["9:16", "1:1", "4:5", "3:4", "16:9", "4:3"];
+const CONTENT_CLASSES = [{ value: "sfw", label: "SFW production" }, { value: "adult", label: "Adult production" }];
+const REFERENCE_KINDS = [{ value: "face", label: "Face" }, { value: "body", label: "Body" }];
+const ASPECT_RATIO_ITEMS = ASPECT_RATIOS.map((value) => ({ value, label: value }));
+
+const emptyDraft = (): IdentityDraft => ({
+  name: "",
+  triggerWord: "",
+  basePrompts: [],
+  references: [],
+  defaults: { ...DEFAULT_IDENTITY_DEFAULTS },
+});
+
+function toDraft(identity: IdentityAsset): IdentityDraft {
+  return {
+    name: identity.name,
+    triggerWord: identity.triggerWord,
+    basePrompts: identity.basePrompts,
+    references: identity.references,
+    defaults: identity.defaults ?? { ...DEFAULT_IDENTITY_DEFAULTS },
+  };
+}
+
+function formatDate(value: string | number | undefined) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function isVideoUrl(value: string) {
+  return /\.(?:mp4|mov|webm|m4v)(?:$|[?#])/i.test(value);
+}
+
+function ReferenceMosaic({ identity, compact = false }: { identity: IdentityAsset; compact?: boolean }) {
+  const refs = identity.references.slice(0, 4);
+  return (
+    <div className={cn("relative grid overflow-hidden bg-muted", compact ? "h-28 grid-cols-3" : "h-52 grid-cols-3")}>
+      {refs.map((reference, index) => (
+        <div key={`${reference.url}-${index}`} className={cn("relative min-w-0 overflow-hidden border-r border-background/80", index === 0 && refs.length > 1 && "col-span-2 row-span-2", refs.length === 1 && "col-span-3 row-span-2")}>
+          <Image src={reference.url} alt={reference.label ?? `${identity.name} ${reference.kind} reference`} fill sizes={compact ? "240px" : "420px"} unoptimized className="object-cover transition duration-500 group-hover/card:scale-[1.025]" />
+          <span className="absolute bottom-1.5 left-1.5 rounded bg-background/75 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-foreground/70 backdrop-blur-sm">{reference.kind}</span>
+        </div>
+      ))}
+      {!refs.length && (
+        <div className="col-span-3 flex h-full items-center justify-center bg-[radial-gradient(circle_at_center,var(--color-muted),transparent_70%)] text-muted-foreground">
+          <ScanFace className={compact ? "size-8" : "size-12"} strokeWidth={1.1} />
+        </div>
+      )}
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/70 via-transparent to-transparent" />
+      <div className="absolute right-2 top-2 rounded bg-background/75 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground backdrop-blur-sm">ID · v{identity.version}</div>
+    </div>
+  );
+}
+
+export default function IdentityLibrary() {
+  const router = useRouter();
+  const addToast = useWorkflowStore((state) => state.addToast);
+  const [identities, setIdentities] = useState<IdentityAsset[]>([]);
+  const [workflows, setWorkflows] = useState<Space[]>([]);
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [versions, setVersions] = useState<IdentityAsset[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [selected, setSelected] = useState<IdentityAsset | null>(null);
+  const [draft, setDraft] = useState<IdentityDraft>(emptyDraft);
+  const [deleteTarget, setDeleteTarget] = useState<IdentityAsset | null>(null);
+  const [referenceKind, setReferenceKind] = useState<IdentityReferenceKind>("face");
+  const referenceInput = useRef<HTMLInputElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async (quiet = false) => {
+    if (quiet) setRefreshing(true);
+    try {
+      const [identityResponse, workflowResponse, ledgerResponse] = await Promise.all([
+        fetch("/api/identities", { cache: "no-store" }),
+        fetch("/api/workflows", { cache: "no-store" }),
+        fetch("/api/ledger?limit=500", { cache: "no-store" }),
+      ]);
+      const [identityBody, workflowBody, ledgerBody] = await Promise.all([identityResponse.json(), workflowResponse.json(), ledgerResponse.json()]) as [
+        { identities?: IdentityAsset[]; error?: string },
+        { spaces?: Space[]; error?: string },
+        { entries?: LedgerEntry[]; error?: string },
+      ];
+      if (!identityResponse.ok) throw new Error(identityBody.error ?? "Unable to load identities.");
+      if (!workflowResponse.ok) throw new Error(workflowBody.error ?? "Unable to load linked workflows.");
+      if (!ledgerResponse.ok) throw new Error(ledgerBody.error ?? "Unable to load identity activity.");
+      setIdentities(identityBody.identities ?? []);
+      setWorkflows(workflowBody.spaces ?? []);
+      setLedger(ledgerBody.entries ?? []);
+    } catch (error) {
+      addToast((error as Error).message, "error");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    queueMicrotask(() => void load());
+  }, [load]);
+
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return identities;
+    return identities.filter((identity) => `${identity.name} ${identity.triggerWord} ${identity.basePrompts.join(" ")} ${identity.defaults.provider ?? ""} ${identity.defaults.modelId ?? ""}`.toLowerCase().includes(normalized));
+  }, [identities, query]);
+
+  const identityWorkflowIds = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const workflow of workflows) {
+      for (const node of workflow.nodes) {
+        const identityId = node.data.identityAssetId ?? node.data.identitySnapshot?.id;
+        if (typeof identityId !== "string") continue;
+        const current = map.get(identityId) ?? [];
+        if (!current.includes(workflow.id)) current.push(workflow.id);
+        map.set(identityId, current);
+      }
+    }
+    return map;
+  }, [workflows]);
+
+  const activityFor = useCallback((identityId: string) => ledger.filter((entry) => entry.identityAssetId === identityId), [ledger]);
+
+  const openCreate = () => {
+    setSelected(null);
+    setDraft(emptyDraft());
+    setVersions([]);
+    setEditorOpen(true);
+  };
+
+  const openEdit = async (identity: IdentityAsset) => {
+    setSelected(identity);
+    setDraft(toDraft(identity));
+    setEditorOpen(true);
+    try {
+      const response = await fetch(`/api/identities/${encodeURIComponent(identity.id)}`, { cache: "no-store" });
+      const body = await response.json() as { versions?: IdentityAsset[] };
+      if (response.ok) setVersions(body.versions ?? []);
+    } catch { setVersions([]); }
+  };
+
+  const save = async () => {
+    if (!draft.name.trim()) { addToast("Give this identity a name.", "error"); return; }
+    if (!!draft.defaults.provider !== !!draft.defaults.modelId) { addToast("Set both a default provider and model ID, or leave both blank.", "error"); return; }
+    setSaving(true);
+    try {
+      const response = await fetch(selected ? `/api/identities/${encodeURIComponent(selected.id)}` : "/api/identities", {
+        method: selected ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      const body = await response.json() as { identity?: IdentityAsset; error?: string };
+      if (!response.ok || !body.identity) throw new Error(body.error ?? "Unable to save identity.");
+      setIdentities((current) => [body.identity!, ...current.filter((identity) => identity.id !== body.identity!.id)]);
+      setSelected(body.identity);
+      setDraft(toDraft(body.identity));
+      setVersions((current) => [body.identity!, ...current.filter((version) => version.version !== body.identity!.version)]);
+      addToast(`${body.identity.name} saved as version ${body.identity.version}.`, "success");
+    } catch (error) {
+      addToast((error as Error).message, "error");
+    } finally { setSaving(false); }
+  };
+
+  const uploadReference = async (file: File) => {
+    setUploading(true);
+    try {
+      const response = await fetch("/api/upload-asset", { method: "POST", headers: { "Content-Type": file.type || "image/jpeg" }, body: await file.arrayBuffer() });
+      const body = await response.json() as { cdnUrl?: string; error?: string };
+      if (!response.ok || !body.cdnUrl) throw new Error(body.error ?? "Reference upload failed.");
+      setDraft((current) => ({ ...current, references: [...current.references, { url: body.cdnUrl!, kind: referenceKind, label: file.name }] }));
+    } catch (error) { addToast((error as Error).message, "error"); }
+    finally { setUploading(false); }
+  };
+
+  const duplicate = async (identity: IdentityAsset) => {
+    try {
+      const response = await fetch("/api/identities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...toDraft(identity), name: `${identity.name} copy` }) });
+      const body = await response.json() as { identity?: IdentityAsset; error?: string };
+      if (!response.ok || !body.identity) throw new Error(body.error ?? "Unable to duplicate identity.");
+      setIdentities((current) => [body.identity!, ...current]);
+      addToast(`Duplicated ${identity.name}.`, "success");
+    } catch (error) { addToast((error as Error).message, "error"); }
+  };
+
+  const exportIdentity = (identity: IdentityAsset) => {
+    const blob = new Blob([JSON.stringify({ format: "heliosgen-identity", version: 1, identity }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${identity.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "identity"}.helios.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importIdentity = async (file: File) => {
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      if (!parsed || typeof parsed !== "object") throw new Error("Identity JSON must contain an object.");
+      const envelope = parsed as Record<string, unknown>;
+      const source = (envelope.identity && typeof envelope.identity === "object" ? envelope.identity : envelope) as Partial<IdentityAsset>;
+      const input: IdentityDraft = {
+        name: String(source.name ?? "Imported identity"),
+        triggerWord: String(source.triggerWord ?? ""),
+        basePrompts: Array.isArray(source.basePrompts) ? source.basePrompts.filter((value): value is string => typeof value === "string") : [],
+        references: Array.isArray(source.references) ? source.references.filter((value): value is IdentityReference => !!value && typeof value.url === "string" && (value.kind === "face" || value.kind === "body")) : [],
+        defaults: source.defaults ?? { ...DEFAULT_IDENTITY_DEFAULTS },
+      };
+      const response = await fetch("/api/identities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+      const body = await response.json() as { identity?: IdentityAsset; error?: string };
+      if (!response.ok || !body.identity) throw new Error(body.error ?? "Unable to import identity.");
+      setIdentities((current) => [body.identity!, ...current]);
+      addToast(`Imported ${body.identity.name}.`, "success");
+    } catch (error) { addToast(`Import failed: ${(error as Error).message}`, "error"); }
+  };
+
+  const createWorkflow = async (identity: IdentityAsset, templateId: "scene-replacement" | "pose-outfit-batch") => {
+    try {
+      const suffix = templateId === "scene-replacement" ? "Scene Replacement" : "Pose × Outfit Batch";
+      const response = await fetch("/api/clone-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ templateId, identityAssetId: identity.id, name: `${identity.name} — ${suffix}` }) });
+      const body = await response.json() as { workflow?: Space; error?: string };
+      if (!response.ok || !body.workflow) throw new Error(body.error ?? "Unable to create workflow.");
+      const refreshed = await fetch("/api/workflows", { cache: "no-store" }).then((result) => result.json()) as { spaces: Space[] };
+      useWorkflowStore.getState().loadSpacesFromDB(refreshed.spaces);
+      useWorkflowStore.getState().switchSpace(body.workflow.id);
+      addToast(`Created ${suffix} with ${identity.name}.`, "success");
+      router.push(`/workflow/${body.workflow.id}`);
+    } catch (error) { addToast((error as Error).message, "error"); }
+  };
+
+  const deleteIdentity = async () => {
+    if (!deleteTarget) return;
+    try {
+      const response = await fetch(`/api/identities/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Unable to delete identity.");
+      setIdentities((current) => current.filter((identity) => identity.id !== deleteTarget.id));
+      if (selected?.id === deleteTarget.id) setEditorOpen(false);
+      addToast(`Deleted ${deleteTarget.name}. Existing workflows keep their embedded snapshot.`, "success");
+    } catch (error) { addToast((error as Error).message, "error"); }
+    finally { setDeleteTarget(null); }
+  };
+
+  const selectedWorkflows = selected ? workflows.filter((workflow) => identityWorkflowIds.get(selected.id)?.includes(workflow.id)) : [];
+  const selectedActivity = selected ? activityFor(selected.id) : [];
+  const totalReferences = identities.reduce((count, identity) => count + identity.references.length, 0);
+  const linkedCount = new Set([...identityWorkflowIds.values()].flat()).size;
+
+  return (
+    <main className="relative flex-1 overflow-y-auto bg-background text-foreground">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(ellipse_at_15%_0%,color-mix(in_oklab,var(--color-primary)_10%,transparent),transparent_55%),radial-gradient(ellipse_at_80%_0%,color-mix(in_oklab,var(--color-chart-2)_8%,transparent),transparent_52%)]" />
+      <div className="relative mx-auto w-full max-w-[1500px] px-5 py-8 md:px-9 md:py-10">
+        <header className="grid gap-7 border-b border-border pb-8 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground"><span className="h-px w-8 bg-primary/60" />Production assets / identity layer</div>
+            <h1 className="max-w-3xl text-3xl font-medium tracking-[-0.035em] sm:text-4xl">Keep the person consistent.<br /><span className="text-muted-foreground">Change everything around them.</span></h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">Version face and body references, reusable prompt DNA, content routing, and model defaults—then launch identity-aware workflows with a traceable production history.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input ref={importInput} type="file" accept="application/json,.json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importIdentity(file); event.target.value = ""; }} />
+            <Button variant="outline" onClick={() => importInput.current?.click()}><FileJson />Import JSON</Button>
+            <Button onClick={openCreate}><Plus />New identity</Button>
+          </div>
+        </header>
+
+        <section className="grid border-x border-b border-border sm:grid-cols-3" aria-label="Identity library summary">
+          {[
+            { value: String(identities.length).padStart(2, "0"), label: "Identity dossiers", Icon: ScanFace },
+            { value: String(totalReferences).padStart(2, "0"), label: "Reference frames", Icon: Images },
+            { value: String(linkedCount).padStart(2, "0"), label: "Linked workflows", Icon: Boxes },
+          ].map(({ value, label, Icon }, index) => (
+            <div key={label} className={cn("flex items-center gap-4 px-5 py-4", index > 0 && "border-t border-border sm:border-l sm:border-t-0")}>
+              <Icon className="size-4 text-muted-foreground" strokeWidth={1.4} />
+              <strong className="font-mono text-xl font-medium tracking-tight">{value}</strong>
+              <span className="text-xs text-muted-foreground">{label}</span>
+            </div>
+          ))}
+        </section>
+
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, trigger, model, or prompt…" className="pl-9" /></div>
+          <div className="flex items-center gap-2"><span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{filtered.length} shown</span><Button variant="ghost" size="icon" aria-label="Refresh identities" disabled={refreshing} onClick={() => void load(true)}><RefreshCw className={cn(refreshing && "animate-spin")} /></Button></div>
+        </div>
+
+        {loading ? (
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map((item) => <Skeleton key={item} className="h-[390px] rounded-xl" />)}</div>
+        ) : filtered.length ? (
+          <section className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((identity) => {
+              const linked = identityWorkflowIds.get(identity.id)?.length ?? 0;
+              const runs = activityFor(identity.id);
+              return (
+                <Card key={identity.id} className="group/card cursor-pointer gap-0 py-0 transition hover:-translate-y-0.5 hover:ring-foreground/20" onClick={() => void openEdit(identity)}>
+                  <ReferenceMosaic identity={identity} />
+                  <CardHeader className="border-b border-border py-4">
+                    <CardTitle className="truncate pr-8 text-lg tracking-tight">{identity.name}</CardTitle>
+                    <CardDescription className="font-mono text-[10px] uppercase tracking-[0.13em]">Updated {formatDate(identity.updatedAt)}</CardDescription>
+                    <CardAction onClick={(event) => event.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${identity.name}`} />}><MoreHorizontal /></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem onClick={() => void createWorkflow(identity, "scene-replacement")}><WandSparkles />Create scene workflow</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void createWorkflow(identity, "pose-outfit-batch")}><Boxes />Create batch workflow</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => void duplicate(identity)}><Copy />Duplicate</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => exportIdentity(identity)}><Download />Export JSON</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(identity)}><Trash2 />Delete identity</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent className="space-y-4 py-4">
+                    <div className="flex flex-wrap gap-1.5"><Badge variant={identity.defaults.contentClass === "adult" ? "destructive" : "secondary"}>{identity.defaults.contentClass.toUpperCase()}</Badge><Badge variant="outline">{identity.references.length} refs</Badge>{identity.defaults.provider && <Badge variant="outline">{identity.defaults.provider}</Badge>}</div>
+                    <div className="min-h-10 text-xs leading-5 text-muted-foreground">{identity.triggerWord ? <><span className="font-mono text-foreground">{identity.triggerWord}</span> · </> : null}{identity.basePrompts[0] ?? "No reusable base prompt yet."}</div>
+                  </CardContent>
+                  <CardFooter className="grid grid-cols-2 gap-0 p-0">
+                    <div className="border-r border-border px-4 py-3"><div className="font-mono text-sm">{linked}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Workflows</div></div>
+                    <div className="px-4 py-3"><div className="font-mono text-sm">{runs.length}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Runs logged</div></div>
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </section>
+        ) : (
+          <Empty className="mt-8 min-h-96 border border-dashed border-border bg-card/30">
+            <EmptyHeader><EmptyMedia variant="icon"><UserRoundSearch /></EmptyMedia><EmptyTitle>{identities.length ? "No identities match" : "Create your first identity dossier"}</EmptyTitle><EmptyDescription>{identities.length ? "Try another name, trigger, provider, or prompt." : "Bundle references, prompt DNA, and routing defaults once. Reuse them across every production workflow."}</EmptyDescription></EmptyHeader>
+            <EmptyContent>{identities.length ? <Button variant="outline" onClick={() => setQuery("")}>Clear search</Button> : <Button onClick={openCreate}><Plus />New identity</Button>}</EmptyContent>
+          </Empty>
+        )}
+      </div>
+
+      <Sheet open={editorOpen} onOpenChange={setEditorOpen}>
+        <SheetContent className="w-full gap-0 overflow-hidden bg-popover p-0 sm:max-w-2xl">
+          <SheetHeader className="border-b border-border px-6 py-5">
+            <div className="pr-10"><div className="mb-2 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{selected ? `Identity ${selected.id.slice(0, 8)} · version ${selected.version}` : "New identity dossier"}</div><SheetTitle className="text-xl tracking-tight">{selected ? selected.name : "Define a reusable identity"}</SheetTitle><SheetDescription>Edits create a new immutable version. Workflows keep their embedded snapshot until refreshed.</SheetDescription></div>
+          </SheetHeader>
+          <ScrollArea className="min-h-0 flex-1">
+            <Tabs defaultValue="profile" className="gap-0">
+              <TabsList variant="line" className="sticky top-0 z-10 w-full justify-start border-b border-border bg-popover px-6 py-2">
+                <TabsTrigger value="profile">Profile</TabsTrigger>
+                <TabsTrigger value="references">References <Badge variant="secondary">{draft.references.length}</Badge></TabsTrigger>
+                <TabsTrigger value="defaults">Defaults</TabsTrigger>
+                {selected && <TabsTrigger value="activity">Activity <Badge variant="secondary">{selectedActivity.length}</Badge></TabsTrigger>}
+                {selected && <TabsTrigger value="versions">Versions <Badge variant="secondary">{versions.length}</Badge></TabsTrigger>}
+              </TabsList>
+
+              <TabsContent value="profile" className="space-y-6 p-6">
+                <div className="grid gap-2"><Label htmlFor="identity-name">Identity name</Label><Input id="identity-name" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Ava — lifestyle creator" /></div>
+                <div className="grid gap-2"><Label htmlFor="identity-trigger">Trigger word</Label><Input id="identity-trigger" value={draft.triggerWord} onChange={(event) => setDraft((current) => ({ ...current, triggerWord: event.target.value }))} placeholder="AVA_PERSON" /><p className="text-xs leading-5 text-muted-foreground">A stable token used when a provider or trained model recognizes one.</p></div>
+                <div className="grid gap-2"><Label htmlFor="identity-prompts">Reusable base prompts</Label><Textarea id="identity-prompts" className="min-h-48 resize-y" value={draft.basePrompts.join("\n")} onChange={(event) => setDraft((current) => ({ ...current, basePrompts: event.target.value.split("\n") }))} placeholder={"One production instruction per line\nPreserve facial geometry and natural skin texture\nConsistent body proportions"} /><p className="text-xs leading-5 text-muted-foreground">Each non-empty line becomes a reusable prompt fragment.</p></div>
+              </TabsContent>
+
+              <TabsContent value="references" className="space-y-5 p-6">
+                <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-sm font-medium">Reference matrix</h3><p className="mt-1 text-xs text-muted-foreground">Mix close face references with full-body frames for stronger consistency.</p></div><div className="flex gap-2"><Select items={REFERENCE_KINDS} value={referenceKind} onValueChange={(value) => setReferenceKind(value === "body" ? "body" : "face")}><SelectTrigger className="w-28"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="face">Face</SelectItem><SelectItem value="body">Body</SelectItem></SelectGroup></SelectContent></Select><Button variant="outline" disabled={uploading} onClick={() => referenceInput.current?.click()}><Upload />{uploading ? "Uploading…" : "Add reference"}</Button></div></div>
+                <input ref={referenceInput} type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); event.target.value = ""; }} />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group relative aspect-3/4 overflow-hidden rounded-lg bg-muted ring-1 ring-border"><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover" /><div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-linear-to-t from-black/85 to-transparent p-2 pt-8"><div className="min-w-0"><div className="truncate text-[10px] text-white/75">{reference.label ?? `Reference ${index + 1}`}</div><div className="font-mono text-[9px] uppercase tracking-widest text-white/45">{reference.kind}</div></div><Button variant="destructive" size="icon-xs" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div></div>)}</div>
+                {!draft.references.length && <Empty className="min-h-64 border border-dashed border-border"><EmptyHeader><EmptyMedia variant="icon"><Images /></EmptyMedia><EmptyTitle>No reference frames</EmptyTitle><EmptyDescription>Add at least one clear face reference. Full-body frames help preserve proportions.</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => referenceInput.current?.click()}><Upload />Upload image</Button></EmptyContent></Empty>}
+              </TabsContent>
+
+              <TabsContent value="defaults" className="space-y-6 p-6">
+                <div className="rounded-lg border border-border bg-card p-4"><div className="flex gap-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><h3 className="text-sm font-medium">Explicit content routing</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">This metadata is auditable; it does not infer capability from model names. Adult workflows still require explicit adult-age and consent confirmations before a run.</p></div></div></div>
+                <div className="grid gap-2"><Label>Content class</Label><Select items={CONTENT_CLASSES} value={draft.defaults.contentClass} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, contentClass: value === "adult" ? "adult" : "sfw" } }))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="sfw">SFW production</SelectItem><SelectItem value="adult">Adult production</SelectItem></SelectGroup></SelectContent></Select></div>
+                <div className="grid gap-4 sm:grid-cols-2"><div className="grid gap-2"><Label>Default provider</Label><Select items={PROVIDERS} value={draft.defaults.provider ?? "workflow-default"} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, provider: value === "workflow-default" ? undefined : value as WorkflowProvider, ...(value === "workflow-default" ? { modelId: undefined } : {}) } }))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{PROVIDERS.map((provider) => <SelectItem key={provider.value} value={provider.value}>{provider.label}</SelectItem>)}</SelectGroup></SelectContent></Select></div><div className="grid gap-2"><Label htmlFor="identity-model">Default model ID</Label><Input id="identity-model" value={draft.defaults.modelId ?? ""} disabled={!draft.defaults.provider} onChange={(event) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, modelId: event.target.value || undefined } }))} placeholder="provider/model-name" /></div></div>
+                <div className="grid gap-2"><Label>Default aspect ratio</Label><Select items={ASPECT_RATIO_ITEMS} value={draft.defaults.aspectRatio ?? "9:16"} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, aspectRatio: value ?? "9:16" } }))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{ASPECT_RATIOS.map((ratio) => <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>)}</SelectGroup></SelectContent></Select></div>
+              </TabsContent>
+
+              {selected && <TabsContent value="activity" className="space-y-7 p-6">
+                <section><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium">Linked workflows</h3><Badge variant="outline">{selectedWorkflows.length}</Badge></div>{selectedWorkflows.length ? <div className="divide-y divide-border rounded-lg border border-border">{selectedWorkflows.map((workflow) => <button key={workflow.id} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={() => router.push(`/workflow/${workflow.id}`)}><div><div className="text-sm">{workflow.name}</div><div className="mt-0.5 text-[10px] text-muted-foreground">Updated {formatDate(workflow.updatedAt ?? workflow.createdAt)}</div></div><ArrowUpRight className="size-4 text-muted-foreground" /></button>)}</div> : <p className="text-xs text-muted-foreground">No workflow currently embeds this identity.</p>}</section>
+                <section><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium">Provider ledger</h3><Badge variant="outline">{selectedActivity.length}</Badge></div>{selectedActivity.length ? <div className="grid grid-cols-2 gap-3">{selectedActivity.slice(0, 12).map((entry) => <div key={entry.id} className="overflow-hidden rounded-lg border border-border bg-card">{entry.outputUrl ? <div className="relative aspect-square">{isVideoUrl(entry.outputUrl) ? <video src={entry.outputUrl} muted playsInline controls className="size-full object-cover" /> : <Image src={entry.outputUrl} alt="Generated identity output" fill sizes="240px" unoptimized className="object-cover" />}</div> : <div className="flex aspect-square items-center justify-center bg-muted"><Sparkles className="size-6 text-muted-foreground" /></div>}<div className="space-y-1 p-3"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{entry.modelId}</span><Badge variant={entry.status === "error" ? "destructive" : "secondary"}>{entry.status}</Badge></div><div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{entry.provider} · {formatDate(entry.createdAt)}</div></div></div>)}</div> : <p className="text-xs text-muted-foreground">Runs created from this identity will appear here with provider and model provenance.</p>}</section>
+              </TabsContent>}
+
+              {selected && <TabsContent value="versions" className="space-y-3 p-6">{versions.map((version) => <div key={version.version} className="grid grid-cols-[72px_1fr_auto] items-center gap-4 border-b border-border py-3"><ReferenceMosaic identity={version} compact /><div className="min-w-0"><div className="text-sm font-medium">Version {version.version}</div><div className="mt-1 truncate text-xs text-muted-foreground">{version.triggerWord || "No trigger"} · {version.references.length} references · {version.basePrompts.length} prompts</div></div><time className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{formatDate(version.updatedAt)}</time></div>)}</TabsContent>}
+            </Tabs>
+          </ScrollArea>
+          <SheetFooter className="flex-row items-center justify-between border-t border-border px-6 py-4"><div>{selected && <Button type="button" variant="destructive" onClick={() => setDeleteTarget(selected)}><Trash2 />Delete</Button>}</div><div className="ml-auto flex gap-2"><Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>Close</Button><Button type="button" disabled={saving || uploading} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void save(); }}>{saving ? "Saving…" : selected ? "Save new version" : "Create identity"}</Button></div></SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Delete {deleteTarget?.name}?</AlertDialogTitle><AlertDialogDescription>This permanently removes the identity and version history. Existing workflows keep their embedded snapshot, but cannot refresh from this identity.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => void deleteIdentity()}>Delete identity</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </main>
+  );
+}

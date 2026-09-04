@@ -14,6 +14,12 @@ const workflowMetadata = z.object({
   adultAssurances: z.object({ allSubjectsAdults: z.boolean(), consentVerified: z.boolean() }).strict().optional(),
 }).strict();
 const identityReference = z.object({ url: z.string().url(), kind: z.enum(["face", "body"]), label: z.string().max(80).optional() }).strict();
+const identityDefaults = z.object({
+  contentClass: z.enum(["sfw", "adult"]).default("sfw"),
+  provider: z.enum(["kie", "wavespeed", "comfyui", "azure", "codex"]).optional(),
+  modelId: z.string().min(1).max(240).optional(),
+  aspectRatio: z.string().min(1).max(24).optional(),
+}).strict();
 
 function result(value: JsonObject) {
   return {
@@ -217,15 +223,15 @@ function createServer(): McpServer {
 
   server.registerTool("helios_generate_image", {
     title: "Start image generation",
-    description: "Start an image generation or edit job with a configured HeliosGen image model.",
-    inputSchema: z.object({ prompt: z.string().min(1), model: z.string().default("nano-banana-2"), imageUrls: z.array(z.string().url()).default([]), aspectRatio: z.string().default("1:1"), quality: z.string().default("1k") }),
+    description: "Start an image generation or edit job with a configured HeliosGen image model, optionally attributed to an identity and workflow.",
+    inputSchema: z.object({ prompt: z.string().min(1), model: z.string().default("nano-banana-2"), imageUrls: z.array(z.string().url()).default([]), aspectRatio: z.string().default("1:1"), quality: z.string().default("1k"), workflowId: z.string().max(240).optional(), nodeId: z.string().max(240).optional(), identityAssetId: z.string().max(240).optional(), workflowMetadata: workflowMetadata.optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result(await client.json<JsonObject>("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
 
   server.registerTool("helios_generate_video", {
     title: "Start video generation",
-    description: "Start a text-, image-, or reference-to-video job with a configured HeliosGen video model.",
-    inputSchema: z.object({ prompt: z.string().default(""), videoModel: z.string().default("kling-3.0"), startFrameUrl: z.string().url().optional(), endFrameUrl: z.string().url().optional(), referenceImageUrls: z.array(z.string().url()).default([]), referenceVideoUrls: z.array(z.string().url()).default([]), referenceAudioUrls: z.array(z.string().url()).default([]), sound: z.boolean().default(false), duration: z.number().positive().default(5), aspectRatio: z.string().default("16:9"), mode: z.string().default("pro"), resolution: z.string().optional() }),
+    description: "Start a text-, image-, or reference-to-video job with a configured HeliosGen video model, optionally attributed to an identity and workflow.",
+    inputSchema: z.object({ prompt: z.string().default(""), videoModel: z.string().default("kling-3.0"), startFrameUrl: z.string().url().optional(), endFrameUrl: z.string().url().optional(), referenceImageUrls: z.array(z.string().url()).default([]), referenceVideoUrls: z.array(z.string().url()).default([]), referenceAudioUrls: z.array(z.string().url()).default([]), sound: z.boolean().default(false), duration: z.number().positive().default(5), aspectRatio: z.string().default("16:9"), mode: z.string().default("pro"), resolution: z.string().optional(), workflowId: z.string().max(240).optional(), nodeId: z.string().max(240).optional(), identityAssetId: z.string().max(240).optional(), workflowMetadata: workflowMetadata.optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result(await client.json<JsonObject>("/api/generate-video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
 
@@ -269,6 +275,7 @@ function createServer(): McpServer {
       maxCost: z.number().nonnegative().optional().describe("Maximum estimated USD spend across the primary model and attempted fallbacks."),
       workflowId: z.string().max(240).optional(),
       nodeId: z.string().max(240).optional(),
+      identityAssetId: z.string().max(240).optional(),
       workflowMetadata: workflowMetadata.optional().describe("Audited SFW/adult routing metadata. Adult requests require assurances and an exact matching provider/model route."),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
@@ -333,14 +340,14 @@ function createServer(): McpServer {
   server.registerTool("helios_create_identity_asset", {
     title: "Create identity asset",
     description: "Create version 1 of a reusable identity matrix. References must be URLs already accessible to the configured generation provider.",
-    inputSchema: z.object({ name: z.string().min(1).max(120), triggerWord: z.string().max(120).default(""), basePrompts: z.array(z.string().min(1).max(2000)).max(20).default([]), references: z.array(identityReference).max(24).default([]) }).strict(),
+    inputSchema: z.object({ name: z.string().min(1).max(120), triggerWord: z.string().max(120).default(""), basePrompts: z.array(z.string().min(1).max(2000)).max(20).default([]), references: z.array(identityReference).max(24).default([]), defaults: identityDefaults.default({ contentClass: "sfw" }) }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input) => result(await client.json<JsonObject>("/api/identities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
 
   server.registerTool("helios_update_identity_asset", {
     title: "Create new identity version",
     description: "Replace the current identity matrix fields and append an immutable version-history snapshot. Existing workflows retain their embedded snapshot until deliberately refreshed.",
-    inputSchema: z.object({ identityId: z.string().min(1), name: z.string().min(1).max(120), triggerWord: z.string().max(120).default(""), basePrompts: z.array(z.string().min(1).max(2000)).max(20).default([]), references: z.array(identityReference).max(24).default([]) }).strict(),
+    inputSchema: z.object({ identityId: z.string().min(1), name: z.string().min(1).max(120), triggerWord: z.string().max(120).default(""), basePrompts: z.array(z.string().min(1).max(2000)).max(20).default([]), references: z.array(identityReference).max(24).default([]), defaults: identityDefaults.default({ contentClass: "sfw" }) }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ identityId, ...input }) => result(await client.json<JsonObject>(`/api/identities/${encodeURIComponent(identityId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
 
@@ -354,7 +361,7 @@ function createServer(): McpServer {
   server.registerTool("helios_create_clone_workflow", {
     title: "Create CloneMe production workflow",
     description: "Create an editable identity scene-replacement or pose/outfit batch workflow from the built-in production templates.",
-    inputSchema: z.object({ templateId: z.enum(["scene-replacement", "pose-outfit-batch"]), name: z.string().min(1).max(120).optional() }).strict(),
+    inputSchema: z.object({ templateId: z.enum(["scene-replacement", "pose-outfit-batch"]), name: z.string().min(1).max(120).optional(), identityAssetId: z.string().min(1).optional() }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input) => result(await client.json<JsonObject>("/api/clone-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
 
@@ -406,12 +413,13 @@ function createServer(): McpServer {
   server.registerTool("helios_list_generation_ledger", {
     title: "List generation cost ledger",
     description: "List recent provider generation attempts and aggregated quoted/estimated spend. Filter by workflow or node to audit routing, fallbacks, provenance, and costs across WaveSpeed, Kie, Azure, Codex, and ComfyUI.",
-    inputSchema: z.object({ workflowId: z.string().optional(), nodeId: z.string().optional(), limit: z.number().int().min(1).max(500).default(100) }).strict(),
+    inputSchema: z.object({ workflowId: z.string().optional(), nodeId: z.string().optional(), identityAssetId: z.string().optional(), limit: z.number().int().min(1).max(500).default(100) }).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async ({ workflowId, nodeId, limit }) => {
+  }, async ({ workflowId, nodeId, identityAssetId, limit }) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (workflowId) params.set("workflowId", workflowId);
     if (nodeId) params.set("nodeId", nodeId);
+    if (identityAssetId) params.set("identityAssetId", identityAssetId);
     return result(await client.json<JsonObject>(`/api/ledger?${params}`));
   });
 

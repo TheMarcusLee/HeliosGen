@@ -46,7 +46,7 @@ The small Seedance example confirms the important conversion map:
 
 CloneMe Studio is not a node-workflow library, but its production pipeline is now expressed as native, reusable HeliosGen capabilities:
 
-1. ✅ **Identity matrix input.** The Identity Matrix canvas node saves multiple face/body references, a trigger word, and reusable base prompts as one identity asset. Every edit creates an immutable version, and workflows retain the embedded snapshot even if the saved asset later changes.
+1. ✅ **Identity layer and matrix input.** The dedicated Identities library and Identity Matrix canvas node save multiple face/body references, a trigger word, reusable base prompts, content class, provider/model preference, and aspect ratio as one portable identity asset. Every edit creates an immutable version; the library exposes linked workflows and provider activity; workflows retain their embedded snapshot even if the saved asset later changes.
 2. ✅ **Scene replacement workflow.** The dashboard template connects a target scene to Opus 5 vision analysis, combines that result with the selected identity, sends the identity-aware prompt and references to generation, and records the gallery/ledger provenance.
 3. ✅ **Pose/outfit batch workflow.** The dashboard template creates the cross-product of selected poses and outfits while reusing one scene analysis for the complete batch.
 4. ✅ **Concurrent queue with explicit states.** Batch runs and items persist in SQLite with `idle`, `analysis`, `generation`, `paused`, `completed`, and `error` states; concurrency is bounded from 1–8 and the canvas supports pause, resume, and error-only retry.

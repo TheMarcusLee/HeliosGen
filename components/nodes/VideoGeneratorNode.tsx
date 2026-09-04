@@ -7,7 +7,7 @@ import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyfl
 import CornerResizer from "./CornerResizer";
 import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { resolveInputs } from "@/lib/executor";
+import { resolveIdentityAssetId, resolveInputs } from "@/lib/executor";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
 import { VIDEO_MODELS as VIDEO_MODEL_CFG } from "@/lib/modelConfig";
@@ -980,7 +980,12 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     // Build full payload first so debug log matches what gets sent
     const workflowState = useWorkflowStore.getState();
     const workflowMetadata = workflowState.spaces.find((space) => space.id === workflowState.activeSpaceId)?.metadata;
-    const provenance = { workflowId: workflowState.activeSpaceId, nodeId: id, workflowMetadata };
+    const provenance = {
+      workflowId: workflowState.activeSpaceId,
+      nodeId: id,
+      workflowMetadata,
+      identityAssetId: resolveIdentityAssetId(id, workflowState.nodes as Node<NodeData>[], workflowState.edges),
+    };
     const payload: Record<string, unknown> = isVeo ? {
       videoModel: videoModelId,
       prompt: finalPrompt,

@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { Edge, Node } from "@xyflow/react";
 import { annotationBounds, annotationPath } from "../lib/annotations";
 import { applyComfyBindings, deriveComfyBindings, extractComfyOutputFiles, validateComfyApiWorkflow } from "../lib/comfyWorkflow";
 import { convertNodeBananaWorkflow } from "../lib/nodeBananaConverter";
 import { renderPromptTemplate } from "../lib/templateVariables";
-import { buildPoseOutfitMatrix, validateContentRoute } from "../lib/cloneMe";
+import { buildPoseOutfitMatrix, normalizeIdentityDefaults, validateContentRoute } from "../lib/cloneMe";
+import { resolveIdentityAssetId } from "../lib/executor";
+import type { NodeData } from "../lib/store";
 import { makePoseOutfitBatchTemplate, makeSceneReplacementTemplate } from "../lib/templates";
 
 const comfyWorkflow = {
@@ -82,6 +85,27 @@ test("builds a pose/outfit cross-product from one shared analysis", () => {
   assert.equal(items.length, 6);
   assert.equal(items.every((item) => item.prompt.includes("Soft window light, 50mm portrait")), true);
   assert.equal(new Set(items.map((item) => `${item.pose}/${item.outfit}`)).size, 6);
+});
+
+test("normalizes identity production defaults", () => {
+  assert.deepEqual(normalizeIdentityDefaults(undefined), { contentClass: "sfw", aspectRatio: "9:16" });
+  assert.deepEqual(normalizeIdentityDefaults({ contentClass: "adult", provider: "wavespeed", modelId: "vendor/model", aspectRatio: "4:5" }), {
+    contentClass: "adult", provider: "wavespeed", modelId: "vendor/model", aspectRatio: "4:5",
+  });
+  assert.deepEqual(normalizeIdentityDefaults({ provider: "unknown", modelId: "" }), { contentClass: "sfw" });
+});
+
+test("resolves identity provenance through intermediate workflow nodes", () => {
+  const nodes: Node<NodeData>[] = [
+    { id: "identity", type: "identityMatrixNode", position: { x: 0, y: 0 }, data: { label: "Identity", status: "idle", identityAssetId: "person-1" } },
+    { id: "template", type: "templateNode", position: { x: 1, y: 0 }, data: { label: "Template", status: "idle" } },
+    { id: "generate", type: "generateNode", position: { x: 2, y: 0 }, data: { label: "Generate", status: "idle" } },
+  ];
+  const edges: Edge[] = [
+    { id: "one", source: "identity", target: "template" },
+    { id: "two", source: "template", target: "generate" },
+  ];
+  assert.equal(resolveIdentityAssetId("generate", nodes, edges), "person-1");
 });
 
 test("requires exact audited routing and adult consent assurances", () => {

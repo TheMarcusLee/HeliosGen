@@ -6,6 +6,16 @@ export interface IdentityReference {
   label?: string;
 }
 
+export type WorkflowContentClass = "sfw" | "adult";
+export type WorkflowProvider = "kie" | "wavespeed" | "comfyui" | "azure" | "codex";
+
+export interface IdentityDefaults {
+  contentClass: WorkflowContentClass;
+  provider?: WorkflowProvider;
+  modelId?: string;
+  aspectRatio?: string;
+}
+
 export interface IdentityAsset {
   id: string;
   name: string;
@@ -13,12 +23,10 @@ export interface IdentityAsset {
   triggerWord: string;
   basePrompts: string[];
   references: IdentityReference[];
+  defaults: IdentityDefaults;
   createdAt: string;
   updatedAt: string;
 }
-
-export type WorkflowContentClass = "sfw" | "adult";
-export type WorkflowProvider = "kie" | "wavespeed" | "comfyui" | "azure" | "codex";
 
 export interface ProviderRoute {
   provider: WorkflowProvider;
@@ -43,6 +51,25 @@ export const DEFAULT_WORKFLOW_METADATA: WorkflowMetadata = {
   contentClass: "sfw",
   routes: {},
 };
+
+export const DEFAULT_IDENTITY_DEFAULTS: IdentityDefaults = {
+  contentClass: "sfw",
+  aspectRatio: "9:16",
+};
+
+export function normalizeIdentityDefaults(value: unknown): IdentityDefaults {
+  if (!value || typeof value !== "object") return { ...DEFAULT_IDENTITY_DEFAULTS };
+  const raw = value as Partial<IdentityDefaults>;
+  const provider = ["kie", "wavespeed", "comfyui", "azure", "codex"].includes(raw.provider ?? "")
+    ? raw.provider as WorkflowProvider
+    : undefined;
+  return {
+    contentClass: raw.contentClass === "adult" ? "adult" : "sfw",
+    ...(provider ? { provider } : {}),
+    ...(typeof raw.modelId === "string" && raw.modelId.trim() ? { modelId: raw.modelId.trim().slice(0, 240) } : {}),
+    ...(typeof raw.aspectRatio === "string" && raw.aspectRatio.trim() ? { aspectRatio: raw.aspectRatio.trim().slice(0, 24) } : {}),
+  };
+}
 
 const MINOR_TERMS = String.raw`(?:baby|toddler|child|children|kid|minor|underage|preteen|teen(?:ager)?|schoolgirl|schoolboy|young girl|young boy|(?:[0-9]|1[0-7])[- ]?year[- ]?old)`;
 const SEXUAL_TERMS = String.raw`(?:nude|naked|topless|sexual|sex|explicit|erotic|lingerie|fetish|porn|genitals?)`;

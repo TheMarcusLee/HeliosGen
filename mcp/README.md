@@ -37,9 +37,10 @@ WaveSpeed tools:
 Identity production tools:
 
 - `helios_list_identity_assets` and `helios_get_identity_asset` inspect saved identities and immutable version history.
-- `helios_create_identity_asset`, `helios_update_identity_asset`, and `helios_delete_identity_asset` manage identity assets.
-- `helios_create_clone_workflow` creates either built-in scene-replacement or pose/outfit-batch workflow.
+- `helios_create_identity_asset`, `helios_update_identity_asset`, and `helios_delete_identity_asset` manage identity assets, their content class, and provider/model/aspect-ratio defaults.
+- `helios_create_clone_workflow` creates either built-in scene-replacement or pose/outfit-batch workflow, optionally pre-bound to a saved identity snapshot and its compatible defaults.
 - `helios_set_workflow_routing` stores an explicit SFW/adult provider and model route with the required adult/consent assurances.
 - `helios_list_identity_batches`, `helios_get_identity_batch`, `helios_create_identity_batch`, and `helios_update_identity_batch` plan and track persistent concurrent batches.
+- Image, video, WaveSpeed, and ledger tools accept or expose `identityAssetId` for end-to-end provenance.
 
 Destructive workflow tools are marked with MCP `destructiveHint`; compatible clients can require confirmation. Provider API keys stay in HeliosGen's local SQLite settings and are never returned by the MCP server.

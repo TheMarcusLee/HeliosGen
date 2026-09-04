@@ -140,7 +140,7 @@ You only pay for what you generate.
 - Node Banana community workflow browser and versioned converter
 - ComfyUI API-workflow nodes for local ComfyUI or Comfy Cloud
 - Prompt templates, non-destructive image annotations, and portable media exports
-- Versioned identity assets with reusable face/body references, trigger words, and base prompts
+- First-class identity library with reusable face/body references, immutable versions, prompt DNA, provider/model defaults, JSON portability, linked workflows, and run activity
 - One-click scene-replacement and pose × outfit production workflow templates
 - Persistent concurrent batch queues with pause, resume, retries, and explicit item states
 - Explicit SFW/adult provider routing with consent assurances and server-side safety enforcement
@@ -169,7 +169,7 @@ WaveSpeed's live catalog is available in Settings, directly on schema-driven can
 
 The dashboard's community library imports and converts shared Node Banana workflows into editable HeliosGen graphs. ComfyUI nodes accept workflows exported with **Save (API Format)** and can execute against a local server or Comfy Cloud configured in Settings.
 
-CloneMe-style production pipelines are built in. Create **Scene replacement** or **Pose × outfit batch** from the dashboard, save reusable versioned identities on the canvas, and configure an explicit provider/model route from the workflow's **Routing** control. Batch jobs persist their queue state and reuse a single Opus 5 scene analysis across every pose/outfit combination.
+CloneMe-style production pipelines are built in. Open **Identities** in the main sidebar to manage versioned identity dossiers, reference matrices, routing/model defaults, portable JSON, linked workflows, and provider activity. From any identity, create a pre-bound **Scene replacement** or **Pose × outfit batch** workflow in one click. Batch jobs persist their queue state and reuse a single Opus 5 scene analysis across every pose/outfit combination.
 
 See [the implemented Node Banana and provider roadmap](docs/node-banana-review.md) for design details and provenance.
 

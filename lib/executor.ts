@@ -34,6 +34,32 @@ export function topoSort(nodes: Node<NodeData>[], edges: Edge[]): string[] {
   return order;
 }
 
+/** Finds the closest upstream identity asset so provider runs can retain provenance
+ * even when the identity is connected through prompt/template nodes. */
+export function resolveIdentityAssetId(
+  nodeId: string,
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+): string | undefined {
+  const queue = edges.filter((edge) => edge.target === nodeId).map((edge) => edge.source);
+  const seen = new Set<string>();
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    if (seen.has(currentId)) continue;
+    seen.add(currentId);
+    const node = nodes.find((candidate) => candidate.id === currentId);
+    if (!node) continue;
+    if (node.type === "identityMatrixNode") {
+      const identityAssetId = node.data.identityAssetId ?? node.data.identitySnapshot?.id;
+      if (typeof identityAssetId === "string" && identityAssetId.trim()) return identityAssetId;
+    }
+    queue.push(...edges.filter((edge) => edge.target === currentId).map((edge) => edge.source));
+  }
+
+  return undefined;
+}
+
 /** Returns waves of generation node IDs in dependency order.
  *  Nodes in the same wave have no inter-dependencies and run in parallel.
  *  Each wave must complete before the next starts. */

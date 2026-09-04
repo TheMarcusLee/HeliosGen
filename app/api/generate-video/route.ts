@@ -456,6 +456,7 @@ export async function POST(req: NextRequest) {
     taskId,
     workflowId: typeof body.workflowId === "string" ? body.workflowId : undefined,
     nodeId: typeof body.nodeId === "string" ? body.nodeId : undefined,
+    identityAssetId: typeof body.identityAssetId === "string" ? body.identityAssetId : undefined,
     provider: "kie",
     modelId: videoModel,
     metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] },

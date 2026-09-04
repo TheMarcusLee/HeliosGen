@@ -25,6 +25,7 @@ import {
   LayoutGrid,
   ChevronRight,
   ChevronDown,
+  ScanFace,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -785,6 +786,7 @@ export function AppSidebar() {
   const navItems = [
     { label: "Image", href: `/gallery?tab=images${folderParam}`, icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
     { label: "Video", href: `/gallery?tab=videos${folderParam}`, icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
+    { label: "Identities", href: "/identities", icon: ScanFace, active: pathname.startsWith("/identities") },
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
