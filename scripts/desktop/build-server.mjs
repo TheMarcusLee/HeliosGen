@@ -52,6 +52,11 @@ function stageShim(triple) {
 
 if (process.argv.includes("--dev")) {
   console.log("[desktop] dev mode — run `next dev` yourself (pnpm desktop:dev does both)");
+  // Tauri validates configured bundle resource globs during `tauri dev` too.
+  // A fresh checkout has no ignored server staging tree, so leave one harmless
+  // file for `server/**/*` to match; production builds replace the whole tree.
+  mkdirSync(STAGE, { recursive: true });
+  writeFileSync(join(STAGE, "dev-placeholder.txt"), "Development resource placeholder.\n");
   stageShim(targetTriple());
   process.exit(0);
 }
