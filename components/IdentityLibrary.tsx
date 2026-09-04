@@ -9,12 +9,17 @@ import {
   Copy,
   Download,
   FileJson,
+  Fingerprint,
+  GitBranch,
+  History,
   Images,
   MoreHorizontal,
   Plus,
   RefreshCw,
+  Route,
   ScanFace,
   Search,
+  SlidersHorizontal,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -29,8 +34,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -119,6 +124,16 @@ function ReferenceMosaic({ identity, compact = false }: { identity: IdentityAsse
       )}
       <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-background/70 via-transparent to-transparent" />
       <div className="absolute right-2 top-2 rounded bg-background/75 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground backdrop-blur-sm">ID · v{identity.version}</div>
+    </div>
+  );
+}
+
+function EditorSectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+  return (
+    <div className="border-b border-border pb-5">
+      <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/80">{eyebrow}</div>
+      <h3 className="mt-2 text-lg font-medium tracking-tight">{title}</h3>
+      <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   );
 }
@@ -397,57 +412,153 @@ export default function IdentityLibrary() {
             })}
           </section>
         ) : (
-          <Empty className="mt-8 min-h-96 border border-dashed border-border bg-card/30">
-            <EmptyHeader><EmptyMedia variant="icon"><UserRoundSearch /></EmptyMedia><EmptyTitle>{identities.length ? "No identities match" : "Create your first identity dossier"}</EmptyTitle><EmptyDescription>{identities.length ? "Try another name, trigger, provider, or prompt." : "Bundle references, prompt DNA, and routing defaults once. Reuse them across every production workflow."}</EmptyDescription></EmptyHeader>
-            <EmptyContent>{identities.length ? <Button variant="outline" onClick={() => setQuery("")}>Clear search</Button> : <Button onClick={openCreate}><Plus />New identity</Button>}</EmptyContent>
+          <Empty className="mt-8 min-h-[430px] border border-dashed border-border bg-card/25 px-5 py-10">
+            <EmptyHeader className="max-w-lg">
+              <EmptyMedia variant="icon"><UserRoundSearch /></EmptyMedia>
+              <EmptyTitle className="text-base">{identities.length ? "No identities match" : "Create your first identity dossier"}</EmptyTitle>
+              <EmptyDescription>{identities.length ? "Try another name, trigger, provider, or prompt." : "Give every recurring person one durable source of truth for references, prompt DNA, and generation defaults."}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent className="max-w-3xl">
+              {!identities.length && (
+                <div className="my-3 grid w-full gap-px overflow-hidden rounded-xl border border-border bg-border text-left sm:grid-cols-3">
+                  {[
+                    { icon: Fingerprint, label: "01 · Define", text: "Name the identity and capture reusable prompt instructions." },
+                    { icon: Images, label: "02 · Reference", text: "Collect clear face and body frames in one versioned matrix." },
+                    { icon: Route, label: "03 · Route", text: "Set auditable content, provider, model, and framing defaults." },
+                  ].map(({ icon: Icon, label, text }) => (
+                    <div key={label} className="bg-background/80 p-4">
+                      <Icon className="size-4 text-primary" strokeWidth={1.5} />
+                      <div className="mt-3 font-mono text-[9px] uppercase tracking-[0.16em] text-foreground">{label}</div>
+                      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {identities.length ? <Button variant="outline" onClick={() => setQuery("")}>Clear search</Button> : <Button onClick={openCreate}><Plus />Build an identity</Button>}
+            </EmptyContent>
           </Empty>
         )}
       </div>
 
       <Sheet open={editorOpen} onOpenChange={setEditorOpen}>
-        <SheetContent className="w-full gap-0 overflow-hidden bg-popover p-0 sm:max-w-2xl">
-          <SheetHeader className="border-b border-border px-6 py-5">
-            <div className="pr-10"><div className="mb-2 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{selected ? `Identity ${selected.id.slice(0, 8)} · version ${selected.version}` : "New identity dossier"}</div><SheetTitle className="text-xl tracking-tight">{selected ? selected.name : "Define a reusable identity"}</SheetTitle><SheetDescription>Edits create a new immutable version. Workflows keep their embedded snapshot until refreshed.</SheetDescription></div>
+        <SheetContent size="wide" className="gap-0 overflow-hidden bg-popover p-0">
+          <SheetHeader className="border-b border-border px-5 py-5 sm:px-7 sm:py-6">
+            <div className="flex items-start gap-4 pr-10">
+              <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted text-muted-foreground">
+                {draft.references[0] ? <Image src={draft.references[0].url} alt="Identity cover reference" fill sizes="48px" unoptimized className="object-cover" /> : <Fingerprint className="size-5" strokeWidth={1.4} />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <span>{selected ? `Identity ${selected.id.slice(0, 8)}` : "New identity dossier"}</span>
+                  <span aria-hidden="true">/</span>
+                  <span>{selected ? `Version ${selected.version}` : "Draft"}</span>
+                </div>
+                <SheetTitle className="truncate text-xl tracking-tight sm:text-2xl">{selected ? selected.name : "Define a reusable identity"}</SheetTitle>
+                <SheetDescription className="mt-1 max-w-2xl leading-5">Store the source material once, then reuse a stable snapshot across every production workflow. Saved edits create a new immutable version.</SheetDescription>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Badge variant="outline">{draft.references.length} references</Badge>
+                  <Badge variant={draft.defaults.contentClass === "adult" ? "destructive" : "secondary"}>{draft.defaults.contentClass.toUpperCase()}</Badge>
+                  <Badge variant="outline">{draft.defaults.provider ?? "Workflow routing"}</Badge>
+                </div>
+              </div>
+            </div>
           </SheetHeader>
           <ScrollArea className="min-h-0 flex-1">
-            <Tabs defaultValue="profile" className="gap-0">
-              <TabsList variant="line" className="sticky top-0 z-10 w-full justify-start border-b border-border bg-popover px-6 py-2">
-                <TabsTrigger value="profile">Profile</TabsTrigger>
-                <TabsTrigger value="references">References <Badge variant="secondary">{draft.references.length}</Badge></TabsTrigger>
-                <TabsTrigger value="defaults">Defaults</TabsTrigger>
-                {selected && <TabsTrigger value="activity">Activity <Badge variant="secondary">{selectedActivity.length}</Badge></TabsTrigger>}
-                {selected && <TabsTrigger value="versions">Versions <Badge variant="secondary">{versions.length}</Badge></TabsTrigger>}
+            <Tabs defaultValue="profile" className="min-h-full gap-0">
+              <TabsList variant="line" aria-label="Identity editor sections" className="sticky top-0 z-10 flex min-h-12 w-full justify-start overflow-x-auto border-b border-border bg-popover/95 px-4 py-2 backdrop-blur-sm sm:px-7">
+                <TabsTrigger value="profile" className="flex-none px-3"><Fingerprint />Profile</TabsTrigger>
+                <TabsTrigger value="references" className="flex-none px-3"><Images />References <Badge variant="secondary">{draft.references.length}</Badge></TabsTrigger>
+                <TabsTrigger value="defaults" className="flex-none px-3"><SlidersHorizontal />Defaults</TabsTrigger>
+                {selected && <TabsTrigger value="activity" className="flex-none px-3"><History />Activity <Badge variant="secondary">{selectedActivity.length}</Badge></TabsTrigger>}
+                {selected && <TabsTrigger value="versions" className="flex-none px-3"><GitBranch />Versions <Badge variant="secondary">{versions.length}</Badge></TabsTrigger>}
               </TabsList>
 
-              <TabsContent value="profile" className="space-y-6 p-6">
-                <div className="grid gap-2"><Label htmlFor="identity-name">Identity name</Label><Input id="identity-name" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Ava — lifestyle creator" /></div>
-                <div className="grid gap-2"><Label htmlFor="identity-trigger">Trigger word</Label><Input id="identity-trigger" value={draft.triggerWord} onChange={(event) => setDraft((current) => ({ ...current, triggerWord: event.target.value }))} placeholder="AVA_PERSON" /><p className="text-xs leading-5 text-muted-foreground">A stable token used when a provider or trained model recognizes one.</p></div>
-                <div className="grid gap-2"><Label htmlFor="identity-prompts">Reusable base prompts</Label><Textarea id="identity-prompts" className="min-h-48 resize-y" value={draft.basePrompts.join("\n")} onChange={(event) => setDraft((current) => ({ ...current, basePrompts: event.target.value.split("\n") }))} placeholder={"One production instruction per line\nPreserve facial geometry and natural skin texture\nConsistent body proportions"} /><p className="text-xs leading-5 text-muted-foreground">Each non-empty line becomes a reusable prompt fragment.</p></div>
+              <TabsContent value="profile" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+                <EditorSectionHeading eyebrow="01 / Profile" title="The identity contract" description="Name the person and define the prompt fragments that should travel with every identity-aware generation." />
+                <FieldGroup>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field>
+                      <FieldLabel htmlFor="identity-name">Identity name</FieldLabel>
+                      <Input id="identity-name" autoFocus value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Ava — lifestyle creator" />
+                      <FieldDescription>Use a recognizable production name. This stays internal.</FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="identity-trigger">Trigger word</FieldLabel>
+                      <Input id="identity-trigger" value={draft.triggerWord} onChange={(event) => setDraft((current) => ({ ...current, triggerWord: event.target.value }))} placeholder="AVA_PERSON" />
+                      <FieldDescription>A stable token for providers or trained models that recognize one.</FieldDescription>
+                    </Field>
+                  </div>
+                  <Field>
+                    <div className="flex items-end justify-between gap-3">
+                      <FieldLabel htmlFor="identity-prompts">Reusable prompt DNA</FieldLabel>
+                      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{draft.basePrompts.filter((prompt) => prompt.trim()).length} fragments</span>
+                    </div>
+                    <Textarea id="identity-prompts" className="min-h-52 resize-y leading-6" value={draft.basePrompts.join("\n")} onChange={(event) => setDraft((current) => ({ ...current, basePrompts: event.target.value.split("\n") }))} placeholder={"One reusable instruction per line\nPreserve facial geometry and natural skin texture\nKeep body proportions consistent across scenes"} />
+                    <FieldDescription>Write one instruction per line. Workflows can combine these fragments without duplicating prompt work.</FieldDescription>
+                  </Field>
+                </FieldGroup>
               </TabsContent>
 
-              <TabsContent value="references" className="space-y-5 p-6">
-                <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-sm font-medium">Reference matrix</h3><p className="mt-1 text-xs text-muted-foreground">Mix close face references with full-body frames for stronger consistency.</p></div><div className="flex gap-2"><Select items={REFERENCE_KINDS} value={referenceKind} onValueChange={(value) => setReferenceKind(value === "body" ? "body" : "face")}><SelectTrigger className="w-28"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="face">Face</SelectItem><SelectItem value="body">Body</SelectItem></SelectGroup></SelectContent></Select><Button variant="outline" disabled={uploading} onClick={() => referenceInput.current?.click()}><Upload />{uploading ? "Uploading…" : "Add reference"}</Button></div></div>
+              <TabsContent value="references" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+                <EditorSectionHeading eyebrow="02 / Reference matrix" title="Show the system who this is" description="Use varied, high-quality source frames. Close face images carry facial detail; full-body references reinforce proportions and silhouette." />
                 <input ref={referenceInput} type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); event.target.value = ""; }} />
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group relative aspect-3/4 overflow-hidden rounded-lg bg-muted ring-1 ring-border"><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover" /><div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-linear-to-t from-black/85 to-transparent p-2 pt-8"><div className="min-w-0"><div className="truncate text-[10px] text-white/75">{reference.label ?? `Reference ${index + 1}`}</div><div className="font-mono text-[9px] uppercase tracking-widest text-white/45">{reference.kind}</div></div><Button variant="destructive" size="icon-xs" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div></div>)}</div>
+                <div className="grid gap-4 rounded-xl border border-dashed border-border bg-card/35 p-4 sm:grid-cols-[1fr_auto] sm:items-center sm:p-5" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file?.type.startsWith("image/")) void uploadReference(file); }}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Upload className="size-4" /></div>
+                    <div><div className="text-sm font-medium">Add a source frame</div><p className="mt-0.5 text-xs leading-5 text-muted-foreground">Drop an image here or choose a file. JPG, PNG, or WebP works best.</p></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Select items={REFERENCE_KINDS} value={referenceKind} onValueChange={(value) => setReferenceKind(value === "body" ? "body" : "face")}><SelectTrigger aria-label="Reference type" className="w-28"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="face">Face</SelectItem><SelectItem value="body">Body</SelectItem></SelectGroup></SelectContent></Select>
+                    <Button variant="outline" disabled={uploading} onClick={() => referenceInput.current?.click()}><Upload />{uploading ? "Uploading…" : "Choose file"}</Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group relative aspect-3/4 overflow-hidden rounded-xl bg-muted ring-1 ring-border"><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover transition duration-300 group-hover:scale-[1.02]" /><div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-linear-to-t from-black/90 to-transparent p-3 pt-10"><div className="min-w-0"><div className="truncate text-[10px] text-white/80">{reference.label ?? `Reference ${index + 1}`}</div><div className="mt-0.5 font-mono text-[9px] uppercase tracking-widest text-white/50">{reference.kind}</div></div><Button variant="destructive" size="icon-xs" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div></div>)}</div>
                 {!draft.references.length && <Empty className="min-h-64 border border-dashed border-border"><EmptyHeader><EmptyMedia variant="icon"><Images /></EmptyMedia><EmptyTitle>No reference frames</EmptyTitle><EmptyDescription>Add at least one clear face reference. Full-body frames help preserve proportions.</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => referenceInput.current?.click()}><Upload />Upload image</Button></EmptyContent></Empty>}
               </TabsContent>
 
-              <TabsContent value="defaults" className="space-y-6 p-6">
-                <div className="rounded-lg border border-border bg-card p-4"><div className="flex gap-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><h3 className="text-sm font-medium">Explicit content routing</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">This metadata is auditable; it does not infer capability from model names. Adult workflows still require explicit adult-age and consent confirmations before a run.</p></div></div></div>
-                <div className="grid gap-2"><Label>Content class</Label><Select items={CONTENT_CLASSES} value={draft.defaults.contentClass} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, contentClass: value === "adult" ? "adult" : "sfw" } }))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="sfw">SFW production</SelectItem><SelectItem value="adult">Adult production</SelectItem></SelectGroup></SelectContent></Select></div>
-                <div className="grid gap-4 sm:grid-cols-2"><div className="grid gap-2"><Label>Default provider</Label><Select items={PROVIDERS} value={draft.defaults.provider ?? "workflow-default"} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, provider: value === "workflow-default" ? undefined : value as WorkflowProvider, ...(value === "workflow-default" ? { modelId: undefined } : {}) } }))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{PROVIDERS.map((provider) => <SelectItem key={provider.value} value={provider.value}>{provider.label}</SelectItem>)}</SelectGroup></SelectContent></Select></div><div className="grid gap-2"><Label htmlFor="identity-model">Default model ID</Label><Input id="identity-model" value={draft.defaults.modelId ?? ""} disabled={!draft.defaults.provider} onChange={(event) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, modelId: event.target.value || undefined } }))} placeholder="provider/model-name" /></div></div>
-                <div className="grid gap-2"><Label>Default aspect ratio</Label><Select items={ASPECT_RATIO_ITEMS} value={draft.defaults.aspectRatio ?? "9:16"} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, aspectRatio: value ?? "9:16" } }))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{ASPECT_RATIOS.map((ratio) => <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>)}</SelectGroup></SelectContent></Select></div>
+              <TabsContent value="defaults" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+                <EditorSectionHeading eyebrow="03 / Production defaults" title="Make routing intentional" description="Set the starting provider, model, framing, and content class. A workflow can override these choices while preserving the identity snapshot." />
+                <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                  <div className="flex gap-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" /><div><h3 className="text-sm font-medium">Explicit, auditable content routing</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">Capability is never inferred from a model name. Adult workflows still require explicit adult-age and consent confirmations before a run, and provider rules always apply.</p></div></div>
+                </div>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="identity-content-class">Content class</FieldLabel>
+                    <Select items={CONTENT_CLASSES} value={draft.defaults.contentClass} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, contentClass: value === "adult" ? "adult" : "sfw" } }))}><SelectTrigger id="identity-content-class" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="sfw">SFW production</SelectItem><SelectItem value="adult">Adult production</SelectItem></SelectGroup></SelectContent></Select>
+                    <FieldDescription>This travels with the identity as workflow metadata and is visible in run provenance.</FieldDescription>
+                  </Field>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field>
+                      <FieldLabel htmlFor="identity-provider">Default provider</FieldLabel>
+                      <Select items={PROVIDERS} value={draft.defaults.provider ?? "workflow-default"} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, provider: value === "workflow-default" ? undefined : value as WorkflowProvider, ...(value === "workflow-default" ? { modelId: undefined } : {}) } }))}><SelectTrigger id="identity-provider" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{PROVIDERS.map((provider) => <SelectItem key={provider.value} value={provider.value}>{provider.label}</SelectItem>)}</SelectGroup></SelectContent></Select>
+                      <FieldDescription>Leave routing to each workflow or pin a provider here.</FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="identity-model">Default model ID</FieldLabel>
+                      <Input id="identity-model" value={draft.defaults.modelId ?? ""} disabled={!draft.defaults.provider} onChange={(event) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, modelId: event.target.value || undefined } }))} placeholder="provider/model-name" />
+                      <FieldDescription>{draft.defaults.provider ? "Use the provider's exact model identifier." : "Choose a provider before pinning a model."}</FieldDescription>
+                    </Field>
+                  </div>
+                  <Field>
+                    <FieldLabel htmlFor="identity-aspect-ratio">Default aspect ratio</FieldLabel>
+                    <Select items={ASPECT_RATIO_ITEMS} value={draft.defaults.aspectRatio ?? "9:16"} onValueChange={(value) => setDraft((current) => ({ ...current, defaults: { ...current.defaults, aspectRatio: value ?? "9:16" } }))}><SelectTrigger id="identity-aspect-ratio" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{ASPECT_RATIOS.map((ratio) => <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>)}</SelectGroup></SelectContent></Select>
+                  </Field>
+                </FieldGroup>
+                <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3" aria-label="Current production defaults">
+                  {[{ label: "Content", value: draft.defaults.contentClass.toUpperCase() }, { label: "Route", value: draft.defaults.provider ?? "Per workflow" }, { label: "Frame", value: draft.defaults.aspectRatio ?? "9:16" }].map((item) => <div key={item.label} className="bg-background px-4 py-3"><div className="font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground">{item.label}</div><div className="mt-1 truncate text-sm">{item.value}</div></div>)}
+                </div>
               </TabsContent>
 
-              {selected && <TabsContent value="activity" className="space-y-7 p-6">
+              {selected && <TabsContent value="activity" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+                <EditorSectionHeading eyebrow="04 / Activity" title="Trace where this identity travels" description="Open linked workflows and review provider outputs with model, status, and cost provenance." />
                 <section><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium">Linked workflows</h3><Badge variant="outline">{selectedWorkflows.length}</Badge></div>{selectedWorkflows.length ? <div className="divide-y divide-border rounded-lg border border-border">{selectedWorkflows.map((workflow) => <button key={workflow.id} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={() => router.push(`/workflow/${workflow.id}`)}><div><div className="text-sm">{workflow.name}</div><div className="mt-0.5 text-[10px] text-muted-foreground">Updated {formatDate(workflow.updatedAt ?? workflow.createdAt)}</div></div><ArrowUpRight className="size-4 text-muted-foreground" /></button>)}</div> : <p className="text-xs text-muted-foreground">No workflow currently embeds this identity.</p>}</section>
                 <section><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium">Provider ledger</h3><Badge variant="outline">{selectedActivity.length}</Badge></div>{selectedActivity.length ? <div className="grid grid-cols-2 gap-3">{selectedActivity.slice(0, 12).map((entry) => <div key={entry.id} className="overflow-hidden rounded-lg border border-border bg-card">{entry.outputUrl ? <div className="relative aspect-square">{isVideoUrl(entry.outputUrl) ? <video src={entry.outputUrl} muted playsInline controls className="size-full object-cover" /> : <Image src={entry.outputUrl} alt="Generated identity output" fill sizes="240px" unoptimized className="object-cover" />}</div> : <div className="flex aspect-square items-center justify-center bg-muted"><Sparkles className="size-6 text-muted-foreground" /></div>}<div className="space-y-1 p-3"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{entry.modelId}</span><Badge variant={entry.status === "error" ? "destructive" : "secondary"}>{entry.status}</Badge></div><div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{entry.provider} · {formatDate(entry.createdAt)}</div></div></div>)}</div> : <p className="text-xs text-muted-foreground">Runs created from this identity will appear here with provider and model provenance.</p>}</section>
               </TabsContent>}
 
-              {selected && <TabsContent value="versions" className="space-y-3 p-6">{versions.map((version) => <div key={version.version} className="grid grid-cols-[72px_1fr_auto] items-center gap-4 border-b border-border py-3"><ReferenceMosaic identity={version} compact /><div className="min-w-0"><div className="text-sm font-medium">Version {version.version}</div><div className="mt-1 truncate text-xs text-muted-foreground">{version.triggerWord || "No trigger"} · {version.references.length} references · {version.basePrompts.length} prompts</div></div><time className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{formatDate(version.updatedAt)}</time></div>)}</TabsContent>}
+              {selected && <TabsContent value="versions" className="mx-auto w-full max-w-3xl space-y-3 p-5 sm:p-7"><EditorSectionHeading eyebrow="05 / Version history" title="Immutable identity snapshots" description="Every saved revision stays available for provenance while existing workflows keep the version they embedded." />{versions.map((version) => <div key={version.version} className="grid grid-cols-[72px_1fr] items-center gap-4 border-b border-border py-3 sm:grid-cols-[72px_1fr_auto]"><ReferenceMosaic identity={version} compact /><div className="min-w-0"><div className="text-sm font-medium">Version {version.version}</div><div className="mt-1 truncate text-xs text-muted-foreground">{version.triggerWord || "No trigger"} · {version.references.length} references · {version.basePrompts.length} prompts</div></div><time className="col-start-2 font-mono text-[9px] uppercase tracking-wider text-muted-foreground sm:col-auto">{formatDate(version.updatedAt)}</time></div>)}</TabsContent>}
             </Tabs>
           </ScrollArea>
-          <SheetFooter className="flex-row items-center justify-between border-t border-border px-6 py-4"><div>{selected && <Button type="button" variant="destructive" onClick={() => setDeleteTarget(selected)}><Trash2 />Delete</Button>}</div><div className="ml-auto flex gap-2"><Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>Close</Button><Button type="button" disabled={saving || uploading} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void save(); }}>{saving ? "Saving…" : selected ? "Save new version" : "Create identity"}</Button></div></SheetFooter>
+          <SheetFooter className="flex-row items-center justify-between gap-3 border-t border-border bg-popover px-5 py-4 sm:px-7"><div>{selected && <Button type="button" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(selected)}><Trash2 />Delete</Button>}</div><div className="ml-auto flex gap-2"><Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button><Button type="button" disabled={saving || uploading || !draft.name.trim()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void save(); }}>{saving ? "Saving…" : selected ? "Save new version" : "Create identity"}</Button></div></SheetFooter>
         </SheetContent>
       </Sheet>
 
