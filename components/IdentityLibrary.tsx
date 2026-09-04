@@ -150,11 +150,11 @@ export default function IdentityLibrary() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false);
   const [selected, setSelected] = useState<IdentityAsset | null>(null);
   const [draft, setDraft] = useState<IdentityDraft>(emptyDraft);
   const [deleteTarget, setDeleteTarget] = useState<IdentityAsset | null>(null);
-  const [referenceKind, setReferenceKind] = useState<IdentityReferenceKind>("face");
   const referenceInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
 
@@ -251,15 +251,45 @@ export default function IdentityLibrary() {
     } finally { setSaving(false); }
   };
 
-  const uploadReference = async (file: File) => {
+  const uploadReferences = async (files: File[]) => {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (!images.length) {
+      addToast("Choose one or more image files.", "error");
+      return;
+    }
+
     setUploading(true);
+    setUploadingCount(images.length);
+    let completed = 0;
+    let failed = 0;
+
     try {
-      const response = await fetch("/api/upload-asset", { method: "POST", headers: { "Content-Type": file.type || "image/jpeg" }, body: await file.arrayBuffer() });
-      const body = await response.json() as { cdnUrl?: string; error?: string };
-      if (!response.ok || !body.cdnUrl) throw new Error(body.error ?? "Reference upload failed.");
-      setDraft((current) => ({ ...current, references: [...current.references, { url: body.cdnUrl!, kind: referenceKind, label: file.name }] }));
-    } catch (error) { addToast((error as Error).message, "error"); }
-    finally { setUploading(false); }
+      for (let offset = 0; offset < images.length; offset += 4) {
+        const batch = images.slice(offset, offset + 4);
+        const results = await Promise.allSettled(batch.map(async (file): Promise<IdentityReference> => {
+          const response = await fetch("/api/upload-asset", { method: "POST", headers: { "Content-Type": file.type || "image/jpeg" }, body: await file.arrayBuffer() });
+          const body = await response.json() as { cdnUrl?: string; error?: string };
+          if (!response.ok || !body.cdnUrl) throw new Error(body.error ?? `Could not upload ${file.name}.`);
+          return { url: body.cdnUrl, kind: "face", label: file.name };
+        }));
+        const uploaded = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+        failed += results.length - uploaded.length;
+        completed += results.length;
+        if (uploaded.length) setDraft((current) => ({ ...current, references: [...current.references, ...uploaded] }));
+        setUploadingCount(images.length - completed);
+      }
+      if (failed) addToast(`${failed} ${failed === 1 ? "image" : "images"} could not be uploaded.`, "error");
+    } finally {
+      setUploading(false);
+      setUploadingCount(0);
+    }
+  };
+
+  const setReferenceKind = (index: number, kind: IdentityReferenceKind) => {
+    setDraft((current) => ({
+      ...current,
+      references: current.references.map((reference, candidate) => candidate === index ? { ...reference, kind } : reference),
+    }));
   };
 
   const duplicate = async (identity: IdentityAsset) => {
@@ -399,7 +429,7 @@ export default function IdentityLibrary() {
                       </DropdownMenu>
                     </CardAction>
                   </CardHeader>
-                  <CardContent className="space-y-4 py-4">
+                  <CardContent className="flex flex-col gap-4 py-4">
                     <div className="flex flex-wrap gap-1.5"><Badge variant={identity.defaults.contentClass === "adult" ? "destructive" : "secondary"}>{identity.defaults.contentClass.toUpperCase()}</Badge><Badge variant="outline">{identity.references.length} refs</Badge>{identity.defaults.provider && <Badge variant="outline">{identity.defaults.provider}</Badge>}</div>
                     <div className="min-h-10 text-xs leading-5 text-muted-foreground">{identity.triggerWord ? <><span className="font-mono text-foreground">{identity.triggerWord}</span> · </> : null}{identity.basePrompts[0] ?? "No reusable base prompt yet."}</div>
                   </CardContent>
@@ -473,7 +503,7 @@ export default function IdentityLibrary() {
                 {selected && <TabsTrigger value="versions" className="flex-none px-3"><GitBranch />Versions <Badge variant="secondary">{versions.length}</Badge></TabsTrigger>}
               </TabsList>
 
-              <TabsContent value="profile" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+              <TabsContent value="profile" className="mx-auto flex w-full max-w-3xl flex-col gap-7 p-5 sm:p-7">
                 <EditorSectionHeading eyebrow="01 / Profile" title="The identity contract" description="Name the person and define the prompt fragments that should travel with every identity-aware generation." />
                 <FieldGroup>
                   <div className="grid gap-5 sm:grid-cols-2">
@@ -499,24 +529,21 @@ export default function IdentityLibrary() {
                 </FieldGroup>
               </TabsContent>
 
-              <TabsContent value="references" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+              <TabsContent value="references" className="mx-auto flex w-full max-w-3xl flex-col gap-7 p-5 sm:p-7">
                 <EditorSectionHeading eyebrow="02 / Reference matrix" title="Show the system who this is" description="Use varied, high-quality source frames. Close face images carry facial detail; full-body references reinforce proportions and silhouette." />
-                <input ref={referenceInput} type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); event.target.value = ""; }} />
-                <div className="grid gap-4 rounded-xl border border-dashed border-border bg-card/35 p-4 sm:grid-cols-[1fr_auto] sm:items-center sm:p-5" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file?.type.startsWith("image/")) void uploadReference(file); }}>
+                <input ref={referenceInput} type="file" accept="image/*" multiple className="hidden" onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadReferences(files); event.target.value = ""; }} />
+                <div className="grid gap-4 rounded-xl border border-dashed border-border bg-card/35 p-4 transition-colors hover:border-primary/40 sm:grid-cols-[1fr_auto] sm:items-center sm:p-5" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const files = Array.from(event.dataTransfer.files); if (files.length) void uploadReferences(files); }}>
                   <div className="flex items-center gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Upload className="size-4" /></div>
-                    <div><div className="text-sm font-medium">Add a source frame</div><p className="mt-0.5 text-xs leading-5 text-muted-foreground">Drop an image here or choose a file. JPG, PNG, or WebP works best.</p></div>
+                    <div><div className="text-sm font-medium">Add source frames</div><p className="mt-0.5 text-xs leading-5 text-muted-foreground">Drop several images here or choose files. New frames start as Face; classify each one below.</p></div>
                   </div>
-                  <div className="flex gap-2">
-                    <Select items={REFERENCE_KINDS} value={referenceKind} onValueChange={(value) => setReferenceKind(value === "body" ? "body" : "face")}><SelectTrigger aria-label="Reference type" className="w-28"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="face">Face</SelectItem><SelectItem value="body">Body</SelectItem></SelectGroup></SelectContent></Select>
-                    <Button variant="outline" disabled={uploading} onClick={() => referenceInput.current?.click()}><Upload />{uploading ? "Uploading…" : "Choose file"}</Button>
-                  </div>
+                  <Button variant="outline" disabled={uploading} onClick={() => referenceInput.current?.click()}><Upload />{uploading ? `Uploading ${uploadingCount || "…"}` : "Choose images"}</Button>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group relative aspect-3/4 overflow-hidden rounded-xl bg-muted ring-1 ring-border"><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover transition duration-300 group-hover:scale-[1.02]" /><div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-linear-to-t from-black/90 to-transparent p-3 pt-10"><div className="min-w-0"><div className="truncate text-[10px] text-white/80">{reference.label ?? `Reference ${index + 1}`}</div><div className="mt-0.5 font-mono text-[9px] uppercase tracking-widest text-white/50">{reference.kind}</div></div><Button variant="destructive" size="icon-xs" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div></div>)}</div>
-                {!draft.references.length && <Empty className="min-h-64 border border-dashed border-border"><EmptyHeader><EmptyMedia variant="icon"><Images /></EmptyMedia><EmptyTitle>No reference frames</EmptyTitle><EmptyDescription>Add at least one clear face reference. Full-body frames help preserve proportions.</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => referenceInput.current?.click()}><Upload />Upload image</Button></EmptyContent></Empty>}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group overflow-hidden rounded-xl border border-border bg-card"><div className="relative aspect-3/4 overflow-hidden bg-muted"><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover transition duration-300 group-hover:scale-[1.02]" /><Button variant="destructive" size="icon-xs" className="absolute right-2 top-2" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div><div className="flex flex-col gap-2 p-3"><div className="truncate text-xs text-muted-foreground" title={reference.label}>{reference.label ?? `Reference ${index + 1}`}</div><Field><FieldLabel htmlFor={`identity-reference-${index}`}>Reference role</FieldLabel><Select items={REFERENCE_KINDS} value={reference.kind} onValueChange={(value) => setReferenceKind(index, value === "body" ? "body" : "face")}><SelectTrigger id={`identity-reference-${index}`} aria-label={`Reference ${index + 1} role`} className="w-full"><SelectValue /></SelectTrigger><SelectContent alignItemWithTrigger={false}><SelectGroup><SelectItem value="face">Face reference</SelectItem><SelectItem value="body">Body reference</SelectItem></SelectGroup></SelectContent></Select></Field></div></div>)}</div>
+                {!draft.references.length && <Empty className="min-h-64 border border-dashed border-border"><EmptyHeader><EmptyMedia variant="icon"><Images /></EmptyMedia><EmptyTitle>No reference frames</EmptyTitle><EmptyDescription>Add several images at once, then mark each one as a face or body reference.</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => referenceInput.current?.click()}><Upload />Choose images</Button></EmptyContent></Empty>}
               </TabsContent>
 
-              <TabsContent value="defaults" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+              <TabsContent value="defaults" className="mx-auto flex w-full max-w-3xl flex-col gap-7 p-5 sm:p-7">
                 <EditorSectionHeading eyebrow="03 / Production defaults" title="Make routing intentional" description="Set the starting provider, model, framing, and content class. A workflow can override these choices while preserving the identity snapshot." />
                 <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
                   <div className="flex gap-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" /><div><h3 className="text-sm font-medium">Explicit, auditable content routing</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">Capability is never inferred from a model name. Adult workflows still require explicit adult-age and consent confirmations before a run, and provider rules always apply.</p></div></div>
@@ -549,13 +576,13 @@ export default function IdentityLibrary() {
                 </div>
               </TabsContent>
 
-              {selected && <TabsContent value="activity" className="mx-auto w-full max-w-3xl space-y-7 p-5 sm:p-7">
+              {selected && <TabsContent value="activity" className="mx-auto flex w-full max-w-3xl flex-col gap-7 p-5 sm:p-7">
                 <EditorSectionHeading eyebrow="04 / Activity" title="Trace where this identity travels" description="Open linked workflows and review provider outputs with model, status, and cost provenance." />
                 <section><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium">Linked workflows</h3><Badge variant="outline">{selectedWorkflows.length}</Badge></div>{selectedWorkflows.length ? <div className="divide-y divide-border rounded-lg border border-border">{selectedWorkflows.map((workflow) => <button key={workflow.id} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={() => router.push(`/workflow/${workflow.id}`)}><div><div className="text-sm">{workflow.name}</div><div className="mt-0.5 text-[10px] text-muted-foreground">Updated {formatDate(workflow.updatedAt ?? workflow.createdAt)}</div></div><ArrowUpRight className="size-4 text-muted-foreground" /></button>)}</div> : <p className="text-xs text-muted-foreground">No workflow currently embeds this identity.</p>}</section>
-                <section><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium">Provider ledger</h3><Badge variant="outline">{selectedActivity.length}</Badge></div>{selectedActivity.length ? <div className="grid grid-cols-2 gap-3">{selectedActivity.slice(0, 12).map((entry) => <div key={entry.id} className="overflow-hidden rounded-lg border border-border bg-card">{entry.outputUrl ? <div className="relative aspect-square">{isVideoUrl(entry.outputUrl) ? <video src={entry.outputUrl} muted playsInline controls className="size-full object-cover" /> : <Image src={entry.outputUrl} alt="Generated identity output" fill sizes="240px" unoptimized className="object-cover" />}</div> : <div className="flex aspect-square items-center justify-center bg-muted"><Sparkles className="size-6 text-muted-foreground" /></div>}<div className="space-y-1 p-3"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{entry.modelId}</span><Badge variant={entry.status === "error" ? "destructive" : "secondary"}>{entry.status}</Badge></div><div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{entry.provider} · {formatDate(entry.createdAt)}</div></div></div>)}</div> : <p className="text-xs text-muted-foreground">Runs created from this identity will appear here with provider and model provenance.</p>}</section>
+                <section><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium">Provider ledger</h3><Badge variant="outline">{selectedActivity.length}</Badge></div>{selectedActivity.length ? <div className="grid grid-cols-2 gap-3">{selectedActivity.slice(0, 12).map((entry) => <div key={entry.id} className="overflow-hidden rounded-lg border border-border bg-card">{entry.outputUrl ? <div className="relative aspect-square">{isVideoUrl(entry.outputUrl) ? <video src={entry.outputUrl} muted playsInline controls className="size-full object-cover" /> : <Image src={entry.outputUrl} alt="Generated identity output" fill sizes="240px" unoptimized className="object-cover" />}</div> : <div className="flex aspect-square items-center justify-center bg-muted"><Sparkles className="size-6 text-muted-foreground" /></div>}<div className="flex flex-col gap-1 p-3"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{entry.modelId}</span><Badge variant={entry.status === "error" ? "destructive" : "secondary"}>{entry.status}</Badge></div><div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{entry.provider} · {formatDate(entry.createdAt)}</div></div></div>)}</div> : <p className="text-xs text-muted-foreground">Runs created from this identity will appear here with provider and model provenance.</p>}</section>
               </TabsContent>}
 
-              {selected && <TabsContent value="versions" className="mx-auto w-full max-w-3xl space-y-3 p-5 sm:p-7"><EditorSectionHeading eyebrow="05 / Version history" title="Immutable identity snapshots" description="Every saved revision stays available for provenance while existing workflows keep the version they embedded." />{versions.map((version) => <div key={version.version} className="grid grid-cols-[72px_1fr] items-center gap-4 border-b border-border py-3 sm:grid-cols-[72px_1fr_auto]"><ReferenceMosaic identity={version} compact /><div className="min-w-0"><div className="text-sm font-medium">Version {version.version}</div><div className="mt-1 truncate text-xs text-muted-foreground">{version.triggerWord || "No trigger"} · {version.references.length} references · {version.basePrompts.length} prompts</div></div><time className="col-start-2 font-mono text-[9px] uppercase tracking-wider text-muted-foreground sm:col-auto">{formatDate(version.updatedAt)}</time></div>)}</TabsContent>}
+              {selected && <TabsContent value="versions" className="mx-auto flex w-full max-w-3xl flex-col gap-3 p-5 sm:p-7"><EditorSectionHeading eyebrow="05 / Version history" title="Immutable identity snapshots" description="Every saved revision stays available for provenance while existing workflows keep the version they embedded." />{versions.map((version) => <div key={version.version} className="grid grid-cols-[72px_1fr] items-center gap-4 border-b border-border py-3 sm:grid-cols-[72px_1fr_auto]"><ReferenceMosaic identity={version} compact /><div className="min-w-0"><div className="text-sm font-medium">Version {version.version}</div><div className="mt-1 truncate text-xs text-muted-foreground">{version.triggerWord || "No trigger"} · {version.references.length} references · {version.basePrompts.length} prompts</div></div><time className="col-start-2 font-mono text-[9px] uppercase tracking-wider text-muted-foreground sm:col-auto">{formatDate(version.updatedAt)}</time></div>)}</TabsContent>}
             </Tabs>
           </ScrollArea>
           <SheetFooter className="flex-row items-center justify-between gap-3 border-t border-border bg-popover px-5 py-4 sm:px-7"><div>{selected && <Button type="button" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(selected)}><Trash2 />Delete</Button>}</div><div className="ml-auto flex gap-2"><Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button><Button type="button" disabled={saving || uploading || !draft.name.trim()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void save(); }}>{saving ? "Saving…" : selected ? "Save new version" : "Create identity"}</Button></div></SheetFooter>
