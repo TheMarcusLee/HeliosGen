@@ -5,7 +5,8 @@ import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChatSessionStore, type StoredMessage, type ChatSession } from "@/lib/chatSessionStore";
 import { getToken } from "@/lib/galleryUtils";
-import { MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
+import { DEFAULT_TEXT_MODEL_ID, MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
+import { extractAssistantTextDelta } from "@/lib/assistantStream";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { Send, ChevronUp, Copy, Check } from "lucide-react";
 import { motion } from "motion/react";
@@ -309,7 +310,7 @@ function ChatWindow({
     session.messages.map((m) => ({ ...m }))
   );
   const [input, setInput] = useState("");
-  const [model, setModel] = useState<ModelId>((session.model || defaultModel || "claude-sonnet-4-6") as ModelId);
+  const [model, setModel] = useState<ModelId>((session.model || defaultModel || DEFAULT_TEXT_MODEL_ID) as ModelId);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const kieKeySet   = useWorkflowStore((s) => s.kieKeySet);
   const azureKeySet = useWorkflowStore((s) => s.azureKeySet);
@@ -401,10 +402,7 @@ function ChatWindow({
           if (json === "[DONE]") continue;
           try {
             const parsed = JSON.parse(json);
-            const chunk =
-              (parsed.type === "content_block_delta" ? parsed.delta?.text : null) ??
-              parsed.choices?.[0]?.delta?.content ??
-              null;
+            const chunk = extractAssistantTextDelta(parsed);
             if (chunk) accumulated += chunk;
           } catch { /* skip malformed SSE */ }
         }
@@ -606,7 +604,7 @@ function ChatInner() {
 
   const { sessions, createSession, upsertSession, preferredModel, setPreferredModel } = useChatSessionStore();
   const [hydrated, setHydrated] = useState(false);
-  const [landingModel, setLandingModel] = useState<ModelId>("claude-sonnet-4-6");
+  const [landingModel, setLandingModel] = useState<ModelId>(DEFAULT_TEXT_MODEL_ID);
   const [pendingMessage, setPendingMessage] = useState("");
 
   // Sync landingModel from store once hydrated

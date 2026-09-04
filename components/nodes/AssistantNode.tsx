@@ -7,13 +7,12 @@ import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
 import CornerResizer from "./CornerResizer";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 import { useReadOnly } from "@/lib/readOnlyContext";
+import { DEFAULT_TEXT_MODEL_ID, MODELS as TEXT_MODELS } from "@/lib/models";
+import { extractAssistantTextDelta } from "@/lib/assistantStream";
 
 type AssistantNodeType = Node<NodeData, "assistantNode">;
 
-const MODELS = [
-  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
-];
+const MODELS = TEXT_MODELS.filter((candidate) => candidate.id !== "azure-auto");
 
 export default function AssistantNode({ id, data, selected }: NodeProps<AssistantNodeType>) {
   const readOnly = useReadOnly();
@@ -47,7 +46,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
   const status = (data.status as string) ?? "idle";
   const outputText = (data.outputText as string) ?? "";
   const localPrompt = (data.localPrompt as string) ?? "";
-  const model = (data.model as string) ?? "claude-sonnet-4-6";
+  const model = (data.model as string) ?? DEFAULT_TEXT_MODEL_ID;
 
   const [viewMode, setViewMode] = useState<"input" | "output">("input");
   const [loading, setLoading] = useState(false);
@@ -169,16 +168,10 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
           if (payload === "[DONE]") break outer;
           try {
             const parsed = JSON.parse(payload);
-            // Anthropic streaming: content_block_delta with text_delta type
-            if (
-              parsed.type === "content_block_delta" &&
-              parsed.delta?.type === "text_delta"
-            ) {
-              const delta = parsed.delta.text ?? "";
-              if (delta) {
-                accumulated += delta;
-                updateNodeData(id, { outputText: accumulated });
-              }
+            const delta = extractAssistantTextDelta(parsed);
+            if (delta) {
+              accumulated += delta;
+              updateNodeData(id, { outputText: accumulated });
             }
           } catch { /* skip malformed SSE lines */ }
         }

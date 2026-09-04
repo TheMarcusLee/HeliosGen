@@ -3,18 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { getKieToken } from "@/lib/getKieToken";
 import { getAzureToken } from "@/lib/getAzureKey";
+import { DEFAULT_TEXT_MODEL_ID, getTextModel } from "@/lib/models";
 
 interface Message {
   role: "user" | "assistant" | "system";
   content: string;
 }
-
-// Models that use OpenAI-compatible chat/completions endpoint
-const OPENAI_COMPAT_ENDPOINTS: Record<string, string> = {
-  "gemini-3-flash":  "https://api.kie.ai/gemini-3-flash/v1/chat/completions",
-  "gemini-3.1-pro":  "https://api.kie.ai/gemini-3.1-pro/v1/chat/completions",
-  "gpt-5-2":         "https://api.kie.ai/gpt-5-2/v1/chat/completions",
-};
 
 const AZURE_API_VERSION = "2024-04-01-preview";
 
@@ -29,7 +23,11 @@ export async function POST(req: NextRequest) {
     azureModelName?: string;
   };
 
-  const model = body.model ?? "claude-sonnet-4-6";
+  const model = body.model ?? DEFAULT_TEXT_MODEL_ID;
+  const modelConfig = getTextModel(model);
+  if (!modelConfig) {
+    return Response.json({ error: `Unknown text model: ${model}` }, { status: 400 });
+  }
 
   let messages: Message[];
 
@@ -121,10 +119,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const openaiEndpoint = OPENAI_COMPAT_ENDPOINTS[model];
-
-  const upstream = openaiEndpoint
-    ? await fetch(openaiEndpoint, {
+  let upstream: Response;
+  if (modelConfig.transport === "chat-completions") {
+    upstream = await fetch(modelConfig.endpoint!, {
         method: "POST",
         cache: "no-store",
         headers: {
@@ -132,14 +129,34 @@ export async function POST(req: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          model,
           messages: messages.map(m => ({
             role: m.role,
             content: [{ type: "text", text: m.content }],
           })),
           stream: true,
         }),
-      })
-    : await fetch("https://api.kie.ai/claude/v1/messages", {
+      });
+  } else if (modelConfig.transport === "responses") {
+    upstream = await fetch(modelConfig.endpoint!, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        stream: true,
+        input: messages.map((message) => ({
+          role: message.role === "system" ? "developer" : message.role,
+          content: [{ type: "input_text", text: message.content }],
+        })),
+        reasoning: { effort: "high" },
+      }),
+    });
+  } else {
+    upstream = await fetch("https://api.kie.ai/claude/v1/messages", {
         method: "POST",
         cache: "no-store",
         headers: {
@@ -151,9 +168,10 @@ export async function POST(req: NextRequest) {
           messages,
           stream: true,
           thinkingFlag: true,
-          max_tokens: 4096,
+          max_tokens: 8192,
         }),
       });
+  }
 
   if (!upstream.ok) {
     const errText = await upstream.text();

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { getToken } from "@/lib/galleryUtils";
 import { MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
+import { extractAssistantTextDelta } from "@/lib/assistantStream";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { useWorkflowStore } from "@/lib/store";
@@ -145,9 +146,7 @@ export function QuickAssist() {
           if (json === "[DONE]") continue;
           try {
             const parsed = JSON.parse(json);
-            const claudeChunk = parsed.type === "content_block_delta" ? parsed.delta?.text : null;
-            const openaiChunk = parsed.choices?.[0]?.delta?.content ?? null;
-            const chunk = claudeChunk ?? openaiChunk ?? null;
+            const chunk = extractAssistantTextDelta(parsed);
             if (chunk) {
               accumulated += chunk;
               flushSync(() => {

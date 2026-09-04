@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { flushSync } from "react-dom";
+import { extractAssistantTextDelta } from "@/lib/assistantStream";
 import { getToken } from "./galleryUtils";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 import { useChatSessionStore, type StoredMessage } from "./chatSessionStore";
@@ -77,10 +78,7 @@ export const useChatStreamingStore = create<ChatStreamingState>()((set, get) => 
             if (json === "[DONE]") continue;
             try {
               const parsed = JSON.parse(json);
-              const chunk =
-                (parsed.type === "content_block_delta" ? parsed.delta?.text : null) ??
-                parsed.choices?.[0]?.delta?.content ??
-                null;
+              const chunk = extractAssistantTextDelta(parsed);
               if (chunk) {
                 accumulated += chunk;
                 flushSync(() => {

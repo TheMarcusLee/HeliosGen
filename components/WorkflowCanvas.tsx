@@ -20,6 +20,8 @@ import "@xyflow/react/dist/style.css";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { requestWorkflowSync } from "@/lib/workflowSyncBus";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { DEFAULT_TEXT_MODEL_ID } from "@/lib/models";
+import { extractAssistantTextDelta } from "@/lib/assistantStream";
 import CuttableEdge from "@/components/edges/CuttableEdge";
 import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
@@ -1265,7 +1267,7 @@ export default function WorkflowCanvas() {
             headers: authHeaders(token),
             body: JSON.stringify({
               prompt,
-              model: node.data.model ?? "claude-sonnet-4-6",
+              model: node.data.model ?? DEFAULT_TEXT_MODEL_ID,
               systemPrompt: "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind.",
             }),
           });
@@ -1286,10 +1288,8 @@ export default function WorkflowCanvas() {
               if (payload === "[DONE]") break outer;
               try {
                 const parsed = JSON.parse(payload);
-                if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
-                  const delta = parsed.delta.text ?? "";
-                  if (delta) { accumulated += delta; updateNodeData(nodeId, { outputText: accumulated }); }
-                }
+                const delta = extractAssistantTextDelta(parsed);
+                if (delta) { accumulated += delta; updateNodeData(nodeId, { outputText: accumulated }); }
               } catch { /* skip */ }
             }
           }

@@ -1,0 +1,42 @@
+<evaluation>
+  <qa_pair>
+    <question>How many workflows are currently stored in HeliosGen?</question>
+    <answer>8</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Which imported workflow has exactly six image input nodes?</question>
+    <answer>Space 64 (import-mtamud8ng376)</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>How many nodes and edges are in the workflow named Reaction?</question>
+    <answer>8 nodes and 8 edges</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Which imported workflow has a video input node, and how many nodes does that workflow have in total?</question>
+    <answer>Space 65 (import-mte3dmitc1c5), with 5 nodes</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>How many prompt nodes and video generator nodes are in workflow mtmf7gily8p1?</question>
+    <answer>8 prompt nodes and 4 video generator nodes</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Which two workflows each contain 11 nodes, 16 edges, and 8 generate nodes?</question>
+    <answer>Space 53 (import-mrkdrq75kpc0) and UGC Template (mtloo84v772r) (import-mtloo84v772r)</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>How many text models are configured for each provider?</question>
+    <answer>Anthropic 5, OpenAI 6, Google 6, Azure 1</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Is Claude Opus 5 available in the text model catalog, and is Claude Opus 4.8 present?</question>
+    <answer>Claude Opus 5 is available; Claude Opus 4.8 is not present</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>How many image models and video models are currently configured?</question>
+    <answer>9 image models and 17 video models</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>List the three GPT 5.6 variants configured in HeliosGen.</question>
+    <answer>GPT 5.6 Sol, GPT 5.6 Terra, and GPT 5.6 Luna</answer>
+  </qa_pair>
+</evaluation>
