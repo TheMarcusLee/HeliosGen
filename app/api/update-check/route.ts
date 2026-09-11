@@ -12,11 +12,11 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const REPO = "SegFault42/WorkflowAI";
+const REPO = "TheMarcusLee/HeliosGen";
 const RELEASES_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h — GitHub unauthenticated limit is 60/h
-const CURRENT_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "0.0.0";
+const CURRENT_VERSION = process.env.NEXT_PUBLIC_APP_VERSION?.trim();
 const FORCE = process.env.NEXT_PUBLIC_UPDATE_CHECK_FORCE === "1";
 
 type UpdatePayload = {
@@ -47,10 +47,15 @@ function isNewer(candidate: string, base: string): boolean {
 }
 
 async function check(): Promise<UpdatePayload> {
+  const currentVersion = CURRENT_VERSION || "development";
   const notCurrent: UpdatePayload = {
     updateAvailable: false,
-    currentVersion: CURRENT_VERSION,
+    currentVersion,
   };
+
+  // A plain `pnpm dev` session has no packaged application version. Treating
+  // it as 0.0.0 made every published release look like an available update.
+  if (!CURRENT_VERSION && !FORCE) return notCurrent;
 
   let release: {
     tag_name?: string;
@@ -65,7 +70,7 @@ async function check(): Promise<UpdatePayload> {
     const res = await fetch(RELEASES_API, {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": `HeliosGen-Desktop/${CURRENT_VERSION}`,
+        "User-Agent": `HeliosGen-Desktop/${currentVersion}`,
       },
       signal: AbortSignal.timeout(10_000),
     });
@@ -74,7 +79,7 @@ async function check(): Promise<UpdatePayload> {
       if (FORCE) {
         return {
           updateAvailable: true,
-          currentVersion: CURRENT_VERSION,
+          currentVersion,
           latestVersion: "v0.0.0-preview",
           name: "Preview (forced)",
           notes:
@@ -95,11 +100,11 @@ async function check(): Promise<UpdatePayload> {
   const tag = release.tag_name?.trim();
   if (!tag || release.draft) return notCurrent;
   if (!FORCE && release.prerelease) return notCurrent;
-  if (!FORCE && !isNewer(tag, CURRENT_VERSION)) return notCurrent;
+  if (!FORCE && !isNewer(tag, currentVersion)) return notCurrent;
 
   return {
     updateAvailable: true,
-    currentVersion: CURRENT_VERSION,
+    currentVersion,
     latestVersion: tag,
     name: release.name?.trim() || tag,
     notes: release.body?.trim() || "",
