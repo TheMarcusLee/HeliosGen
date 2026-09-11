@@ -16,7 +16,7 @@ export class HeliosClient {
   readonly baseUrl: string;
   private writeTail: Promise<void> = Promise.resolve();
 
-  constructor(baseUrl = process.env.HELIOSGEN_BASE_URL ?? "http://127.0.0.1:3000") {
+  constructor(baseUrl = process.env.UGCGEN_BASE_URL ?? process.env.HELIOSGEN_BASE_URL ?? "http://127.0.0.1:3000") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
@@ -25,14 +25,14 @@ export class HeliosClient {
     try {
       response = await fetch(`${this.baseUrl}${path}`, init);
     } catch (error) {
-      throw new Error(`Cannot reach HeliosGen at ${this.baseUrl}. Start the app first. ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Cannot reach UGC{Gen} at ${this.baseUrl}. Start the app first. ${error instanceof Error ? error.message : String(error)}`);
     }
     const text = await response.text();
     let body: unknown = null;
     try { body = text ? JSON.parse(text) : null; } catch { body = text; }
     if (!response.ok) {
       const detail = typeof body === "object" && body && "error" in body ? String((body as JsonObject).error) : text;
-      throw new Error(`HeliosGen ${response.status}: ${detail || response.statusText}`);
+      throw new Error(`UGC{Gen} ${response.status}: ${detail || response.statusText}`);
     }
     return body as T;
   }
@@ -94,7 +94,7 @@ export class HeliosClient {
     });
     if (!response.ok || !response.body) {
       const text = await response.text();
-      throw new Error(`HeliosGen ${response.status}: ${text || response.statusText}`);
+      throw new Error(`UGC{Gen} ${response.status}: ${text || response.statusText}`);
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

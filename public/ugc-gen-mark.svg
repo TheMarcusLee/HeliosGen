@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">UGC{Gen} mark</title>
+  <desc id="description">A teal braced G on a dark production-grid tile.</desc>
+  <defs>
+    <linearGradient id="surface" x1="144" y1="96" x2="880" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#151C27"/>
+      <stop offset="1" stop-color="#080B10"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="244" y1="180" x2="780" y2="844" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#85F4E0"/>
+      <stop offset="0.52" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#169A8A"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feComposite in="blur" in2="SourceGraphic" operator="out" result="outer"/>
+      <feColorMatrix in="outer" values="0 0 0 0 0.176 0 0 0 0 0.831 0 0 0 0 0.749 0 0 0 .34 0"/>
+      <feBlend in="SourceGraphic"/>
+    </filter>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0H0V64" fill="none" stroke="#D9FFF8" stroke-opacity=".035" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="url(#surface)"/>
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="url(#grid)"/>
+  <rect x="48" y="48" width="928" height="928" rx="204" fill="none" stroke="#2DD4BF" stroke-opacity=".18" stroke-width="8"/>
+  <g fill="none" stroke="url(#accent)" stroke-linecap="square" stroke-linejoin="round" filter="url(#glow)">
+    <path d="M352 232H284c-42 0-76 34-76 76v128c0 42-28 76-68 76 40 0 68 34 68 76v128c0 42 34 76 76 76h68" stroke-width="64"/>
+    <path d="M672 232h68c42 0 76 34 76 76v128c0 42 28 76 68 76-40 0-68 34-68 76v128c0 42-34 76-76 76h-68" stroke-width="64"/>
+  </g>
+  <path d="M654 420c-34-48-84-72-148-72-105 0-174 68-174 166s69 166 176 166c62 0 113-19 154-56V508H512v72h66v24c-20 12-42 18-67 18-59 0-98-43-98-108 0-66 38-108 96-108 37 0 65 14 84 42l61-28Z" fill="#F4F7FB"/>
+  <rect x="310" y="846" width="404" height="14" rx="7" fill="#2DD4BF" fill-opacity=".74"/>
+</svg>

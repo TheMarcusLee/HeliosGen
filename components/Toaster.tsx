@@ -1,8 +1,8 @@
 "use client";
 import { useEffect } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useWorkflowStore, Toast } from "@/lib/store";
+import { BrandIcon } from "@/components/Brand";
 
 const COLORS: Record<Toast["type"], { bg: string; border: string; icon: string }> = {
   error:   { bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.3)",  icon: "rgba(239,68,68,0.9)"  },
@@ -81,7 +81,7 @@ function RichToastItem({ toast, onDismiss, onClick }: { toast: Toast; onDismiss:
         display: "flex", alignItems: "center", justifyContent: "center",
         flexShrink: 0, overflow: "hidden",
       }}>
-        <Image src="/HG.svg" alt="HeliosGen" width={32} height={32} />
+        <BrandIcon className="size-8" />
       </div>
 
       {/* Text */}

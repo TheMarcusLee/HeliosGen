@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="public/HG.svg" alt="HeliosGen" width="72" />
+  <img src="public/ugc-gen-mark.svg" alt="UGC{Gen}" width="72" />
 </p>
+
+<h1 align="center">UGC{Gen}</h1>
 
 <p align="center">
   <strong>Local-first AI production workflows for images, video, text, and reusable identities.</strong><br />
   Build, run, inspect, and automate generation pipelines on a visual canvas.
 </p>
 
-# HeliosGen
-
-HeliosGen is a local-first desktop and browser application for building production-grade AI media workflows. This fork extends the original HeliosGen canvas with live provider catalogs, identity dossiers, reusable production templates, cost and provenance tracking, community workflow imports, ComfyUI interoperability, and a writable MCP server for agent control.
+UGC{Gen} is a local-first desktop and browser application for building production-grade AI media workflows. This product extends the original HeliosGen canvas with live provider catalogs, identity dossiers, reusable production templates, cost and provenance tracking, community workflow imports, ComfyUI interoperability, and a writable MCP server for agent control.
 
 The application, workflow database, settings, and generated-media library run locally. Generations still send the prompt and any required reference media to the provider you explicitly select, such as Kie.ai, WaveSpeed, Azure Foundry, or ComfyUI Cloud. Local ComfyUI and Codex CLI routes can remain on the machine, subject to their own configuration.
 
@@ -25,7 +25,7 @@ pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). If an older HeliosGen process is already using port 3000, stop it with `Ctrl+C` in its terminal and run `pnpm dev` again from this directory.
+Open [http://localhost:3000](http://localhost:3000). If an older UGC{Gen} process is already using port 3000, stop it with `Ctrl+C` in its terminal and run `pnpm dev` again from this directory.
 
 API keys are normally added inside **Settings → API Keys**. They are stored in the local SQLite database and are never returned by the MCP server. `.env.local` is optional; see [`.env.example`](.env.example) for supported development fallbacks.
 
@@ -91,7 +91,7 @@ Built-in CloneMe-style templates turn identities into repeatable production pipe
 - Persistent queue states: idle, analysis, generation, completed, paused, and error
 - Pause, resume, retry, and explicit per-item status tracking
 
-Workflow metadata controls SFW/adult routing explicitly and auditably. HeliosGen does not infer adult capability from a model name. Provider rules still apply, and server-side validation rejects sexual content involving minors and non-consensual intimate imagery.
+Workflow metadata controls SFW/adult routing explicitly and auditably. UGC{Gen} does not infer adult capability from a model name. Provider rules still apply, and server-side validation rejects sexual content involving minors and non-consensual intimate imagery.
 
 ### Workflow portability and interoperability
 
@@ -107,7 +107,7 @@ See [the implemented provider and workflow roadmap](docs/node-banana-review.md) 
 
 The repository includes a local stdio MCP server with 37 read/write tools. It can inspect and mutate complete workflow graphs, manage identities and their versions, create production templates and batches, set explicit content routes, discover and run models, wait for jobs, import community workflows, execute ComfyUI graphs, and audit provider activity.
 
-Keep HeliosGen running, then build the MCP server:
+Keep UGC{Gen} running, then build the MCP server:
 
 ```bash
 pnpm mcp:build
@@ -120,12 +120,12 @@ Example MCP client configuration:
   "command": "node",
   "args": ["/absolute/path/to/HeliosGen/mcp/dist/index.js"],
   "env": {
-    "HELIOSGEN_BASE_URL": "http://127.0.0.1:3000"
+    "UGCGEN_BASE_URL": "http://127.0.0.1:3000"
   }
 }
 ```
 
-The default base URL is `http://127.0.0.1:3000`. Set `HELIOSGEN_BASE_URL` when the app uses another port. See [the MCP guide](mcp/README.md) for the available tool groups and the configuration already used on this machine.
+The default base URL is `http://127.0.0.1:3000`. Set `UGCGEN_BASE_URL` when the app uses another port. The legacy `HELIOSGEN_BASE_URL` variable remains supported for existing MCP configurations. See [the MCP guide](mcp/README.md) for the available tool groups and the configuration already used on this machine.
 
 ## Desktop app
 
@@ -212,7 +212,7 @@ Integrate useful upstream work through a dedicated branch or pull request, then 
 
 ## Project lineage
 
-This project is a maintained fork of [SegFault42/HeliosGen](https://github.com/SegFault42/HeliosGen). The original project provided the visual workflow foundation; this fork carries the provider expansion, identity production layer, workflow interoperability, cost/provenance controls, and writable agent interface described above.
+UGC{Gen} is a maintained fork of [SegFault42/HeliosGen](https://github.com/SegFault42/HeliosGen). The original project provided the visual workflow foundation; this fork carries the provider expansion, identity production layer, workflow interoperability, cost/provenance controls, and writable agent interface described above.
 
 ## Licensing
 

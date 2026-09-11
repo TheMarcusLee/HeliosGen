@@ -9,6 +9,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cookies } from "next/headers";
 import { DragDropGuard } from "@/components/DragDropGuard";
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/brand";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,8 +28,8 @@ const doto = Doto({
 });
 
 export const metadata: Metadata = {
-  title: "HeliosGen",
-  description: "Build AI image & video generation workflows visually",
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
 };
 
 export const viewport: Viewport = {

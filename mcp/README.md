@@ -1,17 +1,17 @@
-# HeliosGen MCP server
+# UGC{Gen} MCP server
 
-This local stdio server lets an MCP-capable agent inspect and operate the running HeliosGen app through 37 read/write tools. It includes workflow CRUD, node and edge editing, identity/version management, CloneMe production templates and batch plans, explicit content routing, model discovery, text generation, image/video job creation, provider ledger auditing, community imports, ComfyUI execution, WaveSpeed catalog and generation tools, and job polling.
+This local stdio server lets an MCP-capable agent inspect and operate the running UGC{Gen} app through 37 read/write tools. It includes workflow CRUD, node and edge editing, identity/version management, CloneMe production templates and batch plans, explicit content routing, model discovery, text generation, image/video job creation, provider ledger auditing, community imports, ComfyUI execution, WaveSpeed catalog and generation tools, and job polling.
 
 ## Run
 
-Start HeliosGen first, then build and run the server:
+Start UGC{Gen} first, then build and run the server:
 
 ```sh
 pnpm mcp:build
 pnpm mcp:start
 ```
 
-The server targets `http://127.0.0.1:3000` by default. Set `HELIOSGEN_BASE_URL` if the app is listening elsewhere.
+The server targets `http://127.0.0.1:3000` by default. Set `UGCGEN_BASE_URL` if the app is listening elsewhere. `HELIOSGEN_BASE_URL` remains available as a compatibility fallback.
 
 Use this command in an MCP client configuration after building:
 
@@ -20,12 +20,12 @@ Use this command in an MCP client configuration after building:
   "command": "node",
     "args": ["/absolute/path/to/HeliosGen/mcp/dist/index.js"],
   "env": {
-    "HELIOSGEN_BASE_URL": "http://127.0.0.1:3000"
+    "UGCGEN_BASE_URL": "http://127.0.0.1:3000"
   }
 }
 ```
 
-On the primary development machine it is registered globally in Codex as `heliosgen`.
+Existing MCP registrations and tool names keep the `heliosgen` / `helios_*` identifiers for compatibility; the server and user-facing descriptions identify the product as UGC{Gen}.
 
 WaveSpeed tools:
 
@@ -43,4 +43,4 @@ Identity production tools:
 - `helios_list_identity_batches`, `helios_get_identity_batch`, `helios_create_identity_batch`, and `helios_update_identity_batch` plan and track persistent concurrent batches.
 - Image, video, WaveSpeed, and ledger tools accept or expose `identityAssetId` for end-to-end provenance.
 
-Destructive workflow tools are marked with MCP `destructiveHint`; compatible clients can require confirmation. Provider API keys stay in HeliosGen's local SQLite settings and are never returned by the MCP server.
+Destructive workflow tools are marked with MCP `destructiveHint`; compatible clients can require confirmation. Provider API keys stay in UGC{Gen}'s local SQLite settings and are never returned by the MCP server.

@@ -1,6 +1,6 @@
 //! Sidecar shim for the bundled Next.js server.
 //!
-//! Tauri puts `externalBin` sidecars in `HeliosGen.app/Contents/MacOS/`. macOS
+//! Tauri puts `externalBin` sidecars in `UGC{Gen}.app/Contents/MacOS/`. macOS
 //! treats anything it launches from a bundle's `MacOS/` dir as a GUI app and
 //! gives it its own Dock tile (tauri-apps/tauri#14014) — so a bare `node`
 //! sidecar shows a second, generic "node" icon beside the app.

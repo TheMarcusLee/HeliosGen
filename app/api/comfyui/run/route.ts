@@ -40,7 +40,7 @@ function isPrivateAddress(address: string): boolean {
 async function safeMediaSourceUrl(raw: string, requestOrigin: string): Promise<string> {
   const source = new URL(raw, requestOrigin);
   if (!(source.protocol === "http:" || source.protocol === "https:")) throw new Error("Connected ComfyUI media must use HTTP or HTTPS.");
-  // Relative HeliosGen media is intentionally served by this app. Arbitrary
+  // Relative UGC{Gen} media is intentionally served by this app. Arbitrary
   // absolute URLs must resolve only to public addresses to avoid SSRF.
   if (raw.startsWith("/") && source.origin === requestOrigin) return source.toString();
   if (["localhost", "localhost.localdomain"].includes(source.hostname.toLowerCase())) throw new Error("External ComfyUI media URLs cannot target localhost.");

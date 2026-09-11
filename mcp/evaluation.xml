@@ -1,6 +1,6 @@
 <evaluation>
   <qa_pair>
-    <question>Confirm that the local HeliosGen server is reachable, inspect every built-in text provider, and exclude the automatic Azure router. How many explicitly selectable text models remain? Answer with one integer.</question>
+    <question>Confirm that the local UGC{Gen} server is reachable, inspect every built-in text provider, and exclude the automatic Azure router. How many explicitly selectable text models remain? Answer with one integer.</question>
     <answer>17</answer>
   </qa_pair>
   <qa_pair>

@@ -46,7 +46,7 @@ function WorkflowPolicyDialogBody({ open, onOpenChange, initial }: Props & { ini
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent><SelectGroup><SelectItem value="sfw">SFW / general</SelectItem><SelectItem value="adult">Adult</SelectItem></SelectGroup></SelectContent>
             </Select>
-            <FieldDescription>HeliosGen never guesses adult capability from a model name.</FieldDescription>
+            <FieldDescription>UGC{"{Gen}"} never guesses adult capability from a model name.</FieldDescription>
           </Field>
           <Field>
             <FieldLabel>{rating === "adult" ? "Adult" : "SFW"} provider route</FieldLabel>
@@ -57,7 +57,7 @@ function WorkflowPolicyDialogBody({ open, onOpenChange, initial }: Props & { ini
           </Field>
           <Field data-invalid={routeMissing || undefined}>
             <FieldLabel>Exact model ID</FieldLabel>
-            <Input value={route?.modelId ?? ""} aria-invalid={routeMissing || undefined} onChange={(event) => updateRoute({ modelId: event.target.value })} placeholder="provider/model or HeliosGen model ID" />
+            <Input value={route?.modelId ?? ""} aria-invalid={routeMissing || undefined} onChange={(event) => updateRoute({ modelId: event.target.value })} placeholder="provider/model or UGC{Gen} model ID" />
             <FieldDescription>Generation is locked to this exact provider/model pair for auditable routing.</FieldDescription>
           </Field>
           {rating === "adult" && <>

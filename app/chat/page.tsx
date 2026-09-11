@@ -10,17 +10,11 @@ import { extractAssistantTextDelta } from "@/lib/assistantStream";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { Send, ChevronUp, Copy, Check } from "lucide-react";
 import { motion } from "motion/react";
-import Image from "next/image";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 import TypewriterHeading from "@/components/ui/TypewriterHeading";
 import { useWorkflowStore } from "@/lib/store";
 import { loadAzureBaseUrl, loadAzureTextDeployment, loadAzureTextModelName } from "@/components/SettingsModal";
-
-// ── Logo ──────────────────────────────────────────────────────────────────────
-
-function LogoIcon({ size = 40 }: { size?: number }) {
-  return <Image src="/HG.svg" alt="Logo" width={size} height={size} />;
-}
+import { BrandIcon } from "@/components/Brand";
 
 // ── Model picker ──────────────────────────────────────────────────────────────
 
@@ -218,7 +212,7 @@ function LandingView({
       <DotCanvasBackground />
       {/* Logo */}
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
-      <LogoIcon size={48} />
+      <BrandIcon className="size-12 text-sm" />
 
       {/* Title */}
       <TypewriterHeading text="I'm here to help you make better prompts." onDone={() => setHeadingDone(true)} />
@@ -441,7 +435,7 @@ function ChatWindow({
   if (messages.length === 0 && !isStreaming) {
     return (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 24px 80px", minWidth: 0 }}>
-        <LogoIcon size={48} />
+        <BrandIcon className="size-12 text-sm" />
         <TypewriterHeading text="I'm here to help you make better prompts." />
         <div style={{ width: "100%", maxWidth: "680px" }}>
           <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "18px", padding: "10px 10px 10px 20px", transition: "border-color 150ms" }}>

@@ -6,12 +6,12 @@ Audit commits: node-banana `5c0e0ae6150f29a6de819f8d6f1dedba15151f7c`; CloneMe S
 
 ## Adopted now
 
-- **Provider-scoped API boundary.** WaveSpeed submission, discovery, status parsing, and polling live outside the UI and expose one normalized HeliosGen job contract.
-- **Dynamic model discovery.** HeliosGen reads WaveSpeed's live `/api/v3/models` catalog instead of shipping a stale model list. Model request schemas remain available to MCP clients.
+- **Provider-scoped API boundary.** WaveSpeed submission, discovery, status parsing, and polling live outside the UI and expose one normalized UGC{Gen} job contract.
+- **Dynamic model discovery.** UGC{Gen} reads WaveSpeed's live `/api/v3/models` catalog instead of shipping a stale model list. Model request schemas remain available to MCP clients.
 - **Browsable WaveSpeed settings catalog.** Image and video panels now search and paginate the authenticated live catalog, filter by generated media type, and show input counts and base pricing.
 - **Normalized polling.** WaveSpeed jobs use the existing `pending` / `done` / `error` contract, adaptive 2–10 second polling, all documented terminal states, restart recovery, and local media mirroring.
 - **Agent-first model execution.** The MCP can search models, inspect a model's schema, start a billable generation, and wait for the result.
-- **Portable workflow media.** HeliosGen exports a self-contained zip with content-addressed media and restores those assets during import.
+- **Portable workflow media.** UGC{Gen} exports a self-contained zip with content-addressed media and restores those assets during import.
 
 ## Where the shared node-banana workflows actually live
 
@@ -31,7 +31,7 @@ Catalog observed on 2026-09-04:
 | Fashion I2V - Marco | @MarcoBorin | 60 | 198.3 MB | Kie |
 | Apply Material - Ecom | @ReflctWillie | 38 | 86 KB | Fal, Gemini |
 
-The large files embed reference media. Importing them directly would duplicate hundreds of megabytes and still would not execute because Node Banana node and handle names differ from HeliosGen. The correct integration is a catalog browser plus a versioned converter that externalizes assets and reports unsupported nodes before committing an import.
+The large files embed reference media. Importing them directly would duplicate hundreds of megabytes and still would not execute because Node Banana node and handle names differ from UGC{Gen}. The correct integration is a catalog browser plus a versioned converter that externalizes assets and reports unsupported nodes before committing an import.
 
 The small Seedance example confirms the important conversion map:
 
@@ -40,11 +40,11 @@ The small Seedance example confirms the important conversion map:
 - `generateVideo` → `videoGeneratorNode`
 - `llmGenerate` → `assistantNode`
 - `promptConstructor` has no native equivalent yet and needs a template/variable node
-- Node Banana's indexed handles (`text-0`, `image-2`) need semantic HeliosGen handle mapping
+- Node Banana's indexed handles (`text-0`, `image-2`) need semantic UGC{Gen} handle mapping
 
 ## CloneMe Studio production pipeline — implemented
 
-CloneMe Studio is not a node-workflow library, but its production pipeline is now expressed as native, reusable HeliosGen capabilities:
+CloneMe Studio is not a node-workflow library, but its production pipeline is now expressed as native, reusable UGC{Gen} capabilities:
 
 1. ✅ **Identity layer and matrix input.** The dedicated Identities library and Identity Matrix canvas node save multiple face/body references, a trigger word, reusable base prompts, content class, provider/model preference, and aspect ratio as one portable identity asset. Every edit creates an immutable version; the library exposes linked workflows and provider activity; workflows retain their embedded snapshot even if the saved asset later changes.
 2. ✅ **Scene replacement workflow.** The dashboard template connects a target scene to Opus 5 vision analysis, combines that result with the selected identity, sends the identity-aware prompt and references to generation, and records the gallery/ledger provenance.
@@ -59,7 +59,7 @@ CloneMe Studio is not a node-workflow library, but its production pipeline is no
 2. ✅ **Per-run cost capture.** SQLite records provider attempts across WaveSpeed, Kie, Azure, Codex, and ComfyUI, including quoted/estimated spend, final state, workflow/node provenance, and fallback skips. Settings includes aggregate and recent usage views.
 3. ✅ **Ordered fallback models.** Nodes accept compatible ordered fallbacks and a maximum estimated spend. Inputs are semantically remapped between schemas, incompatible attempts are skipped with audit entries, and processing continues through the ordered list.
 4. ✅ **Community catalog and converter.** The dashboard browses the hosted Node Banana library and a versioned converter maps supported nodes and semantic handles, while preserving unsupported content as notes with warnings.
-5. ✅ **ComfyUI workflow nodes.** API-format workflows expose typed primitive/media handles and execute against a configured local ComfyUI server or Comfy Cloud, with outputs copied to HeliosGen storage.
+5. ✅ **ComfyUI workflow nodes.** API-format workflows expose typed primitive/media handles and execute against a configured local ComfyUI server or Comfy Cloud, with outputs copied to UGC{Gen} storage.
 6. ✅ **Portable workflow media.** Export archives externalize media and imports restore it, keeping workflows self-contained across machines.
 7. ✅ **Annotation node.** Rectangle, ellipse, arrow, freehand, and text overlays remain non-destructive until the user exports a flattened PNG.
 8. ✅ **Graph integrity and history hardening.** Workflow writes and imports remove orphan/self/duplicate edges, group membership is repaired, cycles fail safely before execution, and undo snapshots omit large blob URLs and volatile job state.
@@ -68,7 +68,7 @@ CloneMe Studio is not a node-workflow library, but its production pipeline is no
 ## Ideas not to copy directly
 
 - Do not adopt a fixed one-second WaveSpeed polling loop; current WaveSpeed guidance requires at least two seconds and recommends backing off for long jobs.
-- Do not replace HeliosGen's SQLite and file-backed job recovery with browser-only state.
+- Do not replace UGC{Gen}'s SQLite and file-backed job recovery with browser-only state.
 - Do not couple provider discovery to React components. The same catalog and schema layer must serve the canvas, gallery, HTTP routes, and MCP.
 
 ## Delivered implementation order

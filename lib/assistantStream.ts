@@ -4,7 +4,7 @@ function record(value: unknown): UnknownRecord | undefined {
   return value !== null && typeof value === "object" ? value as UnknownRecord : undefined;
 }
 
-/** Extract one visible text delta from any assistant transport used by HeliosGen. */
+/** Extract one visible text delta from any assistant transport used by UGC{Gen}. */
 export function extractAssistantTextDelta(event: unknown): string | null {
   const root = record(event);
   if (!root) return null;

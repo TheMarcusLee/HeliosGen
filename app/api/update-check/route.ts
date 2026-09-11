@@ -70,7 +70,7 @@ async function check(): Promise<UpdatePayload> {
     const res = await fetch(RELEASES_API, {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": `HeliosGen-Desktop/${currentVersion}`,
+        "User-Agent": `UGCGen-Desktop/${currentVersion}`,
       },
       signal: AbortSignal.timeout(10_000),
     });

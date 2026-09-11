@@ -40,12 +40,12 @@ function summary(workflow: Workflow): JsonObject {
 }
 
 function createServer(): McpServer {
-  const server = new McpServer({ name: "heliosgen-mcp-server", version: "0.3.0" });
+  const server = new McpServer({ name: "ugc-gen-mcp-server", version: "0.3.0" });
   const client = new HeliosClient();
 
   server.registerTool("helios_get_status", {
-    title: "Get HeliosGen status",
-    description: "Check whether the local HeliosGen app is reachable and report workflow, model, and Kie key status.",
+    title: "Get UGC{Gen} status",
+    description: "Check whether the local UGC{Gen} app is reachable and report workflow, model, and Kie key status.",
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async () => {
@@ -62,7 +62,7 @@ function createServer(): McpServer {
   });
 
   server.registerTool("helios_list_models", {
-    title: "List HeliosGen models",
+    title: "List UGC{Gen} models",
     description: "List the configured text, image, or video models and their capabilities.",
     inputSchema: z.object({ type: z.enum(["text", "image", "video"]).optional().describe("Omit to return every model family.") }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -73,7 +73,7 @@ function createServer(): McpServer {
 
   server.registerTool("helios_list_workflows", {
     title: "List workflows",
-    description: "Search and paginate local HeliosGen workflows, returning compact summaries.",
+    description: "Search and paginate local UGC{Gen} workflows, returning compact summaries.",
     inputSchema: z.object({ query: z.string().optional(), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(100).default(25) }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ query, offset, limit }) => {
@@ -102,7 +102,7 @@ function createServer(): McpServer {
 
   server.registerTool("helios_create_workflow", {
     title: "Create workflow",
-    description: "Create a new local HeliosGen workflow, optionally initialized with a graph.",
+    description: "Create a new local UGC{Gen} workflow, optionally initialized with a graph.",
     inputSchema: z.object({ name: z.string().min(1), workflowId: z.string().min(1).optional().describe("Optional stable ID; fails if it already exists."), nodes: z.array(jsonObject).default([]), edges: z.array(jsonObject).default([]), viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() }).optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ name, workflowId, nodes, edges, viewport }) => {
@@ -114,7 +114,7 @@ function createServer(): McpServer {
 
   server.registerTool("helios_rename_workflow", {
     title: "Rename workflow",
-    description: "Rename an existing HeliosGen workflow without changing its graph.",
+    description: "Rename an existing UGC{Gen} workflow without changing its graph.",
     inputSchema: z.object({ workflowId: z.string().min(1), name: z.string().min(1) }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ workflowId, name }) => {
@@ -144,7 +144,7 @@ function createServer(): McpServer {
 
   server.registerTool("helios_add_node", {
     title: "Add workflow node",
-    description: "Add a React Flow node to a workflow. Provide the HeliosGen node type, position, and node data.",
+    description: "Add a React Flow node to a workflow. Provide the UGC{Gen} node type, position, and node data.",
     inputSchema: z.object({ workflowId: z.string().min(1), nodeType: z.string().min(1), position, data: jsonObject, nodeId: z.string().min(1).optional(), width: z.number().positive().optional(), height: z.number().positive().optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ workflowId, nodeType, position: nodePosition, data, nodeId, width, height }) => {
@@ -216,21 +216,21 @@ function createServer(): McpServer {
 
   server.registerTool("helios_generate_text", {
     title: "Generate text",
-    description: "Run a HeliosGen text model and return the complete streamed response.",
+    description: "Run a UGC{Gen} text model and return the complete streamed response.",
     inputSchema: z.object({ prompt: z.string().min(1), model: z.string().optional(), systemPrompt: z.string().optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result({ model: input.model ?? "claude-sonnet-4-6", text: await client.generateText(input) }));
 
   server.registerTool("helios_generate_image", {
     title: "Start image generation",
-    description: "Start an image generation or edit job with a configured HeliosGen image model, optionally attributed to an identity and workflow.",
+    description: "Start an image generation or edit job with a configured UGC{Gen} image model, optionally attributed to an identity and workflow.",
     inputSchema: z.object({ prompt: z.string().min(1), model: z.string().default("nano-banana-2"), imageUrls: z.array(z.string().url()).default([]), aspectRatio: z.string().default("1:1"), quality: z.string().default("1k"), workflowId: z.string().max(240).optional(), nodeId: z.string().max(240).optional(), identityAssetId: z.string().max(240).optional(), workflowMetadata: workflowMetadata.optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result(await client.json<JsonObject>("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
 
   server.registerTool("helios_generate_video", {
     title: "Start video generation",
-    description: "Start a text-, image-, or reference-to-video job with a configured HeliosGen video model, optionally attributed to an identity and workflow.",
+    description: "Start a text-, image-, or reference-to-video job with a configured UGC{Gen} video model, optionally attributed to an identity and workflow.",
     inputSchema: z.object({ prompt: z.string().default(""), videoModel: z.string().default("kling-3.0"), startFrameUrl: z.string().url().optional(), endFrameUrl: z.string().url().optional(), referenceImageUrls: z.array(z.string().url()).default([]), referenceVideoUrls: z.array(z.string().url()).default([]), referenceAudioUrls: z.array(z.string().url()).default([]), sound: z.boolean().default(false), duration: z.number().positive().default(5), aspectRatio: z.string().default("16:9"), mode: z.string().default("pro"), resolution: z.string().optional(), workflowId: z.string().max(240).optional(), nodeId: z.string().max(240).optional(), identityAssetId: z.string().max(240).optional(), workflowMetadata: workflowMetadata.optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (input) => result(await client.json<JsonObject>("/api/generate-video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })));
@@ -266,10 +266,10 @@ function createServer(): McpServer {
 
   server.registerTool("helios_generate_wavespeed", {
     title: "Start WaveSpeed generation",
-    description: "Start a billable WaveSpeed image or video generation using an exact model ID and that model's schema-specific input object. Returns a HeliosGen task ID for helios_wait_for_job. Inspect the model with helios_get_wavespeed_model first; unsupported or missing parameters are rejected by WaveSpeed.",
+    description: "Start a billable WaveSpeed image or video generation using an exact model ID and that model's schema-specific input object. Returns a UGC{Gen} task ID for helios_wait_for_job. Inspect the model with helios_get_wavespeed_model first; unsupported or missing parameters are rejected by WaveSpeed.",
     inputSchema: z.object({
       modelId: z.string().min(3).max(240).describe("Exact WaveSpeed model ID."),
-      mediaType: z.enum(["image", "video"]).describe("How HeliosGen should store and expose the completed media."),
+      mediaType: z.enum(["image", "video"]).describe("How UGC{Gen} should store and expose the completed media."),
       input: jsonObject.describe("WaveSpeed model parameters, including prompt and any model-specific image, size, duration, seed, or quality fields."),
       fallbackModelIds: z.array(z.string().min(3).max(240)).max(8).default([]).describe("Ordered compatible fallback model IDs."),
       maxCost: z.number().nonnegative().optional().describe("Maximum estimated USD spend across the primary model and attempted fallbacks."),
@@ -437,7 +437,7 @@ function createServer(): McpServer {
 
   server.registerTool("helios_import_community_workflow", {
     title: "Import community workflow",
-    description: "Download a Node Banana community workflow, convert supported nodes and edges into HeliosGen format, preserve provider model choices where possible, and save it as a new editable workflow. Files over 25 MB require allowLarge=true.",
+    description: "Download a Node Banana community workflow, convert supported nodes and edges into UGC{Gen} format, preserve provider model choices where possible, and save it as a new editable workflow. Files over 25 MB require allowLarge=true.",
     inputSchema: z.object({ workflowId: z.string().min(1).max(180).describe("Community catalog ID."), allowLarge: z.boolean().default(false).describe("Explicitly allow downloading media-embedded files over 25 MB.") }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async ({ workflowId, allowLarge }) => result(await client.json<JsonObject>(`/api/community-workflows/${encodeURIComponent(workflowId)}/import`, {
@@ -446,7 +446,7 @@ function createServer(): McpServer {
 
   server.registerTool("helios_run_comfy_workflow", {
     title: "Run ComfyUI workflow",
-    description: "Execute an API-format ComfyUI workflow through the configured local server or Comfy Cloud endpoint. Bindings override exposed primitive/media inputs; completed files are copied into HeliosGen media storage.",
+    description: "Execute an API-format ComfyUI workflow through the configured local server or Comfy Cloud endpoint. Bindings override exposed primitive/media inputs; completed files are copied into UGC{Gen} media storage.",
     inputSchema: z.object({
       workflow: jsonObject.describe("ComfyUI workflow exported with Save (API Format)."),
       bindings: z.array(z.object({
@@ -479,4 +479,4 @@ function createServer(): McpServer {
   return server;
 }
 
-void serveStdio(createServer, { onerror: (error) => console.error("[heliosgen-mcp]", error) });
+void serveStdio(createServer, { onerror: (error) => console.error("[ugc-gen-mcp]", error) });

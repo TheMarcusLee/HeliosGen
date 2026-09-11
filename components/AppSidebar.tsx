@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkflowStore } from "@/lib/store";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
@@ -46,6 +45,7 @@ import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
+import { BrandIcon, BrandWordmark } from "@/components/Brand";
 
 // ── Deterministic pixel-art avatar ───────────────────────────────────────────
 function fnv1a(str: string): number {
@@ -599,11 +599,6 @@ const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelec
   );
 });
 
-// ── Static icons ──────────────────────────────────────────────────────────────
-function LogoIcon() {
-  return <Image src="/HG.svg" alt="Logo" width={26} height={26} />;
-}
-
 function CreditIcon({ size = 12 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -757,17 +752,14 @@ export function AppSidebar() {
       {/* ── Header ── */}
       <SidebarHeader className="flex-row items-center justify-between px-4 pt-5 pb-2 gap-0">
         <div className="flex items-center gap-2.5 group-data-[collapsible=icon]:hidden">
-          <LogoIcon />
-          <span className="text-white text-[22px] leading-none select-none"
-            style={{ fontFamily: "'Georgia','Times New Roman',serif", fontStyle: "italic" }}>
-            HeliosGen
-          </span>
+          <BrandIcon />
+          <BrandWordmark />
         </div>
         {/* Collapsed: logo fades to trigger on hover */}
         <div className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:py-1">
           <div className="relative group/logo-area w-10 h-10 flex items-center justify-center">
             <div className="pointer-events-none transition-opacity duration-200 group-hover/logo-area:opacity-0">
-              <LogoIcon />
+              <BrandIcon />
             </div>
             <SidebarTrigger className="absolute inset-0 opacity-0 group-hover/logo-area:opacity-100 transition-opacity duration-200 text-white/50 hover:text-white hover:bg-white/[0.05] w-full h-full rounded-xl p-0 [&_svg]:size-4" />
           </div>

@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     }
 
     const upstream = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; HeliosGen/1.0)" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; UGCGen/1.0)" },
       redirect: "follow",
     });
 

@@ -58,7 +58,7 @@ function mapHandle(type: string, handle: unknown, direction: "source" | "target"
     if (type === "assistantNode" || type === "templateNode") return "textOut";
     if (type === "waveSpeedNode" || type === "annotationNode" || type === "comfyWorkflowNode") return "media";
     // Prompt, image-input, and video-input nodes use their default (unnamed)
-    // output handle in HeliosGen.
+    // output handle in UGC{Gen}.
     return undefined;
   }
   if (type === "templateNode") return "text";

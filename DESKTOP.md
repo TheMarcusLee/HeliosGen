@@ -1,4 +1,4 @@
-# HeliosGen Desktop (Tauri)
+# UGC{Gen} Desktop (Tauri)
 
 A fully local, self-contained desktop app. No accounts, no Supabase, no R2, no
 ngrok — it runs the Next.js app as a bundled Node sidecar and stores everything
@@ -8,7 +8,7 @@ hosted/web deployment.
 ## Architecture
 
 ```
-┌─ HeliosGen.app ─────────────────────────────────────┐
+┌─ UGC{Gen}.app ──────────────────────────────────────┐
 │  Tauri shell (Rust)                                 │
 │    ├─ picks a free localhost port                   │
 │    ├─ spawns the `helios-node` sidecar shim, which  │
@@ -48,9 +48,9 @@ hosted/web deployment.
 | **Node 22+** | Repo's `pnpm@9.15.9` needs Node ≥ 22.13. `nvm use 22 && corepack enable`. |
 | **Tauri system deps** | macOS: Xcode CLT. Linux: webkit2gtk + build-essential. See <https://v2.tauri.app/start/prerequisites/>. |
 
-App icons are already generated in `src-tauri/icons/` from `src-tauri/icon-source.png`
-(a 1024² render of `public/HG.svg`). To regenerate after a logo change:
-`npx @tauri-apps/cli@^2 icon src-tauri/icon-source.png`.
+App icons are already generated in `src-tauri/icons/` from the UGC{Gen} mark at
+`public/ugc-gen-mark.svg`. To regenerate after a logo change:
+`pnpm desktop:icon public/ugc-gen-mark.svg`.
 
 Install JS deps (adds `@tauri-apps/cli`): `pnpm install` (or `npm install`).
 
@@ -70,14 +70,14 @@ compiles the Rust shell (~1–2 min).
 
 ```bash
 pnpm desktop:build            # → src-tauri/target/release/bundle/
-open "src-tauri/target/release/bundle/macos/HeliosGen.app"
+open "src-tauri/target/release/bundle/macos/UGC{Gen}.app"
 ```
 
-- macOS: produces `HeliosGen.app` and (with `CI=true`, which the script sets)
-  `HeliosGen_<ver>_aarch64.dmg`. The `.app` is ~440 MB (bundled Node runtime +
+- macOS: produces `UGC{Gen}.app` and (with `CI=true`, which the script sets)
+  `UGC{Gen}_<ver>_aarch64.dmg`. The `.app` is ~440 MB (bundled Node runtime +
   prod `node_modules`).
 - The app is **unsigned** — on first launch macOS Gatekeeper blocks it.
-  Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/HeliosGen.app"`.
+  Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/UGC{Gen}.app"`.
 - Data lives in `~/Library/Application Support/cash.sdd.helios.desktop/`:
   `guest.db` (SQLite — generations, uploads, folders, workflows, settings) and
   `generated/` (media). Delete that folder to reset.
@@ -107,8 +107,8 @@ disable-library-validation — the bundled Node/V8 needs them).
 
 Verify the result:
 ```bash
-spctl -a -vvv "src-tauri/target/release/bundle/macos/HeliosGen.app"   # → accepted, source=Notarized Developer ID
-xcrun stapler validate "src-tauri/target/release/bundle/dmg/HeliosGen_0.1.0_aarch64.dmg"
+spctl -a -vvv "src-tauri/target/release/bundle/macos/UGC{Gen}.app"   # → accepted, source=Notarized Developer ID
+xcrun stapler validate "src-tauri/target/release/bundle/dmg/UGC{Gen}_0.1.0_aarch64.dmg"
 ```
 
 ## Local data store
@@ -128,7 +128,7 @@ plus every referenced image/video — portable and shareable as a file
 
 - [x] Phase 0 — branch + Tauri scaffold
 - [x] Phase 1 — standalone output + Node sidecar + writable data dir + icons.
-      `HeliosGen.app` + `.dmg` build and launch; all routes serve, guest DB
+      `UGC{Gen}.app` + `.dmg` build and launch; all routes serve, guest DB
       writes to `~/Library/Application Support/cash.sdd.helios.desktop/`.
 - [x] Phase 2 — kie.ai webhook replaced with polling (`lib/kieJobPoller.ts`).
       `/api/generate` + `/api/generate-video` start a background poller against

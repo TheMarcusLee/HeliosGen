@@ -83,7 +83,7 @@ export default function CommunityWorkflowBrowser({ open, onOpenChange, onImporte
       <DialogContent className="max-w-5xl border-white/10 bg-[#0b0e14] text-white">
         <DialogHeader>
           <DialogTitle>Community workflow library</DialogTitle>
-          <DialogDescription>Browse shared Node Banana workflows and convert them into editable HeliosGen canvases.</DialogDescription>
+          <DialogDescription>Browse shared Node Banana workflows and convert them into editable UGC{"{Gen}"} canvases.</DialogDescription>
         </DialogHeader>
         <div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-white/35" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workflows, tags, or authors" className="border-white/10 bg-white/5 pl-9" /></div>
         <ScrollArea className="h-[62vh]">
