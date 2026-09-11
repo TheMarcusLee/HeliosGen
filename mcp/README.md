@@ -18,14 +18,14 @@ Use this command in an MCP client configuration after building:
 ```json
 {
   "command": "node",
-  "args": ["/Users/marcuslee/Documents/projects/HeliosGen-product/mcp/dist/index.js"],
+    "args": ["/absolute/path/to/HeliosGen/mcp/dist/index.js"],
   "env": {
     "HELIOSGEN_BASE_URL": "http://127.0.0.1:3000"
   }
 }
 ```
 
-On this machine it is registered globally in Codex as `heliosgen`.
+On the primary development machine it is registered globally in Codex as `heliosgen`.
 
 WaveSpeed tools:
 

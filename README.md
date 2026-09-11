@@ -1,324 +1,219 @@
 <p align="center">
-  <img
-    src="https://raw.githubusercontent.com/SegFault42/HeliosGen/main/public/HG.svg"
-    alt="HeliosGen"
-    width="64"
-  />
+  <img src="public/HG.svg" alt="HeliosGen" width="72" />
 </p>
 
 <p align="center">
-  <strong>Build AI image & video pipelines visually.</strong><br/>
-  Chain prompts, models, reference images, and automations on an infinite canvas.
+  <strong>Local-first AI production workflows for images, video, text, and reusable identities.</strong><br />
+  Build, run, inspect, and automate generation pipelines on a visual canvas.
 </p>
 
----
+# HeliosGen
 
-# ⬇️ Download
+HeliosGen is a local-first desktop and browser application for building production-grade AI media workflows. This fork extends the original HeliosGen canvas with live provider catalogs, identity dossiers, reusable production templates, cost and provenance tracking, community workflow imports, ComfyUI interoperability, and a writable MCP server for agent control.
 
-**HeliosGen is a desktop app.** Grab the latest build for your OS from the
-releases page — no account, no server, no cloud setup:
+The application, workflow database, settings, and generated-media library run locally. Generations still send the prompt and any required reference media to the provider you explicitly select, such as Kie.ai, WaveSpeed, Azure Foundry, or ComfyUI Cloud. Local ComfyUI and Codex CLI routes can remain on the machine, subject to their own configuration.
 
-### 👉 **[Download from the Releases page](https://github.com/SegFault42/HeliosGen/releases)**
+> The current product work is on the `codex/wavespeed-provider` branch. Use the source instructions below to run this version; an upstream release does not include the features documented here.
 
-| OS | File |
-| --- | --- |
-| **macOS** (Apple Silicon) | `HeliosGen_<version>_aarch64.dmg` |
-| **Windows** | 🙋 **looking for a contributor to build & submit** — see below |
-| **Linux** | 🙋 **looking for a contributor to build & submit** — see below |
+## Run locally
 
-> Only the builds actually attached to the latest release are available. macOS
-> is published today. **Tauri can't cross-compile, so Windows and Linux builds
-> need someone on those platforms** — if you can run `npm run desktop:build` on
-> Windows or Linux (see the **Build from source** section below), please open a
-> PR or attach the artifacts to an issue and we'll add them to the release.
+From an existing checkout, start the browser development app:
 
-The app is **not code-signed** yet:
+```bash
+corepack enable
+pnpm install
+pnpm dev
+```
 
-- **macOS** — right-click the app → **Open** (once), or run
-  `xattr -cr /Applications/HeliosGen.app`.
-- **Windows** — SmartScreen: **More info → Run anyway**.
+Open [http://localhost:3000](http://localhost:3000). If an older HeliosGen process is already using port 3000, stop it with `Ctrl+C` in its terminal and run `pnpm dev` again from this directory.
 
----
+API keys are normally added inside **Settings → API Keys**. They are stored in the local SQLite database and are never returned by the MCP server. `.env.local` is optional; see [`.env.example`](.env.example) for supported development fallbacks.
 
-## 🚀 First run
+## Clone the current product branch
 
-1. Launch HeliosGen.
-2. Open **Settings → API Keys** and add your **[kie.ai](https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec)** and/or **[WaveSpeed](https://wavespeed.ai/accesskey)** API key.
-3. Start generating.
+```bash
+git clone --branch codex/wavespeed-provider https://github.com/TheMarcusLee/HeliosGen.git
+cd HeliosGen
+corepack enable
+pnpm install
+pnpm dev
+```
 
-Everything stays on your machine. Generations, uploads, folders, workflows and
-settings live in a local database; media is saved to a local folder:
+Requirements:
 
-| OS | Data location |
+- Node.js 22.13 or newer
+- pnpm 9.15.9, selected through the repository's `packageManager` field
+- Provider credentials for the remote services you choose to use
+
+## What this fork adds
+
+### Provider and model layer
+
+- Kie.ai image, video, and text generation
+- Authenticated WaveSpeed model discovery with a live image/video catalog
+- Schema-generated WaveSpeed canvas controls, typed inputs, defaults, and validation
+- Ordered compatible fallbacks and per-node estimated-cost ceilings
+- Azure Foundry and optional Codex CLI routing for supported operations
+- Local ComfyUI and ComfyUI Cloud API-workflow execution
+- Persistent provider transaction ledger with provider, model, operation, estimate, status, fallback, workflow, identity, and output provenance
+
+WaveSpeed models are discovered live instead of being frozen into the repository. After saving a WaveSpeed key, browse them in **Settings → Image Models** or **Settings → Video Models**, or add a WaveSpeed node to a workflow. The model's current request schema determines the controls shown on the canvas.
+
+The configured text catalog currently includes:
+
+- Anthropic: Opus 5, Sonnet 5, plus legacy Opus 4.7, Sonnet 4.6, and Haiku 4.5 compatibility
+- OpenAI: GPT 5.6 Sol, GPT 5.6 Terra, GPT 5.6 Luna, GPT 5.5, GPT 5.4, and GPT 5.2
+- Google: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash, 3.1 Pro, and 3 Flash
+- Azure Auto routing
+
+Kie.ai image/video entries are maintained by the application catalog. The WaveSpeed portion is deliberately dynamic, so the provider's current model list is the source of truth.
+
+### Identity layer
+
+**Identities** is a first-class production asset library rather than a loose collection of prompt fields. Each dossier can contain:
+
+- multiple face and body reference images
+- a stable trigger word
+- reusable base prompts (prompt DNA)
+- explicit SFW or adult content classification
+- provider, model, and aspect-ratio defaults
+- immutable version snapshots used by linked workflows
+- import/export JSON, workflow links, run activity, and provenance
+
+Multiple images can be dropped into the reference area at once and classified individually as face or body references. Editing an identity creates a new version, so an existing workflow keeps its embedded snapshot until it is intentionally refreshed.
+
+### Production workflows
+
+Built-in CloneMe-style templates turn identities into repeatable production pipelines:
+
+- **Scene replacement:** target scene → Opus 5 vision analysis → identity-aware prompt construction → provider generation → gallery and ledger output
+- **Pose × outfit batch:** analyze once, cross-product selected poses and outfits, then execute with bounded concurrency
+- Persistent queue states: idle, analysis, generation, completed, paused, and error
+- Pause, resume, retry, and explicit per-item status tracking
+
+Workflow metadata controls SFW/adult routing explicitly and auditably. HeliosGen does not infer adult capability from a model name. Provider rules still apply, and server-side validation rejects sexual content involving minors and non-consensual intimate imagery.
+
+### Workflow portability and interoperability
+
+- Node Banana community workflow browser and versioned converter
+- ComfyUI workflows imported from **Save (API Format)**
+- Portable workflow ZIP exports containing `workflow.json` and referenced media
+- Prompt-template nodes, annotations, and non-destructive image markup
+- Imported public Helios workflows remain editable on the native canvas
+
+See [the implemented provider and workflow roadmap](docs/node-banana-review.md) for design notes and feature provenance.
+
+## Agent control with MCP
+
+The repository includes a local stdio MCP server with 37 read/write tools. It can inspect and mutate complete workflow graphs, manage identities and their versions, create production templates and batches, set explicit content routes, discover and run models, wait for jobs, import community workflows, execute ComfyUI graphs, and audit provider activity.
+
+Keep HeliosGen running, then build the MCP server:
+
+```bash
+pnpm mcp:build
+```
+
+Example MCP client configuration:
+
+```json
+{
+  "command": "node",
+  "args": ["/absolute/path/to/HeliosGen/mcp/dist/index.js"],
+  "env": {
+    "HELIOSGEN_BASE_URL": "http://127.0.0.1:3000"
+  }
+}
+```
+
+The default base URL is `http://127.0.0.1:3000`. Set `HELIOSGEN_BASE_URL` when the app uses another port. See [the MCP guide](mcp/README.md) for the available tool groups and the configuration already used on this machine.
+
+## Desktop app
+
+For a native window with hot reload:
+
+```bash
+pnpm desktop:dev
+```
+
+The first run compiles the Rust/Tauri shell and can take a few minutes. Desktop development additionally requires Rust, the platform's Tauri prerequisites, and on macOS the Xcode Command Line Tools.
+
+Build a packaged app on the target operating system:
+
+```bash
+pnpm desktop:build
+```
+
+Artifacts are written beneath `src-tauri/target/release/bundle/`. Tauri does not cross-compile, so macOS, Windows, and Linux packages must each be built on their target platform. See [DESKTOP.md](DESKTOP.md) for architecture, signing, local paths, and packaging details.
+
+## Local data
+
+Browser development stores data inside the checkout:
+
+- SQLite data: `data/`
+- generated media: `public/generated/`
+
+The packaged desktop app stores its writable data in the operating system's app-data directory:
+
+| Operating system | Location |
 | --- | --- |
 | macOS | `~/Library/Application Support/cash.sdd.helios.desktop/` |
 | Windows | `%APPDATA%\cash.sdd.helios.desktop\` |
 | Linux | `~/.local/share/cash.sdd.helios.desktop/` |
 
-Delete that folder to reset the app.
+Back up the SQLite database and `generated/` directory before removing an app-data folder. Deleting it resets local workflows, identities, settings, history, and media.
 
----
+## Optional local tools
 
-# 📸 Screenshots
-## ✨ Simple Image & Video Generation
+Some operations use command-line tools from the login shell's `PATH`:
 
-<p align="center">
-  <img width="2912" height="2292" alt="Image generation example" src="https://github.com/user-attachments/assets/8263b83d-addb-4af8-99d1-d8406c52be2c" />
-</p>
+- `ffmpeg` and `ffprobe` for video trimming and frame extraction
+- `codex` and `codex-imagegen` for the optional Codex CLI image route
 
----
+Missing optional tools disable only their related feature. For the Codex route, install and authenticate the Codex CLI, install [`codex-imagegen-cli`](https://github.com/jdmnk/codex-imagegen-cli), then choose **Codex CLI** for GPT Image 2 in **Settings → Image Models**.
 
-## 🔄 Workflow Generation
+## Development checks
 
-<p align="center">
-  <img width="1459" height="1146" alt="Workflow generation example" src="https://github.com/user-attachments/assets/fc7f1109-76d1-4af0-b91d-0e915bcf5461" />
-</p>
+```bash
+pnpm lint
+pnpm exec tsc --noEmit
+pnpm exec tsx --test tests/*.test.ts
+pnpm mcp:build
+pnpm build
+```
 
----
+## Fork maintenance
 
-## 🧠 Native JSON Prompt Preview
+This repository deliberately keeps two remotes:
 
-<p align="center">
-  <img width="886" alt="JSON prompt preview" src="https://github.com/user-attachments/assets/dedbdf4f-9d52-4e29-ad6e-a2e67e341a73" />
-</p>
+- `origin`: `https://github.com/TheMarcusLee/HeliosGen.git` — this product fork
+- `upstream`: `https://github.com/SegFault42/HeliosGen.git` — the original project
 
----
+Review upstream changes without modifying the current branch:
 
-## 💬 AI Prompt Improvement Assistant
+```bash
+git fetch origin
+git fetch upstream
+git log --oneline --left-right --cherry-pick HEAD...upstream/main
+```
 
-<p align="center">
-  <img width="872" height="502" alt="Prompt assistant interface" src="https://github.com/user-attachments/assets/17ba972c-bd8a-49a7-b367-4ef906fe3e17" />
-</p>
+Integrate useful upstream work through a dedicated branch or pull request, then run the full development checks. This keeps provider, identity, workflow-import, MCP, and local-data behavior reviewable instead of silently overwriting the product fork.
 
-# ✨ HeliosGen
-
-HeliosGen is a free & open source visual AI workflow builder for image and video generation.
-
-Build reusable AI pipelines with:
-- infinite node-based workflows,
-- multi-model generation,
-- reference images,
-- automation chains,
-- all running 100% locally on your machine.
-
-No subscriptions.  
-No disappearing credits.  
-No vendor lock-in.  
-No cloud, no accounts — just a local app and your own kie.ai key.
-
----
-
-# 💳 Credits
-
-HeliosGen now works with <a href="https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec" target="_blank">kie.ai</a>.
-
-All credits are purchased directly on your own account and never expire.
-
-That means:
-- no monthly reset,
-- no lost credits,
-- no subscription lock-in,
-- and full ownership of your usage.
-
-You only pay for what you generate.
-
----
-
-# 🚀 Features
-
-- Infinite node-based canvas
-- AI image & video generation
-- Drag-and-connect workflow system
-- Multi-model pipelines
-- Reference image support
-- Parallel & sequential pipeline execution
-- Real-time generation history
-- 100% local — your data never leaves your machine
-- Bring your own Kie.ai and WaveSpeed keys
-- Live, schema-driven WaveSpeed image and video nodes
-- Ordered provider fallbacks with per-node cost ceilings and a local usage ledger
-- Node Banana community workflow browser and versioned converter
-- ComfyUI API-workflow nodes for local ComfyUI or Comfy Cloud
-- Prompt templates, non-destructive image annotations, and portable media exports
-- First-class identity library with reusable face/body references, immutable versions, prompt DNA, provider/model defaults, JSON portability, linked workflows, and run activity
-- One-click scene-replacement and pose × outfit production workflow templates
-- Persistent concurrent batch queues with pause, resume, retries, and explicit item states
-- Explicit SFW/adult provider routing with consent assurances and server-side safety enforcement
-- Writable local MCP for agent-driven workflow creation, editing, execution, and auditing
-- Modern responsive UI
-
----
-
-# ⚡ Supported Models
-
-## Images
-- GPT Image 2 (OpenAI)
-- Nano Banana / Nano Banana 2 / Nano Banana 2 Lite / Nano Banana Pro (Google)
-- Seedream 5.0 Lite / Pro (Seedream)
-- Z-Image (Z-AI)
-- Grok Imagine (X)
-
-## Videos
-- Veo 3.1 Lite / Fast / Quality, Gemini Omni Video (Google)
-- Kling 3.0, Kling 3.0 Turbo, Motion Control 2.6 / 3.0 (Kling)
-- Seedance 2.0 / Fast / Mini (Bytedance)
-- Grok Imagine, Grok Imagine 1.5 preview (X)
-- HappyHorse (Alibaba)
-
-WaveSpeed's live catalog is available in Settings, directly on schema-driven canvas nodes, through the HeliosGen API, and through the writable MCP. Controls are generated from each model's request schema. Nodes support compatible ordered fallbacks, an estimated-cost ceiling, and locally mirrored results.
-
-The dashboard's community library imports and converts shared Node Banana workflows into editable HeliosGen graphs. ComfyUI nodes accept workflows exported with **Save (API Format)** and can execute against a local server or Comfy Cloud configured in Settings.
-
-CloneMe-style production pipelines are built in. Open **Identities** in the main sidebar to manage versioned identity dossiers, reference matrices, routing/model defaults, portable JSON, linked workflows, and provider activity. From any identity, create a pre-bound **Scene replacement** or **Pose × outfit batch** workflow in one click. Batch jobs persist their queue state and reuse a single Opus 5 scene analysis across every pose/outfit combination.
-
-See [the implemented Node Banana and provider roadmap](docs/node-banana-review.md) for design details and provenance.
-
-## Agent control with MCP
-
-Build the local stdio server with `pnpm mcp:build`, then configure your MCP client to launch `node /absolute/path/to/HeliosGen/mcp/dist/index.js`. Keep HeliosGen running (the MCP defaults to `http://127.0.0.1:3000`, configurable with `HELIOSGEN_BASE_URL`). The server exposes 37 read/write tools for workflows and nodes, identity assets and their versions, CloneMe templates and batch plans, explicit content routing, built-in and live WaveSpeed model discovery, provider generation, community imports, the generation ledger, and ComfyUI execution.
-
----
-
-# 🏗️ Tech Stack
+## Tech stack
 
 | Layer | Technology |
-|---|---|
-| Desktop shell | Tauri 2 (Rust) |
-| App | Next.js + React + TypeScript (bundled Node sidecar) |
-| Database | SQLite (local) |
-| Storage | Local disk |
-| AI Backends | Kie.ai, WaveSpeed, Azure Foundry, Codex CLI |
-
----
-
-# 🤖 Codex CLI (optional — alternate GPT Image 2 backend)
-
-Instead of routing GPT Image 2 through kie.ai credits, HeliosGen can generate through your own ChatGPT Codex subscription via [`codex-imagegen-cli`](https://github.com/jdmnk/codex-imagegen-cli). The desktop app picks up `codex` from your `PATH` automatically; if it's missing, the feature just shows **NOT CONFIGURED** and everything else keeps working.
-
-Requirements:
-- A ChatGPT Plus/Pro/Team/Enterprise account with Codex access
-- [`codex`](https://github.com/openai/codex) CLI installed on your machine
-- [`uv`](https://docs.astral.sh/uv/) (Python package manager)
-
-### 1. Install the Codex CLI
-
-```bash
-# macOS
-brew install codex
-
-# or, cross-platform
-npm install -g @openai/codex
-```
-
-### 2. Install codex-imagegen-cli
-
-```bash
-git clone https://github.com/jdmnk/codex-imagegen-cli.git
-cd codex-imagegen-cli
-uv sync --dev
-uv tool install -e .
-```
-
-This installs the `codex-imagegen` binary — make sure it's on your `PATH`.
-
-### 3. Log in
-
-Either:
-- run `codex login` in a terminal (opens a browser to sign in), **or**
-- open the app → **Settings → API Keys → Codex CLI → Connect Codex**, which walks you through a device-code login — visit the printed URL and enter the code, no terminal needed.
-
-> ⚠️ Starting a new login (either way) immediately invalidates any existing session on that machine — the CLI clears old credentials the moment a login attempt begins, whether or not it's ever completed. Only start one when the status badge below shows **NOT CONFIGURED**.
-
-### 4. Enable it for GPT Image 2
-
-In **Settings → Image Models**, set GPT Image 2's provider toggle to **Codex CLI**. The status badge in **Settings → API Keys** shows **READY** once both the CLI and login are in place.
-
----
-
-# 🛠️ Build from source
-
-Prefer to build it yourself, or need a platform that isn't on the releases page
-yet? The whole app builds from this repo.
-
-Tauri does **not** cross-compile — build on the OS you want to target. Run
-`npm run desktop:build` on a Mac for the macOS build, on Windows for Windows,
-on Linux for Linux.
-
-> **Want to help ship Windows / Linux builds?** Build on that OS and send the
-> artifacts (PR or issue attachment) — they'll be added to the next release,
-> with credit.
-
-## Prerequisites (one-time, all platforms)
-
-| Tool | Notes |
 | --- | --- |
-| **Node 22+** | The bundled server uses `node:sqlite`. `nvm use 22`. |
-| **Rust** | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| **Tauri system deps** | See <https://v2.tauri.app/start/prerequisites/> |
+| Desktop shell | Tauri 2 and Rust |
+| Application | Next.js 16, React 19, and TypeScript |
+| Workflow canvas | React Flow |
+| Database | local SQLite through Node 22 `node:sqlite` |
+| Media storage | local filesystem |
+| Providers | Kie.ai, WaveSpeed, Azure Foundry, Codex CLI, and ComfyUI |
+| Agent interface | Model Context Protocol over local stdio |
 
-Platform-specific system deps:
+## Project lineage
 
-- **macOS** — Xcode Command Line Tools: `xcode-select --install`
-- **Windows** — [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-  (Desktop development with C++) and [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)
-  (preinstalled on Windows 11)
-- **Linux** — `webkit2gtk-4.1`, `librsvg2`, `build-essential`, `curl`, `wget`,
-  `file`, `libssl-dev`, `libayatana-appindicator3-dev` (Debian/Ubuntu package
-  names; see the Tauri prerequisites page for other distros)
+This project is a maintained fork of [SegFault42/HeliosGen](https://github.com/SegFault42/HeliosGen). The original project provided the visual workflow foundation; this fork carries the provider expansion, identity production layer, workflow interoperability, cost/provenance controls, and writable agent interface described above.
 
-## Build
+## Licensing
 
-```bash
-git clone https://github.com/SegFault42/HeliosGen
-cd HeliosGen
-npm install
-npm run desktop:build
-```
-
-Artifacts land in `src-tauri/target/release/bundle/`:
-
-| OS | Output |
-| --- | --- |
-| macOS | `macos/HeliosGen.app`, `dmg/HeliosGen_<ver>_<arch>.dmg` |
-| Windows | `msi/HeliosGen_<ver>_x64_en-US.msi`, `nsis/HeliosGen_<ver>_x64-setup.exe` |
-| Linux | `deb/`, `rpm/`, `appimage/HeliosGen_<ver>_amd64.AppImage` |
-
-The macOS build is **unsigned** — on first launch Gatekeeper blocks it.
-Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/HeliosGen.app"`.
-
-## Develop (hot reload)
-
-```bash
-npm run desktop:dev
-```
-
-Runs `next dev` and `tauri dev` together. The first run compiles the Rust shell
-(~1–2 min).
-
-See [`DESKTOP.md`](DESKTOP.md) for architecture, data locations, and signing &
-notarization.
-
----
-
-# 🤝 Contributions
-
-Contributions are welcome.
-
-If you find a bug, have an idea, or want to improve HeliosGen:
-- Open an issue
-- Submit a pull request
-- Share feedback or feature requests
-
-All contributions are appreciated.
-
----
-
-# 📄 License
-
-MIT License
-
----
-
-<p align="center">
-  Built for creators building the future of AI workflows.
-</p>
+The checkout does not currently contain a license file. Add or confirm the intended license before distributing binaries or accepting outside contributions.
