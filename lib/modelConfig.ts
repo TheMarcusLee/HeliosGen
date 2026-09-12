@@ -17,6 +17,8 @@ export interface ImageModel {
   name: string;
   /** Provider label (groups models in the dropdown) */
   provider: string;
+  /** When to choose this model over its siblings. Shown in pickers and given to the planner. */
+  description?: string;
   /** Available aspect ratios */
   ratios: string[];
   /** Whether this model accepts reference images */
@@ -167,6 +169,7 @@ export const IMAGE_MODELS: ImageModel[] = [
     apiId: "nano-banana-pro",
     name: "Nano Banana Pro",
     provider: "Google",
+    description: "Google's flagship image model: best identity consistency across reference images and natural skin. First pick for influencer anchors and matching stills.",
     ratios: ["1:1", "16:9", "9:16", "4:3", "3:4", "4:5", "5:4", "2:3", "3:2", "21:9"],
     supportsImages: true,
     maxImages: 8,
@@ -261,6 +264,7 @@ export const IMAGE_MODELS: ImageModel[] = [
     textOnlyApiId: "grok-imagine/text-to-image",
     name: "Grok Imagine",
     provider: "X",
+    description: "Grok Imagine 1.x image endpoints. Superseded by Grok Imagine Image 2.0 for new work.",
     ratios: ["1:1", "16:9", "9:16", "2:3", "3:2"],
     supportsImages: true,
     maxImages: 5,
@@ -273,6 +277,69 @@ export const IMAGE_MODELS: ImageModel[] = [
       extra: { nsfw_checker: false },
     },
   },
+  {
+    id: "grok-imagine-image-2",
+    // apiId used when images ARE attached (image-to-image)
+    apiId: "grok-imagine-image-2-0/image-to-image",
+    // apiId used when NO images are attached (text-to-image)
+    textOnlyApiId: "grok-imagine-image-2-0/text-to-image",
+    name: "Grok Imagine Image 2.0",
+    provider: "X",
+    description: "xAI's current image model: strong photoreal people and top-tier image editing (Arena Elo 1439 for edits). Cheap at 4 credits. Its mask-based edit and segment-map endpoints are not wired yet.",
+    ratios: ["1:1", "16:9", "9:16", "2:3", "3:2", "4:3", "3:4"],
+    supportsImages: true,
+    maxImages: 5,
+    supportsQuality: false,
+    textOnlyPromptMaxLength: 5000,
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      imageInputKey: "image_urls",
+      promptMaxLength: 5000,
+    },
+  },
+  // ── Alibaba Qwen Image 3 ─────────────────────────────────────────────────────
+  {
+    id: "qwen-image-3",
+    apiId: "qwen3/image-to-image",
+    textOnlyApiId: "qwen3/text-to-image",
+    name: "Qwen Image 3.0",
+    provider: "Alibaba",
+    description: "Fast, inexpensive general model with strong text rendering in 12 languages. Good for volume stills and text-heavy creative; flat price at 1K or 2K.",
+    ratios: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
+    supportsImages: true,
+    maxImages: 5,
+    supportsQuality: true,
+    apiInput: {
+      aspectRatioKey: "image_size",
+      imageInputKey: "image_urls",
+      qualityKey: "resolution",
+      qualityOptions: ["1k", "2k"],
+      outputFormat: "png",
+      promptMaxLength: 8000,
+      extra: { prompt_extend: true, nsfw_checker: false },
+    },
+  },
+  {
+    id: "qwen-image-3-pro",
+    apiId: "qwen3-pro/image-to-image",
+    textOnlyApiId: "qwen3-pro/text-to-image",
+    name: "Qwen Image 3.0 Pro",
+    provider: "Alibaba",
+    description: "Qwen Image 3.0 with stronger world knowledge and layout-rich composition. Pick it over the base model for complex scenes and multilingual text; 2K costs about double.",
+    ratios: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
+    supportsImages: true,
+    maxImages: 5,
+    supportsQuality: true,
+    apiInput: {
+      aspectRatioKey: "image_size",
+      imageInputKey: "image_urls",
+      qualityKey: "resolution",
+      qualityOptions: ["1k", "2k"],
+      outputFormat: "png",
+      promptMaxLength: 8000,
+      extra: { prompt_extend: true, nsfw_checker: false },
+    },
+  },
   // ── OpenAI GPT Image 2 ────────────────────────────────────────────────────────
   {
     id: "gpt-image-2",
@@ -282,6 +349,7 @@ export const IMAGE_MODELS: ImageModel[] = [
     textOnlyApiId: "gpt-image-2-text-to-image",
     name: "GPT Image 2",
     provider: "OpenAI",
+    description: "Previous GPT Image generation. Prefer GPT Image 2.5 Flare unless you need its exact look.",
     // Kie supports: auto, 1:1, 9:16, 16:9, 4:3, 3:4
     ratios: ["auto", "1:1", "16:9", "9:16", "4:3", "3:4"],
     supportsImages: true,
@@ -348,6 +416,7 @@ export const IMAGE_MODELS: ImageModel[] = [
     textOnlyApiId: "gpt-image-2-5-flare-text-to-image",
     name: "GPT Image 2.5 Flare",
     provider: "OpenAI",
+    description: "Default GPT Image 2.5 tier: the core 2.5 improvements at the same price as Sunburst. Pick it for everyday generation, references and edits.",
     ratios: ["auto", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9", "27:16", "16:27", "9:8", "8:9"],
     supportsImages: true,
     maxImages: 16,
@@ -368,6 +437,7 @@ export const IMAGE_MODELS: ImageModel[] = [
     textOnlyApiId: "gpt-image-2-5-sunburst-text-to-image",
     name: "GPT Image 2.5 Sunburst",
     provider: "OpenAI",
+    description: "Premium GPT Image 2.5 tier for tighter prompt control and more polished output: hero shots, final references, anything you will publish as-is. Same price as Flare.",
     ratios: ["auto", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9", "27:16", "16:27", "9:8", "8:9"],
     supportsImages: true,
     maxImages: 16,
