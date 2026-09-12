@@ -1,5 +1,6 @@
 import { codexAccountEnv } from "@/lib/codexAccount";
 import { generateImageWithAntigravity } from "@/lib/antigravityAccount";
+import { providerErrorDetail } from "@/lib/providerErrorDetail";
 import { estimateKieImage } from "@/lib/pricing";
 import { mkdtemp, rm } from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
@@ -204,6 +205,10 @@ const CODEX_SIZE_MAP: Record<string, string> = {
  * semicolon (e.g. `Responses stream ended without an image result; last status
  * was failed.`). Pull out just the useful part instead of showing the whole dump.
  */
+class CodexImagegenError extends Error {
+  constructor(message: string, readonly exitCode: number, readonly stderr: string) { super(message); }
+}
+
 function cleanCodexError(raw: string): string {
   const match = raw.match(/Error:\s*([\s\S]*)$/);
   const tail = (match ? match[1] : raw).trim();
@@ -266,7 +271,7 @@ async function runCodexImagegen(opts: {
       // sees it. Log the untruncated stream for debugging and only cap what
       // gets wrapped into the thrown Error as a sane upper bound.
       console.error("[codex-imagegen] full stderr:", stderr || "(empty)");
-      throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-4000) || "no stderr output"}`);
+      throw new CodexImagegenError(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-4000) || "no stderr output"}`, exitCode, stderr);
     }
 
     return await readFile(outPath);
@@ -519,8 +524,10 @@ export async function POST(req: NextRequest) {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[codex] background error:", msg, e);
-        jobStore.set(codexTaskId, { status: "error", error: cleanCodexError(msg) });
-        settleProviderLedgerTask(codexTaskId, "error", cleanCodexError(msg));
+        const short = cleanCodexError(msg);
+        const detail = providerErrorDetail({ provider: "OpenAI account · codex-imagegen", model, size, references: r2ImageUrls.length, taskId: codexTaskId, exitCode: e instanceof CodexImagegenError ? e.exitCode : undefined, message: short, raw: e instanceof CodexImagegenError ? e.stderr : msg });
+        jobStore.set(codexTaskId, { status: "error", error: short, detail });
+        settleProviderLedgerTask(codexTaskId, "error", short);
       }
     })();
 
@@ -551,7 +558,7 @@ export async function POST(req: NextRequest) {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[antigravity] background error:", msg);
-        jobStore.set(taskId, { status: "error", error: msg });
+        jobStore.set(taskId, { status: "error", error: msg, detail: providerErrorDetail({ provider: "Google account · Antigravity", model, size: aspectRatio, references: r2ImageUrls.length, taskId, message: msg }) });
         settleProviderLedgerTask(taskId, "error", msg);
       } finally { await rm(workspace, { recursive: true, force: true }); }
     })();

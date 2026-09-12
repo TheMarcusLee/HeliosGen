@@ -168,13 +168,14 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
     }
     const run = c.runs.find(r => r.status === "running" || r.status === "paused");
     if (!run) return c;
-    const fail = (step: ProductionStep, error: unknown) => { step.status = "error"; step.error = error instanceof Error ? error.message : String(error); };
+    const fail = (step: ProductionStep, error: unknown) => { step.status = "error"; step.error = error instanceof Error ? error.message : String(error); step.errorDetail = typeof (error as { detail?: unknown }).detail === "string" ? (error as { detail: string }).detail : undefined; };
+    const withDetail = (message: string, detail?: unknown) => Object.assign(new Error(message), typeof detail === "string" && detail ? { detail } : {});
     // 1. Poll every job in flight, in parallel.
     await Promise.all(run.steps.filter(s => s.status === "running").map(async step => {
       try {
         const response = await providers.jobStatus(request(`/api/job-status?taskId=${encodeURIComponent(step.taskId!)}`));
         const result = await response.json();
-        if (result.status === "error" || result.status === "not_found") throw new Error(result.error || "Job could not be recovered. Check the provider ledger before retrying.");
+        if (result.status === "error" || result.status === "not_found") throw withDetail(result.error || "Job could not be recovered. Check the provider ledger before retrying.", result.detail);
         if (result.status === "done") finishStep(c, run, step, result.videoUrl ? [result.videoUrl] : result.imageUrls?.length ? result.imageUrls : result.imageUrl ? [result.imageUrl] : []);
         else if (Date.now() - (step.startedAt ?? Date.now()) > 60 * 60_000) throw new Error("Job has exceeded one hour. Check the provider ledger before continuing.");
       } catch (error) { fail(step, error); }
@@ -201,7 +202,7 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
           release.assertOwned();
           const response = await (step.kind === "image" ? providers.generateImage : providers.generateVideo)(request(step.kind === "image" ? "/api/generate" : "/api/generate-video", body));
           const result = await response.json();
-          if (!response.ok || !result.taskId) throw new Error(result.error || "Provider returned no job ID.");
+          if (!response.ok || !result.taskId) throw withDetail(result.error || "Provider returned no job ID.", result.detail);
           step.taskId = result.taskId; step.status = "running"; inFlight++;
         } catch (error) { fail(step, error); }
       }
@@ -252,7 +253,7 @@ export function retryRun(id: string, runId: string) {
   if (failed.some(s => s.status === "submitting")) throw new Error("A submission has no saved job ID. Check the provider ledger before retrying.");
   const quote = quotePlan(c, { reply: "", title: c.title, assumptions: [], identityDraft: null, steps: failed.map(({ kind, title, pack, prompt, look, referenceStep, aspectRatio }) => ({ kind, title, pack, prompt, look, referenceStep, aspectRatio })) }, serverCampaignEstimates(c));
   if (quote.reason) throw new Error(quote.reason);
-  failed.forEach((s, i) => { s.status = "queued"; s.error = undefined; s.startedAt = undefined; s.taskId = undefined; s.reservedUsd = quote.costs[i]; });
+  failed.forEach((s, i) => { s.status = "queued"; s.error = undefined; s.errorDetail = undefined; s.startedAt = undefined; s.taskId = undefined; s.reservedUsd = quote.costs[i]; });
   run.status = "running"; c.error = undefined;
   saveWorkflow(c, run);
   return saveCampaign(c);

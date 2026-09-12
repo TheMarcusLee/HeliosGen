@@ -12,7 +12,7 @@ export const isLocalTaskId = (taskId: string) => LOCAL_TASK_PREFIXES.some(prefix
 export type JobResult =
   | { status: "pending"; type?: "image" | "video"; userId?: string }
   | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }
-  | { status: "error"; error: string };
+  | { status: "error"; error: string; detail?: string };
 
 // DATA_DIR is the repo in dev and a writable per-user dir in the packaged
 // desktop app (the install dir is read-only there).

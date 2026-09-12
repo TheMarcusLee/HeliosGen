@@ -215,7 +215,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
         if (job.status === "submitting") throw new Error("Submission interrupted before a job ID was saved. Check the provider ledger; automatic retry is disabled.");
         const response = await tools.jobStatus(request(`/api/job-status?taskId=${encodeURIComponent(job.taskId!)}`)), result = await response.json();
         if (!response.ok || result.status === "not_found") throw new Error("Cannot recover the provider job. Check the provider ledger before continuing.");
-        if (result.status === "error") { job.status = "error"; job.error = result.error || "Provider generation failed."; event(run, "generation_failed", job.error!); }
+        if (result.status === "error") { job.status = "error"; job.error = result.error || "Provider generation failed."; job.errorDetail = typeof result.detail === "string" ? result.detail : undefined; event(run, "generation_failed", job.error!); }
         else if (result.status === "done") {
           const url = result.videoUrl || result.imageUrls?.[0] || result.imageUrl;
           if (!url) throw new Error("Provider completed without a media output.");

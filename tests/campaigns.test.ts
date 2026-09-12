@@ -264,7 +264,7 @@ test("independent steps run in parallel, one failure blocks only its dependents,
   const providers = {
     generateImage: async (req: NextRequest) => { const body = await req.json(); submitted.push(body.prompt); return NextResponse.json({ taskId: `img-${submitted.length}` }); },
     generateVideo: async () => NextResponse.json({ taskId: "video-1" }),
-    jobStatus: async (req: NextRequest) => { const t = req.nextUrl.searchParams.get("taskId"); return NextResponse.json(t === "img-1" ? { status: "error", error: "Responses stream ended without an image result" } : t === "video-1" ? { status: "done", videoUrl: "/generated/reel.mp4" } : { status: "done", imageUrl: `/generated/${t}.png` }); },
+    jobStatus: async (req: NextRequest) => { const t = req.nextUrl.searchParams.get("taskId"); return NextResponse.json(t === "img-1" ? { status: "error", error: "Responses stream ended without an image result", detail: "Provider: OpenAI account · codex-imagegen\nExit code: 1" } : t === "video-1" ? { status: "done", videoUrl: "/generated/reel.mp4" } : { status: "done", imageUrl: `/generated/${t}.png` }); },
   };
   startCampaignRun(c.id, "brief");
   assert.throws(() => editPlan(c.id, "brief", { steps: three.steps.map(s => ({ title: s.title, prompt: s.prompt, look: s.look })) }), /already started/);
@@ -275,6 +275,8 @@ test("independent steps run in parallel, one failure blocks only its dependents,
   let current = getCampaign(c.id);
   assert.deepEqual(current.runs[0].steps.map(s => s.status), ["error", "done", "done", "error"], "the failed concert image blocks only its Reel; the other directions finished");
   assert.equal(current.runs[0].status, "error"); assert.equal(current.assets.length, 2);
+  assert.match(current.runs[0].steps[0].errorDetail ?? "", /codex-imagegen/, "the provider diagnostic rides along with the short error");
+  assert.equal(current.runs[0].steps[3].errorDetail, undefined, "a blocked dependent has no provider diagnostic");
   // Retrying re-queues the failed image and its blocked Reel, keeping the two finished directions.
   providers.jobStatus = async (req: NextRequest) => { const t = req.nextUrl.searchParams.get("taskId"); return NextResponse.json(t === "video-1" ? { status: "done", videoUrl: "/generated/reel.mp4" } : { status: "done", imageUrl: `/generated/${t}.png` }); };
   retryRun(c.id, current.runs[0].id);

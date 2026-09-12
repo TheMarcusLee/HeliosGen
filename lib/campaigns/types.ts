@@ -34,6 +34,8 @@ export type ProductionStep = z.infer<typeof stepSchema> & {
   status: "queued" | "submitting" | "running" | "done" | "error";
   taskId?: string;
   error?: string;
+  /** Diagnostic detail behind the step's "More info" toggle: provider, model, raw output, likely cause. */
+  errorDetail?: string;
   startedAt?: number;
   reservedUsd?: number;
 };

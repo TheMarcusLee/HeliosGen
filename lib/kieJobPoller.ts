@@ -78,7 +78,7 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
       );
       const json = await res.json();
       if (json?.code !== undefined && json.code !== 200 && json.code !== 0) {
-        settle(taskId, kind, { status: "error", error: json.msg ?? `kie.ai error ${json.code}` });
+        settle(taskId, kind, { status: "error", error: json.msg ?? `kie.ai error ${json.code}`, detail: `Provider: Kie.ai\nTask: ${taskId}\nResponse code: ${json.code}\n\nProvider output:\n${JSON.stringify(json, null, 2).slice(0, 2500)}` });
         return;
       }
       data = (json?.data ?? json) as Record<string, unknown>;
@@ -102,7 +102,7 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
     if (state === "fail" || state === "failed" || state === "error") {
       const msg =
         (data.failMsg as string) ?? (data.error as string) ?? (data.failReason as string) ?? "Generation failed";
-      settle(taskId, kind, { status: "error", error: msg });
+      settle(taskId, kind, { status: "error", error: msg, detail: `Provider: Kie.ai\nTask: ${taskId}\nModel: ${String(data.model ?? "")}\nState: ${state}\nFail code: ${String(data.failCode ?? "")}\n\nProvider output:\n${msg}` });
       return;
     }
     // waiting / queuing / generating / running → keep polling

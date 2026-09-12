@@ -34,7 +34,7 @@ export interface DirectorJob {
   id: string; sourceId?: string; kind: "anchor" | "motion" | "still" | "identity";
   /** Route used for an identity candidate; other jobs follow the run's image provider. */
   route?: CandidateRoute; title: string; prompt: string;
-  status: "submitting" | "running" | "done" | "error" | "uncertain"; taskId?: string; assetId?: string; startedAt: number; reservedUsd?: number; error?: string;
+  status: "submitting" | "running" | "done" | "error" | "uncertain"; taskId?: string; assetId?: string; startedAt: number; reservedUsd?: number; error?: string; errorDetail?: string;
 }
 export interface DirectorRun {
   revisionOf?: string;
