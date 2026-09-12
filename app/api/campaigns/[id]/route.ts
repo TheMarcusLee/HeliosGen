@@ -1,4 +1,4 @@
-import { replyDirector, directorReplySchema, startDirector, approveDirector, controlDirector, advanceDirector, approveDirectorSchema, chooseIdentity } from "@/lib/campaigns/director/engine";
+import { replyDirector, directorReplySchema, startDirector, approveDirector, controlDirector, advanceDirector, approveDirectorSchema, chooseIdentity, identityProposalSchema, updateIdentityProposal } from "@/lib/campaigns/director/engine";
 import { startDirectorSchema, directorBusy } from "@/lib/campaigns/director/types";
 import { randomUUID } from "node:crypto";
 import { memorySchema, budgetSchema, budgetUsage } from "@/lib/campaigns/operations";
@@ -23,6 +23,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("director-control"), runId: z.string(), operation: z.enum(["pause", "resume", "stop"]) }),
   z.object({ action: z.literal("director-advance") }),
   z.object({ action: z.literal("director-identity"), runId: z.string(), assetId: z.string() }),
+  identityProposalSchema.extend({ action: z.literal("director-identity-proposal"), runId: z.string() }),
   z.object({ action: z.literal("revise-text"), assetId: z.string(), text: z.string().trim().min(1).max(8000) }),
   z.object({ action: z.literal("memory"), memory: memorySchema }),
   z.object({ action: z.literal("budget"), budget: budgetSchema }),
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (body.action === "director-control") return Response.json({ campaign: controlDirector(id, body.runId, body.operation) });
     if (body.action === "director-advance") return Response.json({ campaign: await advanceDirector(id) });
     if (body.action === "director-identity") return Response.json({ campaign: chooseIdentity(id, body.runId, body.assetId) });
+    if (body.action === "director-identity-proposal") return Response.json({ campaign: updateIdentityProposal(id, body.runId, body) });
     if (body.action === "message") return Response.json({ campaign: await planCampaign(id, body.text, body.azureConfig, undefined, body.revisionOf) });
     if (body.action === "start") return Response.json({ campaign: startCampaignRun(id, body.messageId) });
     if (body.action === "advance") return Response.json({ campaign: await advanceCampaign(id) });

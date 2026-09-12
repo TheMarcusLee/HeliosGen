@@ -1,4 +1,4 @@
-import { getKieApiToken } from "../../guest/db";
+import { getKieApiToken, recoverJob } from "../../guest/db";
 import { searchTikTok } from "./searchProvider";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
@@ -152,6 +152,17 @@ export function replyDirector(id: string, runId: string, input: z.input<typeof d
     return saveCampaign(c);
   });
 }
+export const identityProposalSchema = z.object({ name: z.string().trim().min(1).max(120), dna: z.string().trim().min(20).max(4000), personality: z.string().trim().max(2000), direction: z.string().trim().min(10).max(2000) });
+/** The user edits the agent's proposal before any candidate is generated. */
+export function updateIdentityProposal(id: string, runId: string, input: z.input<typeof identityProposalSchema>) {
+  return withLock(id, () => {
+    const c = getCampaign(id), run = findRun(c, runId), data = identityProposalSchema.parse(input);
+    if (run.status !== "awaiting_approval" || !run.identityProposal || run.jobs.some(j => j.kind === "identity")) throw new Error("The influencer proposal can only be edited before candidates are generated.");
+    run.identityProposal = { ...run.identityProposal, ...data };
+    event(run, "identity_edited", `${data.name}: proposal updated by you before generating candidates.`);
+    return saveCampaign(c);
+  });
+}
 /** The user picks one generated candidate; it becomes a saved identity and the run continues into production. */
 export function chooseIdentity(id: string, runId: string, assetId: string) {
   return withLock(id, () => {
@@ -222,7 +233,17 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
       if (run.status !== "running") return c;
       // An approved influencer proposal is fulfilled deterministically: no reasoning call per candidate.
       if (run.approval && run.identityProposal && !run.identity?.references.length) {
-        const p = run.identityProposal, candidates = ownAssets().filter(a => a.productionKind === "identity");
+        const p = run.identityProposal;
+        // A local image job whose status was lost still has its finished generation on record; reclaim it as a candidate.
+        for (const job of run.jobs.filter(j => j.kind === "identity" && j.status === "error" && j.taskId && !j.assetId)) {
+          const record = recoverJob(job.taskId!);
+          const url = record?.status === "done" ? record.image_urls?.[0] ?? record.image_url : undefined;
+          if (!url) continue;
+          const asset: CampaignAsset = { id: randomUUID(), directorId: run.id, productionKind: "identity", messageId: run.messageId, stepId: job.id, title: job.title, pack: "Influencer candidates", kind: "image", url, prompt: job.prompt, look: p.direction, review: "pending", createdAt: Date.now(), version: 1 };
+          c.assets.push(asset); job.assetId = asset.id; job.status = "done"; job.error = undefined; p.candidates.push(asset.id);
+          event(run, "generated", `${job.title} was recovered from the media library.`);
+        }
+        const candidates = ownAssets().filter(a => a.productionKind === "identity");
         if (candidates.length >= p.count) { run.status = "awaiting_identity"; event(run, "identity_choice", `${p.name}: ${p.count} reference candidates are ready (${p.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")}). Choose the one to save as the influencer for this campaign.`); return commit(); }
         const submitted = run.jobs.filter(j => j.kind === "identity").length;
         if (submitted >= p.count && !run.jobs.some(j => j.kind === "identity" && ["submitting", "running"].includes(j.status))) {
@@ -236,7 +257,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           const n = submitted + 1, route = p.routes[submitted % p.routes.length], modelName = IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model;
           if (route.provider !== "kie" && !(await tools.accountStatus(route.provider)).imageReady) throw new Error(`${accountLabel(route.provider)} image generation is unavailable. No fallback provider will be charged.`);
           if (!tools.mediaReady("identity", route.provider)) throw new Error("Connect Kie.ai in Settings before generating influencer candidates.");
-          const prompt = `Photoreal reference portrait of a new Instagram creator, candidate ${n} of ${p.count}: a distinct interpretation of this identity.\n\nIdentity: ${p.dna}\n\nPersonality: ${p.personality}\n\nStyling and setting for this campaign: ${p.direction}\n\nFull body visible, facing camera, natural light, simple background, no text or logos.`;
+          const prompt = `Editorial-quality reference photo of a new top-tier Instagram fashion and lifestyle creator, candidate ${n} of ${p.count}: a distinct, striking interpretation of this identity.\n\nIdentity: ${p.dna}\n\nPersonality: ${p.personality}\n\nStyling and setting for this campaign: ${p.direction}\n\nMagazine-grade beauty and presence: camera-ready face, polished hair and makeup, an on-trend flattering outfit with intentional styling, confident model posture. Flattering directional light, clean background, sharp full-body framing facing camera. Photoreal, no text, no logos, no watermarks.`;
           const candidateEstimate = serverEstimate({ provider: route.provider, modelId: route.model, kind: "image" });
           const newJob: DirectorJob = { id: randomUUID(), kind: "identity", route, title: `${p.name} · ${modelName} · candidate ${n}`, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: candidateEstimate.basis === "unknown" ? run.approval.imageEstimateUsd : candidateEstimate.usd };
           run.jobs.push(newJob); commit(); release.assertOwned();

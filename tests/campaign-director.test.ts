@@ -347,3 +347,31 @@ test("local provider task ids are never polled against kie.ai", async () => {
   for (const id of ["codex-1-a", "azure-1-a", "antigravity-1789187327695-v5jgqp"]) assert.equal(isLocalTaskId(id), true, id);
   assert.equal(isLocalTaskId("2f4c9b7e1a"), false);
 });
+
+test("the proposal can be edited before candidates exist, and a candidate whose job status was lost is recovered from the media library", async () => {
+  const db = await database, e = await engine;
+  const guest = await import("../lib/guest/db");
+  const c = db.createCampaign({ model: "codex-account", imageModel: "gpt-image-2", imageProvider: "codex" });
+  const started = e.startDirector(c.id, { objective: "Find a trending dance video and design an influencer for it", sourceUrls: ["https://www.tiktok.com/@test/video/123"] });
+  const run = started.directors![0], source = run.sources[0];
+  source.media = structuredClone(media); source.status = "inspected"; source.inspection = structuredClone(inspection); source.selection = { start: 0, end: 5, direction: "Studio look", clip: { ...structuredClone(media), localUrl: "/generated/selected-clip.mp4", duration: 5 } };
+  run.status = "awaiting_approval"; run.identityProposal = { name: "Nova", dna: "Adult creator with long dark hair and athletic build", personality: "Playful", direction: "Gym basics", candidates: [], routes: [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }], count: 2 };
+  db.saveCampaign(started);
+  const edited = e.updateIdentityProposal(c.id, run.id, { name: "Sienna", dna: "Adult creator, striking editorial features, glossy dark waves, athletic hourglass build", personality: "Magnetic", direction: "Elevated streetwear: cropped leather jacket, high-waist tailored shorts, gold hoops" });
+  assert.equal(edited.directors![0].identityProposal?.name, "Sienna"); assert.match(edited.directors![0].events.at(-1)!.summary, /updated by you/);
+  e.approveDirector(c.id, run.id, { maxGenerations: 2 });
+  const tools = fakeTools(); let images = 0; const prompts: string[] = [];
+  tools.generateImage = async req => { images++; prompts.push((await req.json()).prompt); return Response.json({ taskId: `antigravity-test-${images}` }); };
+  // The second candidate's status is lost to a spurious error, but its generation record is complete.
+  tools.jobStatus = async req => req.url.includes("antigravity-test-2") ? Response.json({ status: "error", error: "recordInfo is null" }) : Response.json({ status: "done", imageUrls: ["/generated/candidate-1.jpg"] });
+  guest.insertGeneration({ task_id: "antigravity-test-2", user_id: "guest", generation_type: "image", status: "done", image_url: "/generated/candidate-2.jpg", prompt: "p", model: "nano-banana-pro", aspect_ratio: "9:16", quality: "1k" });
+  tools.decideNext = async () => { throw new Error("the agent must not be consulted while candidates are pending"); };
+  for (let i = 0; i < 10; i++) { await e.advanceDirector(c.id, tools); if (db.getCampaign(c.id).directors![0].status === "awaiting_identity") break; }
+  const current = db.getCampaign(c.id).directors![0];
+  assert.equal(current.status, "awaiting_identity", JSON.stringify(current.events.slice(-3)));
+  const candidates = db.getCampaign(c.id).assets.filter(a => a.productionKind === "identity");
+  assert.deepEqual(candidates.map(a => a.url).sort(), ["/generated/candidate-1.jpg", "/generated/candidate-2.jpg"]);
+  assert.ok(current.events.some(ev => /recovered from the media library/.test(ev.summary)));
+  assert.ok(prompts.every(p => /Sienna|glossy dark waves/.test(p) && /Editorial-quality|Magazine-grade/.test(p)), "candidates are generated from the edited proposal with the editorial standard");
+  assert.throws(() => e.updateIdentityProposal(c.id, run.id, { name: "X", dna: "Twenty characters minimum here", personality: "", direction: "Something else entirely" }), /before candidates/);
+});
