@@ -1,6 +1,6 @@
 [package]
 name = "heliosgen-desktop"
-version = "0.1.0"
+version = "1.2.1"
 description = "UGC{Gen} desktop app"
 authors = ["UGC{Gen}"]
 edition = "2021"

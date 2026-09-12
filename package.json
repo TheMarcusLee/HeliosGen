@@ -1,6 +1,6 @@
 {
   "name": "ugc-gen",
-  "version": "0.1.0",
+  "version": "1.2.1",
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "scripts": {
@@ -9,7 +9,8 @@
     "start": "next start -p ${PORT:-3000}",
     "lint": "eslint",
     "desktop:dev": "node scripts/desktop/dev.mjs",
-    "desktop:build": "CI=true tauri build",
+    "desktop:check-version": "node scripts/desktop/check-version.mjs",
+    "desktop:build": "node scripts/desktop/check-version.mjs && CI=true tauri build",
     "desktop:icon": "tauri icon",
     "mcp:build": "tsc -p mcp/tsconfig.json",
     "mcp:dev": "tsx mcp/src/index.ts",

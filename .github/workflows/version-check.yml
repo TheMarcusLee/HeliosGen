@@ -1,0 +1,30 @@
+name: version-check
+
+# Guards against issue #12: a release tag whose bundle version was never bumped
+# in src-tauri/tauri.conf.json. On PRs it only checks that the version files
+# agree; on a vX.Y.Z / X.Y.Z tag it also checks the tag matches.
+
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+  pull_request:
+    paths:
+      - "package.json"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "scripts/desktop/check-version.mjs"
+      - ".github/workflows/version-check.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # GITHUB_REF_NAME is the tag on a tag push, the branch otherwise; the
+      # script ignores anything that isn't a X.Y.Z version string.
+      - run: node scripts/desktop/check-version.mjs

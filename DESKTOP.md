@@ -108,7 +108,7 @@ disable-library-validation — the bundled Node/V8 needs them).
 Verify the result:
 ```bash
 spctl -a -vvv "src-tauri/target/release/bundle/macos/UGC{Gen}.app"   # → accepted, source=Notarized Developer ID
-xcrun stapler validate "src-tauri/target/release/bundle/dmg/UGC{Gen}_0.1.0_aarch64.dmg"
+xcrun stapler validate "src-tauri/target/release/bundle/dmg/UGC{Gen}_1.2.1_aarch64.dmg"
 ```
 
 ## Local data store
@@ -163,8 +163,14 @@ plus every referenced image/video — portable and shareable as a file
       `components/UpdateBanner.tsx` shows a yellow "Update available" bar under
       the Kie banner; tapping it opens a modal with the release notes and a
       **Download** button (opens the release page via the external-link handler).
-      No self-install. Cut a release by tagging `vX.Y.Z` on GitHub with `version`
-      bumped in `tauri.conf.json` to match.
+      No self-install. Cut a release by bumping `version` in `tauri.conf.json`,
+      `package.json`, `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock` (the
+      `heliosgen-desktop` entry) to the same `X.Y.Z`, then `node
+      scripts/desktop/check-version.mjs X.Y.Z` to confirm they agree. Commit,
+      then tag `vX.Y.Z`. Tauri bakes `tauri.conf.json` `version` into the macOS
+      Info.plist / Windows installer and into `NEXT_PUBLIC_APP_VERSION`. `npm run
+      desktop:build` runs the check first, and the `version-check` CI job fails
+      any tag push whose version files disagree (issue #12).
       `NEXT_PUBLIC_UPDATE_CHECK_FORCE=1` (dev) forces the banner on for eyeballing.
 - [ ] Bundle size — was ~330 MB stage / ~440 MB `.app`; dropping `@aws-sdk` +
       `@supabase` (~web/cloud removal) should trim it further. Remaining bulk is
