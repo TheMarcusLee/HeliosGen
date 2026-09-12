@@ -42,7 +42,9 @@ export async function candidateRoutes(run: Pick<DirectorRun, "imageProvider" | "
 export const candidateCount = (routes: CandidateRoute[]) => routes.length >= 2 ? IDENTITY_CANDIDATES_SPLIT : IDENTITY_CANDIDATES;
 const defaults = { mediaReady: (kind: "anchor" | "motion" | "still" | "identity", provider: "codex" | "antigravity" | "kie") => kind !== "motion" && provider !== "kie" || !!getKieApiToken(), decideNext, inspectSource, reviewOutput, searchSocial, searchTikTok, clipVideo, retrieveVideo, motionImage, generateImage, generateVideo, jobStatus, accountStatus };
 export type DirectorTools = Omit<typeof defaults, "generateImage" | "generateVideo" | "jobStatus"> & Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>>;
-export const approveDirectorSchema = z.object({ maxGenerations: z.number().int().min(2).max(30), motionEstimateUsd: z.number().positive().max(1000).optional(), referenceReuseConfirmed: z.literal(true) });
+export const approveDirectorSchema = z.object({ maxGenerations: z.number().int().min(1).max(30), motionEstimateUsd: z.number().positive().max(1000).optional(), referenceReuseConfirmed: z.boolean().default(false) });
+/** Generations still available under the current approval. */
+export const allowanceLeft = (run: DirectorRun) => run.approval ? (run.approval.jobsAtApproval ?? 0) + run.approval.maxGenerations - run.jobs.length : 0;
 function event(run: DirectorRun, tool: string, summary: string, outcome?: string) { run.events.push({ id: randomUUID(), at: Date.now(), tool, summary, outcome }); }
 function findRun(c: Campaign, id: string) { const run = c.directors?.find(d => d.id === id); if (!run) throw new Error("Director run not found."); return run; }
 function inFlight(run: DirectorRun) { return run.jobs.some(j => j.status === "running" || j.status === "submitting"); }
@@ -65,16 +67,32 @@ export function startDirector(id: string, input: z.input<typeof startDirectorSch
 export function approveDirector(id: string, runId: string, input: z.input<typeof approveDirectorSchema>) {
   return withLock(id, () => {
     const c = getCampaign(id), run = findRun(c, runId), data = approveDirectorSchema.parse(input);
-    if (run.status !== "awaiting_approval" || !run.proposal) throw new Error("This run is not awaiting production approval.");
+    if (run.status !== "awaiting_approval") throw new Error("This run is not awaiting approval.");
     if (c.planning || c.runs.some(r => ["running", "paused"].includes(r.status)) || directorBusy({ directors: c.directors?.filter(d => d.id !== runId) })) throw new Error("Finish other production first.");
     const needsCandidates = !c.identity?.references.length;
     if (needsCandidates && !run.identityProposal) throw new Error("Select or build and save an influencer identity before production, or let the agent propose one.");
+    if (!needsCandidates && !run.proposal && run.approval?.scope !== "candidates") throw new Error("This run is not awaiting production approval.");
     if (c.identity?.defaults.contentClass === "adult") throw new Error("Director production currently supports SFW identities.");
     if (!IMAGE_MODELS.some(m => m.id === c.imageModel && m.supportsImages && m.ratios.includes("9:16"))) throw new Error("Choose a reference-capable image model supporting 9:16.");
     const model = motionModel(run.videoModel);
-    const candidates = needsCandidates ? run.identityProposal!.count : 0;
-    if (data.maxGenerations < run.reels * (2 + run.stillsPerReel) + candidates) throw new Error(`The allowance must cover ${candidates ? `${candidates} influencer candidates plus ` : ""}at least one anchor, motion video, and requested stills for each Reel.`);
     const budget = c.budget ?? budgetSchema.parse({}), used = budgetUsage(c);
+    // Stage one: only the influencer candidates. Production is approved separately once a face is chosen.
+    if (needsCandidates) {
+      const p = run.identityProposal!;
+      if (data.maxGenerations < p.count) throw new Error(`The candidate allowance must cover all ${p.count} influencer candidates.`);
+      const perCandidate = p.routes.map(r => serverEstimate({ provider: r.provider, modelId: r.model, kind: "image", manualUsd: r.provider === "kie" ? budget.imageEstimateUsd : undefined }));
+      const unknown = perCandidate.some(e => e.basis === "unknown");
+      const maxReservedUsd = unknown ? undefined : data.maxGenerations * Math.max(...perCandidate.map(e => e.usd));
+      if (used.generations + data.maxGenerations > budget.maxGenerations) throw new Error("The candidate allowance exceeds the campaign generation limit.");
+      if (budget.maxEstimatedUsd !== null && (unknown || used.unknown)) throw new Error("No price is known for a candidate image model. Enter an image estimate before using a dollar planning limit.");
+      if (budget.maxEstimatedUsd !== null && used.estimatedUsd + maxReservedUsd! > budget.maxEstimatedUsd + 0.000001) throw new Error("The candidate allowance exceeds the campaign estimated-cost limit.");
+      run.approval = { scope: "candidates", jobsAtApproval: run.jobs.length, maxGenerations: data.maxGenerations, imageEstimateUsd: unknown ? undefined : Math.max(...perCandidate.map(e => e.usd)), maxReservedUsd, referenceReuseConfirmed: false, at: Date.now() };
+      run.proposal = undefined; run.status = "running"; run.error = undefined;
+      event(run, "approved", `${p.count} influencer candidates authorized (${p.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")})${maxReservedUsd !== undefined ? `, reserving up to $${maxReservedUsd.toFixed(2)}` : ""}. Production waits for your choice.`);
+      return saveCampaign(c);
+    }
+    if (!data.referenceReuseConfirmed) throw new Error("Confirm that the selected source footage may be reused for these adaptations.");
+    if (data.maxGenerations < run.reels * (2 + run.stillsPerReel)) throw new Error("The allowance must cover at least one anchor, motion video, and requested stills for each Reel.");
     // Manual entries win; otherwise observed charges, then published prices. Motion is priced for the longest selected clip.
     const clipSeconds = Math.max(5, ...run.sources.filter(s => s.selection).map(s => s.selection!.end - s.selection!.start));
     const imageEstimate = serverEstimate({ provider: c.imageProvider ?? "kie", modelId: c.imageModel, kind: "image", manualUsd: budget.imageEstimateUsd });
@@ -95,8 +113,8 @@ export function approveDirector(id: string, runId: string, input: z.input<typeof
       return saveCampaign(c);
     }
     run.imageProvider = c.imageProvider ?? "kie"; run.imageModel = c.imageModel;
-    run.approval = { ...data, motionEstimateUsd, imageEstimateUsd, maxReservedUsd, at: Date.now() }; run.status = "running"; run.error = undefined;
-    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized${known ? ` (reserving up to $${maxReservedUsd!.toFixed(2)}: images ${imageEstimate.basis}, motion ${motionEstimate.basis})` : ""}, including revisions${candidates ? ` and ${candidates} influencer candidates (${run.identityProposal!.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")})` : ""}. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
+    run.approval = { ...data, referenceReuseConfirmed: true, scope: "production", jobsAtApproval: run.jobs.length, motionEstimateUsd, imageEstimateUsd, maxReservedUsd, at: Date.now() }; run.status = "running"; run.error = undefined;
+    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized${known ? ` (reserving up to $${maxReservedUsd!.toFixed(2)}: images ${imageEstimate.basis}, motion ${motionEstimate.basis})` : ""}, including revisions. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
     return saveCampaign(c);
   });
 }
@@ -147,8 +165,9 @@ export function chooseIdentity(id: string, runId: string, assetId: string) {
     const identity = createIdentityAsset({ name: p.name, triggerWord: p.name, basePrompts: [p.dna, p.personality], references: [{ url: asset.url!, kind: "face", label: `Chosen director candidate (${IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model})` }], defaults: { contentClass: "sfw", provider: route.provider, modelId: route.model, aspectRatio: "9:16" } });
     c.identity = identity; run.identity = structuredClone(identity); asset.identityId = identity.id; asset.review = "approved";
     run.imageProvider = route.provider; run.imageModel = route.model; c.imageProvider = route.provider; c.imageModel = route.model;
-    run.proposal = undefined; run.status = "running"; run.error = undefined;
-    event(run, "identity_saved", `${identity.name} is saved to Identities and will anchor every adaptation in this run. Images continue on ${IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model}.`);
+    run.proposal = undefined; run.error = undefined;
+    run.status = run.approval?.scope === "candidates" ? "awaiting_approval" : "running";
+    event(run, "identity_saved", `${identity.name} is saved to Identities and will anchor every adaptation in this run. Images continue on ${IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model}.${run.status === "awaiting_approval" ? " Approve the production allowance to begin the adaptations." : ""}`);
     c.messages.push({ id: randomUUID(), role: "assistant", content: `${identity.name} is saved. Producing the adaptations with this influencer now.`, createdAt: Date.now() });
     return saveCampaign(c);
   });
@@ -207,7 +226,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
         if (candidates.length >= p.count) { run.status = "awaiting_identity"; event(run, "identity_choice", `${p.name}: ${p.count} reference candidates are ready (${p.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")}). Choose the one to save as the influencer for this campaign.`); return commit(); }
         const submitted = run.jobs.filter(j => j.kind === "identity").length;
         if (submitted < p.count) {
-          if (run.jobs.length >= run.approval.maxGenerations) throw new Error("Approved generation allowance exhausted before the influencer candidates were complete.");
+          if (allowanceLeft(run) <= 0) throw new Error("Approved candidate allowance exhausted before the influencer candidates were complete.");
           const n = submitted + 1, route = p.routes[submitted % p.routes.length], modelName = IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model;
           if (route.provider !== "kie" && !(await tools.accountStatus(route.provider)).imageReady) throw new Error(`${accountLabel(route.provider)} image generation is unavailable. No fallback provider will be charged.`);
           if (!tools.mediaReady("identity", route.provider)) throw new Error("Connect Kie.ai in Settings before generating influencer candidates.");
@@ -270,8 +289,8 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
             if (!source!.selection) throw new Error("Select and clip an inspected source first.");
             if (run.sources.filter(s => s.selection).length < run.reels) throw new Error("Select all requested sources before proposing production approval.");
             if (!run.identity?.references.length) throw new Error("No influencer is saved for this campaign. Call propose_identity to design one that fits the selected footage.");
-            if (!run.approval) { run.proposal = decision; run.status = "awaiting_approval"; event(run, "approval_needed", "Sources selected. Approve the generation allowance to begin media production."); break; }
-            if (run.jobs.length >= run.approval.maxGenerations) throw new Error("Approved generation allowance exhausted. Stop and create a new run if more production is needed.");
+            if (!run.approval || run.approval.scope === "candidates") { run.proposal = decision; run.status = "awaiting_approval"; event(run, "approval_needed", "Sources selected and the influencer is saved. Approve the generation allowance to begin media production."); break; }
+            if (allowanceLeft(run) <= 0) throw new Error("Approved generation allowance exhausted. Stop and create a new run if more production is needed.");
             if (run.jobs.filter(j => j.sourceId === source!.id && j.kind === decision.kind).length >= (decision.kind === "still" ? run.stillsPerReel + 2 : 3)) throw new Error("Revision limit reached for this source and output type.");
             if (run.jobs.some(j => j.sourceId === source!.id && j.kind === decision.kind && j.prompt.includes(decision.prompt))) throw new Error("Do not repeat the same generation prompt. Apply the visual review correction.");
             const anchor = ownAssets().filter(a => a.sourceId === source!.id && a.productionKind === "anchor" && a.automatedReview?.pass).at(-1);
@@ -320,7 +339,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
         }
       } catch (error) {
         event(run, "tool_error", (error as Error).message);
-        if (inFlight(run) || run.events.slice(-6).filter(e => e.tool === "tool_error").length >= 3 || (run.approval && run.jobs.length >= run.approval.maxGenerations && !delivered(run, ownAssets()))) throw error;
+        if (inFlight(run) || run.events.slice(-6).filter(e => e.tool === "tool_error").length >= 3 || (run.approval?.scope === "production" && allowanceLeft(run) <= 0 && !delivered(run, ownAssets()))) throw error;
       }
     } catch (error) { if (run.status !== "stopped") run.status = "blocked"; run.error = (error as Error).message; event(run, "blocked", run.error); }
     return commit();

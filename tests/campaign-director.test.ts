@@ -206,8 +206,10 @@ test("a run without a saved identity designs one to fit the footage, generates c
   assert.equal(current.status, "awaiting_approval"); assert.equal(current.identityProposal?.name, "Nova"); assert.equal(current.proposal?.tool, "propose_identity");
   // Both accounts report image generation ready, so the split test runs GPT Image against Nano Banana, two candidates each.
   assert.deepEqual(current.identityProposal!.routes, [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }]); assert.equal(current.identityProposal!.count, 4);
-  assert.throws(() => e.approveDirector(c.id, run.id, { maxGenerations: 6, referenceReuseConfirmed: true }), /4 influencer candidates/);
-  e.approveDirector(c.id, run.id, { maxGenerations: 8, referenceReuseConfirmed: true });
+  // Stage one approves only the candidates; no footage-reuse confirmation is needed yet.
+  assert.throws(() => e.approveDirector(c.id, run.id, { maxGenerations: 3 }), /all 4 influencer candidates/);
+  const stageOne = e.approveDirector(c.id, run.id, { maxGenerations: 4 });
+  assert.equal(stageOne.directors![0].approval?.scope, "candidates"); assert.equal(stageOne.directors![0].approval?.referenceReuseConfirmed, false);
   for (let i = 0; i < 10; i++) { await e.advanceDirector(c.id, tools); if (db.getCampaign(c.id).directors![0].status === "awaiting_identity") break; }
   current = db.getCampaign(c.id).directors![0];
   assert.equal(current.status, "awaiting_identity", JSON.stringify(current.events.slice(-3)));
@@ -217,13 +219,17 @@ test("a run without a saved identity designs one to fit the footage, generates c
   assert.equal(candidates.length, 4); assert.ok(candidates.every(a => a.pack === "Influencer candidates" && a.kind === "image")); assert.match(candidates[1].title, /Nano Banana Pro/);
   assert.throws(() => e.chooseIdentity(c.id, run.id, "not-a-candidate"), /candidates/);
   const chosen = e.chooseIdentity(c.id, run.id, candidates[1].id);
-  assert.equal(chosen.identity?.name, "Nova"); assert.equal(chosen.identity?.references[0].url, candidates[1].url); assert.equal(chosen.directors![0].status, "running"); assert.equal(chosen.directors![0].identity?.id, chosen.identity?.id);
+  assert.equal(chosen.identity?.name, "Nova"); assert.equal(chosen.identity?.references[0].url, candidates[1].url); assert.equal(chosen.directors![0].status, "awaiting_approval", "production is approved separately once a face is chosen"); assert.equal(chosen.directors![0].identity?.id, chosen.identity?.id);
   assert.equal(chosen.assets.find(a => a.id === candidates[1].id)?.identityId, chosen.identity?.id);
   // The winning family (Nano Banana via the Google account) becomes the run's and campaign's image route.
   assert.equal(chosen.directors![0].imageProvider, "antigravity"); assert.equal(chosen.imageModel, "nano-banana-pro"); assert.equal(chosen.identity?.defaults.modelId, "nano-banana-pro");
   // Production now proceeds with the saved influencer as the anchor's reference.
   let anchorBody: Record<string, unknown> | undefined;
   tools.generateImage = async req => { anchorBody = await req.json(); images++; return Response.json({ taskId: `image-task-${images}` }); };
+  // Stage two: the production allowance counts from here, not from the candidates already made.
+  assert.throws(() => e.approveDirector(c.id, run.id, { maxGenerations: 3 }), /reused/);
+  const stageTwo = e.approveDirector(c.id, run.id, { maxGenerations: 3, referenceReuseConfirmed: true });
+  assert.equal(stageTwo.directors![0].approval?.scope, "production"); assert.equal(stageTwo.directors![0].approval?.jobsAtApproval, 4); assert.equal(stageTwo.directors![0].status, "running");
   for (let i = 0; i < 4 && !anchorBody; i++) await e.advanceDirector(c.id, tools);
   assert.ok(anchorBody, "anchor was submitted"); assert.deepEqual(anchorBody!.imageUrls, [candidates[1].url]); assert.equal(anchorBody!.identityAssetId, chosen.identity?.id); assert.equal(anchorBody!.antigravityProvider, true); assert.equal(anchorBody!.model, "nano-banana-pro");
 });

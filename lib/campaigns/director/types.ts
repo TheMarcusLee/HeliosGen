@@ -53,7 +53,8 @@ export interface DirectorRun {
   /** Connected account that reasons, inspects and reviews for this run. Older runs default to Codex. */
   agentProvider?: AccountProvider;
   proposal?: Extract<Decision, { tool: "generate" | "propose_identity" }>;
-  approval?: { at: number; maxGenerations: number; imageEstimateUsd?: number; motionEstimateUsd?: number; maxReservedUsd?: number; referenceReuseConfirmed: boolean };
+  /** "candidates" authorises only the influencer reference candidates; "production" authorises anchors, motion, stills and revisions counted from jobsAtApproval. */
+  approval?: { at: number; scope?: "candidates" | "production"; jobsAtApproval?: number; maxGenerations: number; imageEstimateUsd?: number; motionEstimateUsd?: number; maxReservedUsd?: number; referenceReuseConfirmed: boolean };
   error?: string;
 }
 export function directorBusy(c: { directors?: DirectorRun[] }) { return !!c.directors?.some(d => ["running", "paused"].includes(d.status) || d.jobs.some(j => ["running", "submitting"].includes(j.status))); }
