@@ -67,12 +67,17 @@ test("director retrieves alternatives, rejects poor footage, produces and revise
   const anchors=result.assets.filter(a=>a.productionKind==="anchor");assert.equal(anchors[1].parentAssetId,anchors[0].id);assert.equal(anchors[1].version,2);assert.ok(result.assets.every(a=>a.review==="pending"));assert.equal(budgetUsage(result).generations,4);
 });
 test("approval enforces campaign budgets and cannot be duplicated", async()=>{
- const {c,run}=await ready(),e=await engine,db=await database;c.budget!.maxEstimatedUsd=2;db.saveCampaign(c);
- assert.throws(()=>e.approveDirector(c.id,run.id,{maxGenerations:4,referenceReuseConfirmed:true}),/estimates/);
+ const {c,run}=await ready(),e=await engine,db=await database;c.budget!.maxEstimatedUsd=1;db.saveCampaign(c);
+ // No manual motion estimate: the published Kling 3.0 Motion Control rate prices the 5s clip at $0.50, so 4 generations exceed a $1 limit.
+ assert.throws(()=>e.approveDirector(c.id,run.id,{maxGenerations:4,referenceReuseConfirmed:true}),/estimated-cost/);
+ c.budget!.maxEstimatedUsd=2;db.saveCampaign(c);
  assert.throws(()=>e.approveDirector(c.id,run.id,{maxGenerations:4,motionEstimateUsd:1,referenceReuseConfirmed:true}),/estimated-cost/);
  const result=e.approveDirector(c.id,run.id,{maxGenerations:4,motionEstimateUsd:.4,referenceReuseConfirmed:true});assert.equal(budgetUsage(result).generations,4);assert.equal(budgetUsage(result).estimatedUsd,1.6);
  assert.throws(()=>e.approveDirector(c.id,run.id,{maxGenerations:4,motionEstimateUsd:.4,referenceReuseConfirmed:true}),/not awaiting/);
  e.controlDirector(c.id,run.id,"stop");assert.equal(budgetUsage(db.getCampaign(c.id)).generations,0);
+ const priced=await ready();priced.c.budget!.maxEstimatedUsd=2;db.saveCampaign(priced.c);
+ const approved=e.approveDirector(priced.c.id,priced.run.id,{maxGenerations:4,referenceReuseConfirmed:true});
+ assert.equal(approved.directors![0].approval?.motionEstimateUsd,0.5);assert.equal(approved.directors![0].approval?.maxReservedUsd,2);assert.match(approved.directors![0].events.at(-1)!.summary,/motion published/);
 });
 test("uncertain submissions are never retried and submitted work survives stop",async()=>{
  const {c,run,tools}=await ready(),e=await engine,db=await database;let calls=0;

@@ -95,7 +95,7 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
         settle(taskId, kind, { status: "error", error: "Generation succeeded but returned no output" });
         return;
       }
-      await settleSuccess(taskId, kind, urls);
+      await settleSuccess(taskId, kind, urls, actualCostFromRecord(data));
       return;
     }
 
@@ -134,7 +134,13 @@ function extractUrls(data: Record<string, unknown>): string[] {
   return out;
 }
 
-async function settleSuccess(taskId: string, kind: Kind, kieUrls: string[]): Promise<void> {
+/** Kie reports the credits actually deducted on a finished task; convert to USD for the ledger. */
+export function actualCostFromRecord(data: Record<string, unknown>): number | undefined {
+  const credits = Number(data.creditsConsumed ?? data.credits_consumed);
+  return Number.isFinite(credits) && credits >= 0 ? Math.round(credits * 0.005 * 10000) / 10000 : undefined;
+}
+
+async function settleSuccess(taskId: string, kind: Kind, kieUrls: string[], actualCost?: number): Promise<void> {
   const folder = kind === "video" ? "videos" : "images";
   let storedUrls: string[];
   try {
@@ -150,16 +156,17 @@ async function settleSuccess(taskId: string, kind: Kind, kieUrls: string[]): Pro
     kind === "video"
       ? { status: "done", videoUrl: storedUrls[0] }
       : { status: "done", imageUrl: storedUrls[0], imageUrls: storedUrls },
+    actualCost,
   );
 }
 
 /** Write jobStore, emit the SSE event, and mirror into the guest DB. */
-function settle(taskId: string, kind: Kind, result: JobResult): void {
+function settle(taskId: string, kind: Kind, result: JobResult, actualCost?: number): void {
   jobStore.set(taskId, result);
   jobEvents.emit(`job:${taskId}`, result);
 
   if (result.status === "done") {
-    settleProviderLedgerTask(taskId, "done", undefined, undefined, kind === "video" ? result.videoUrl : result.imageUrl);
+    settleProviderLedgerTask(taskId, "done", undefined, actualCost, kind === "video" ? result.videoUrl : result.imageUrl);
     guestDb.updateGeneration(
       taskId,
       kind === "video"

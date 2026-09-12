@@ -1,5 +1,6 @@
 import { codexAccountEnv } from "@/lib/codexAccount";
 import { generateImageWithAntigravity } from "@/lib/antigravityAccount";
+import { estimateKieImage } from "@/lib/pricing";
 import { mkdtemp, rm } from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import https from "node:https";
@@ -611,7 +612,7 @@ export async function POST(req: NextRequest) {
     if (!taskId) throw new Error("No task ID in response");
 
     jobStore.set(taskId, { status: "pending", userId: currentUserId ?? undefined });
-    insertProviderLedgerAttempt({ taskId, workflowId, nodeId, identityAssetId, provider: "kie", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
+    insertProviderLedgerAttempt({ taskId, workflowId, nodeId, identityAssetId, provider: "kie", modelId: model, quotedCost: estimateKieImage(model, quality)?.usd, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
 
     guestDb.insertGeneration({
       task_id: taskId, user_id: currentUserId, generation_type: "image",

@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Film, ScanEye, Search, Pause, Play, Square, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,14 @@ export function DirectorRunCard({ run, campaign, busy, action }: { run: Director
   const needsCandidates = !campaign.identity?.references.length && !!run.identityProposal;
   const [allowance, setAllowance] = useState(Math.min(30, run.reels * (2 + run.stillsPerReel) + 2 + (needsCandidates ? run.identityProposal!.count : 0)));
   const modelName = (id: string) => IMAGE_MODELS.find(m => m.id === id)?.name ?? id;
+  const [resolvedMotion, setResolvedMotion] = useState<{ usd: number; basis: string; detail: string }>();
+  const clipSeconds = Math.max(5, ...run.sources.filter(s => s.selection).map(s => s.selection!.end - s.selection!.start));
+  useEffect(() => {
+    if (run.status !== "awaiting_approval") return;
+    let cancelled = false;
+    fetch(`/api/campaigns/${campaign.id}/estimates?motionModel=${encodeURIComponent(run.videoModel ?? "")}&seconds=${clipSeconds}`, { cache: "no-store" }).then(r => r.json()).then(d => { if (!cancelled && d.motion) setResolvedMotion(d.motion); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [run.status, run.videoModel, campaign.id, clipSeconds]);
   const candidates = campaign.assets.filter(a => a.directorId === run.id && a.productionKind === "identity" && a.url);
   const [motionEstimate, setMotionEstimate] = useState("");
   const [reuse, setReuse] = useState(false);
@@ -45,8 +53,8 @@ export function DirectorRunCard({ run, campaign, busy, action }: { run: Director
         {run.identityProposal && !campaign.identity?.references.length && <div className="rounded-lg bg-muted/40 p-3 text-xs"><p><strong>Proposed influencer · {run.identityProposal.name}</strong></p><p className="mt-1">{run.identityProposal.dna}</p><p className="mt-1 text-muted-foreground">{run.identityProposal.direction}</p><p className="mt-1 text-muted-foreground">{run.identityProposal.count} reference candidates will be generated first, split across {run.identityProposal.routes.map(r => modelName(r.model)).join(" and ")}; you choose one before any adaptation is produced, and images continue on the winning model.</p></div>}
         {!campaign.identity && !run.identityProposal && <p className="text-xs text-destructive">Select an identity above, or switch to Plan & create to build and save one. Sources will be reassessed against the saved identity.</p>}
         <Field><FieldLabel htmlFor={`allowance-${run.id}`}>Maximum media generations</FieldLabel><Input id={`allowance-${run.id}`} type="number" min={2} max={30} value={allowance} onChange={e => setAllowance(Number(e.target.value))} /></Field>
-        <Field><FieldLabel htmlFor={`motion-estimate-${run.id}`}>Estimated cost per motion video, USD</FieldLabel><Input id={`motion-estimate-${run.id}`} type="number" min="0.01" step="0.01" placeholder={campaign.budget?.maxEstimatedUsd != null ? "Required for your dollar planning limit" : "Optional · based on the selected clip length"} value={motionEstimate} onChange={e => setMotionEstimate(e.target.value)} /></Field>
-        <p className="text-xs text-muted-foreground">Estimates reserve the allowance conservatively at the higher image/video cost. Account images use account limits; $0 denotes no separate API estimate. Provider charges may differ.</p>
+        <Field><FieldLabel htmlFor={`motion-estimate-${run.id}`}>Estimated cost per motion video, USD</FieldLabel><Input id={`motion-estimate-${run.id}`} type="number" min="0.01" step="0.01" placeholder={resolvedMotion && resolvedMotion.basis !== "unknown" ? `${resolvedMotion.usd.toFixed(3)} · ${resolvedMotion.basis === "actual" ? "observed" : "published"}` : campaign.budget?.maxEstimatedUsd != null ? "Required for your dollar planning limit" : "Optional · based on the selected clip length"} value={motionEstimate} onChange={e => setMotionEstimate(e.target.value)} /></Field>
+        <p className="text-xs text-muted-foreground">{resolvedMotion && resolvedMotion.basis !== "unknown" ? `Leave empty to use $${resolvedMotion.usd.toFixed(3)} per motion video (${resolvedMotion.detail}). ` : ""}Estimates reserve the allowance conservatively at the higher image/video cost. Account images use account limits; $0 denotes no separate API estimate. Provider charges may differ.</p>
         <label className="flex items-start gap-2 text-xs leading-relaxed"><input type="checkbox" checked={reuse} onChange={e => setReuse(e.target.checked)} className="mt-0.5" />I can reuse the selected source footage, including its background, for these adaptations.</label>
         <Button disabled={busy || !reuse || (!campaign.identity && !run.identityProposal)} onClick={() => action({ action: "director-approve", runId: run.id, maxGenerations: allowance, ...(motionEstimate ? { motionEstimateUsd: Number(motionEstimate) } : {}), referenceReuseConfirmed: true })}><Play data-icon="inline-start" />Approve bounded production</Button>
       </div>}

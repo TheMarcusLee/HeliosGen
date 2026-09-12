@@ -32,9 +32,11 @@ test("budgets reserve the full plan, retain failed submissions and release unsta
   const c = await fixture(); c.budget = budgetSchema.parse({ maxGenerations: 0 });
   assert.match(quotePlan(c, plan()).reason!, /generation limit/);
   c.budget = budgetSchema.parse({ maxGenerations: 3, maxEstimatedUsd: 1 });
-  assert.match(quotePlan(c, plan()).reason!, /cost estimates/);
+  // With no manual entry the published Kie.ai price prices the plan (Nano Banana 2 at 1K = 8 credits).
+  const published = quotePlan(c, plan()); assert.equal(published.reason, undefined); assert.equal(published.unknown, false); assert.equal(published.estimatedUsd, 0.04);
+  c.imageModel = "seedream-5-pro"; assert.match(quotePlan(c, plan()).reason!, /No price is known/); c.imageModel = "nano-banana-2";
   c.budget.imageEstimateUsd = 0.75;
-  assert.equal(quotePlan(c, plan()).reason, undefined);
+  assert.equal(quotePlan(c, plan()).reason, undefined); assert.equal(quotePlan(c, plan()).estimatedUsd, 0.75, "a manual entry overrides the published price");
   (await database).saveCampaign(c);
   const started = (await services).startCampaignRun(c.id, "plan");
   assert.equal(budgetUsage(started).estimatedUsd, 0.75);

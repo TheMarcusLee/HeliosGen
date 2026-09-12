@@ -12,6 +12,7 @@ import { getCachedInspection, getCachedMedia, setCachedInspection, setCachedMedi
 import { localPath } from "./media";
 import { claimLease } from "../lease";
 import { budgetSchema, budgetUsage } from "../operations";
+import { serverEstimate } from "../estimates";
 import { effectivePrompt, type Campaign, type CampaignAsset } from "../types";
 import { accountStatus, agentProviderOf, accountLabel } from "../agents";
 import { IMAGE_MODELS } from "../../modelConfig";
@@ -74,11 +75,16 @@ export function approveDirector(id: string, runId: string, input: z.input<typeof
     const candidates = needsCandidates ? run.identityProposal!.count : 0;
     if (data.maxGenerations < run.reels * (2 + run.stillsPerReel) + candidates) throw new Error(`The allowance must cover ${candidates ? `${candidates} influencer candidates plus ` : ""}at least one anchor, motion video, and requested stills for each Reel.`);
     const budget = c.budget ?? budgetSchema.parse({}), used = budgetUsage(c);
-    const imageEstimateUsd = c.imageProvider === "codex" ? 0 : budget.imageEstimateUsd ?? undefined;
-    const known = imageEstimateUsd !== undefined && data.motionEstimateUsd !== undefined;
-    const maxReservedUsd = known ? data.maxGenerations * Math.max(imageEstimateUsd!, data.motionEstimateUsd!) : undefined;
+    // Manual entries win; otherwise observed charges, then published prices. Motion is priced for the longest selected clip.
+    const clipSeconds = Math.max(5, ...run.sources.filter(s => s.selection).map(s => s.selection!.end - s.selection!.start));
+    const imageEstimate = serverEstimate({ provider: c.imageProvider ?? "kie", modelId: c.imageModel, kind: "image", manualUsd: budget.imageEstimateUsd });
+    const motionEstimate = serverEstimate({ provider: "kie", modelId: model.id, kind: "video", manualUsd: data.motionEstimateUsd, video: { seconds: clipSeconds, inputSeconds: clipSeconds } });
+    const imageEstimateUsd = imageEstimate.basis === "unknown" ? undefined : imageEstimate.usd;
+    const motionEstimateUsd = motionEstimate.basis === "unknown" ? undefined : motionEstimate.usd;
+    const known = imageEstimateUsd !== undefined && motionEstimateUsd !== undefined;
+    const maxReservedUsd = known ? data.maxGenerations * Math.max(imageEstimateUsd!, motionEstimateUsd!) : undefined;
     if (used.generations + data.maxGenerations > budget.maxGenerations) throw new Error("The approved allowance exceeds the campaign generation limit.");
-    if (budget.maxEstimatedUsd !== null && (!known || used.unknown)) throw new Error("Set image and motion-transfer estimates before using a dollar planning limit. Previously unpriced jobs also need accounting.");
+    if (budget.maxEstimatedUsd !== null && (!known || used.unknown)) throw new Error(`No price is known for ${imageEstimateUsd === undefined ? "the image model" : "the motion model"}. Enter an estimate before using a dollar planning limit. Previously unpriced jobs also need accounting.`);
     if (budget.maxEstimatedUsd !== null && used.estimatedUsd + maxReservedUsd! > budget.maxEstimatedUsd + 0.000001) throw new Error("The allowance exceeds the campaign estimated-cost limit.");
     // The source assessment is bound to the identity/brief that was actually inspected.
     if (JSON.stringify(c.identity) !== JSON.stringify(run.identity) || JSON.stringify(c.memory) !== JSON.stringify(run.memory) || JSON.stringify(c.referenceUrls) !== JSON.stringify(run.referenceUrls)) {
@@ -89,8 +95,8 @@ export function approveDirector(id: string, runId: string, input: z.input<typeof
       return saveCampaign(c);
     }
     run.imageProvider = c.imageProvider ?? "kie"; run.imageModel = c.imageModel;
-    run.approval = { ...data, imageEstimateUsd, maxReservedUsd, at: Date.now() }; run.status = "running"; run.error = undefined;
-    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized, including revisions${candidates ? ` and ${candidates} influencer candidates (${run.identityProposal!.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")})` : ""}. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
+    run.approval = { ...data, motionEstimateUsd, imageEstimateUsd, maxReservedUsd, at: Date.now() }; run.status = "running"; run.error = undefined;
+    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized${known ? ` (reserving up to $${maxReservedUsd!.toFixed(2)}: images ${imageEstimate.basis}, motion ${motionEstimate.basis})` : ""}, including revisions${candidates ? ` and ${candidates} influencer candidates (${run.identityProposal!.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")})` : ""}. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
     return saveCampaign(c);
   });
 }
@@ -201,7 +207,8 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           if (route.provider !== "kie" && !(await tools.accountStatus(route.provider)).imageReady) throw new Error(`${accountLabel(route.provider)} image generation is unavailable. No fallback provider will be charged.`);
           if (!tools.mediaReady("identity", route.provider)) throw new Error("Connect Kie.ai in Settings before generating influencer candidates.");
           const prompt = `Photoreal reference portrait of a new Instagram creator, candidate ${n} of ${p.count}: a distinct interpretation of this identity.\n\nIdentity: ${p.dna}\n\nPersonality: ${p.personality}\n\nStyling and setting for this campaign: ${p.direction}\n\nFull body visible, facing camera, natural light, simple background, no text or logos.`;
-          const newJob: DirectorJob = { id: randomUUID(), kind: "identity", route, title: `${p.name} · ${modelName} · candidate ${n}`, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: route.provider === "kie" ? run.approval.imageEstimateUsd : 0 };
+          const candidateEstimate = serverEstimate({ provider: route.provider, modelId: route.model, kind: "image" });
+          const newJob: DirectorJob = { id: randomUUID(), kind: "identity", route, title: `${p.name} · ${modelName} · candidate ${n}`, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: candidateEstimate.basis === "unknown" ? run.approval.imageEstimateUsd : candidateEstimate.usd };
           run.jobs.push(newJob); commit(); release.assertOwned();
           const body = { codexProvider: route.provider === "codex", antigravityProvider: route.provider === "antigravity", model: route.model, prompt, aspectRatio: "9:16", imageUrls: run.referenceUrls.slice(0, IMAGE_MODELS.find(m => m.id === route.model)?.maxImages ?? 3), workflowId: run.id, nodeId: newJob.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
           const response = await tools.generateImage(request("/api/generate", body));

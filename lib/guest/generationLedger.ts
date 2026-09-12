@@ -202,3 +202,10 @@ export function listLedger(options?: { workflowId?: string; nodeId?: string; ide
     },
   };
 }
+
+/** Most recent actual charges (USD) recorded for a provider/model, newest first. */
+export function recentActualCosts(provider: string, modelId: string, limit = 10): number[] {
+  const rows = db().prepare("SELECT actual_cost FROM generation_ledger WHERE provider = ? AND model_id = ? AND status = 'done' AND cost_kind = 'actual' AND actual_cost IS NOT NULL ORDER BY updated_at DESC LIMIT ?")
+    .all(provider, modelId, Math.min(100, Math.max(1, limit))) as { actual_cost: number }[];
+  return rows.map(r => Number(r.actual_cost));
+}

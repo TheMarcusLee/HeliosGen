@@ -1,5 +1,6 @@
 import { directorBusy } from "./director/types";
 import { quotePlan } from "./operations";
+import { serverCampaignEstimates } from "./estimates";
 import { claimLease } from "./lease";
 import { accountPlanner, accountStatus, agentProviderOf, isAccountChatModel, accountLabel } from "./agents";
 import { randomUUID } from "node:crypto";
@@ -123,7 +124,7 @@ function startRun(id: string, messageId: string) {
     if (step.kind !== "text" && !cfg.ratios.includes(step.aspectRatio)) throw new Error(`${cfg.name} does not support ${step.aspectRatio}. Revise the plan or change model.`);
     if (step.kind === "video" && step.referenceStep === null && !c.identity?.references.length && !c.referenceUrls.length) throw new Error("Video needs an identity reference or an earlier image step.");
   }
-  const quote = quotePlan(c, message.plan);
+  const quote = quotePlan(c, message.plan, serverCampaignEstimates(c));
   if (quote.reason) throw new Error(quote.reason);
   const run: CampaignRun = { id: randomUUID(), memory: structuredClone(c.memory), revisionOf: message.revisionOf, messageId, workflowId: randomUUID(), status: "running", identity: c.identity ? structuredClone(c.identity) : undefined, referenceUrls: [...c.referenceUrls], imageModel: c.imageModel, imageProvider: c.imageProvider ?? "kie", videoModel: c.videoModel,
     steps: message.plan.steps.map((step, index) => ({ ...step, reservedUsd: quote.costs[index], id: randomUUID(), status: "queued" })) };

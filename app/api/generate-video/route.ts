@@ -9,6 +9,7 @@ import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 import { validateContentRoute } from "@/lib/cloneMe";
 import { insertProviderLedgerAttempt } from "@/lib/guest/generationLedger";
+import { estimateKieVideo } from "@/lib/pricing";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -459,6 +460,7 @@ export async function POST(req: NextRequest) {
     identityAssetId: typeof body.identityAssetId === "string" ? body.identityAssetId : undefined,
     provider: "kie",
     modelId: videoModel,
+    quotedCost: estimateKieVideo(videoModel, { seconds: clampedDuration > 0 ? clampedDuration : undefined, resolution: apiInput.useMotionControl || apiInput.useKlingTurbo ? resolution : (mode !== "pro" && cfg.modes ? mode : resolution), sound: Boolean(sound), inputSeconds: rawVideoRef || (rawRefVideoUrls as string[]).length ? 5 : undefined })?.usd,
     metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] },
   });
 
