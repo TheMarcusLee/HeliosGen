@@ -36,6 +36,8 @@ export type ProductionStep = z.infer<typeof stepSchema> & {
   error?: string;
   /** Diagnostic detail behind the step's "More info" toggle: provider, model, raw output, likely cause. */
   errorDetail?: string;
+  /** Set when the connected account failed this image and it was resent to Kie.ai at the published price. */
+  fallback?: { provider: "kie"; model: string; reason: string; detail?: string };
   startedAt?: number;
   reservedUsd?: number;
 };
@@ -82,6 +84,8 @@ export interface CampaignRun {
   imageProvider?: CampaignImageProvider;
   imageModel: string;
   videoModel: string;
+  /** Snapshot of the campaign's fallback setting when the run started. */
+  imageFallback?: boolean;
 }
 export interface Campaign {
   directors?: DirectorRun[];
@@ -105,6 +109,8 @@ export interface Campaign {
   videoModel: string;
   /** Default reference-video model for Research & adapt runs. */
   motionModel?: string;
+  /** When the connected account (OpenAI or Google) fails an image, resend it to Kie.ai at the published price. Defaults to on. */
+  imageFallback?: boolean;
   planning?: boolean;
   planningStartedAt?: number;
   error?: string;

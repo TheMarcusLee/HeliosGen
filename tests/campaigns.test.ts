@@ -284,3 +284,36 @@ test("independent steps run in parallel, one failure blocks only its dependents,
   current = getCampaign(c.id);
   assert.equal(current.runs[0].status, "done"); assert.equal(submitted.length, 4); assert.equal(current.assets.length, 4);
 });
+
+test("an account-provider image failure is resent to Kie.ai once, within the dollar budget, unless the campaign opts out", async () => {
+  const { startCampaignRun, advanceCampaign } = await services;
+  const { createCampaign, saveCampaign, getCampaign } = await database;
+  const one = { ...plan, steps: [{ kind: "image", title: "Pool day", pack: "Identity", prompt: "Pool direction", look: "Pool", referenceStep: null, aspectRatio: "9:16" }] };
+  const make = (settings: Record<string, unknown>) => { const c = createCampaign({ model: "codex-account", imageModel: "gpt-image-2", imageProvider: "codex" }); Object.assign(c, settings); c.messages = [{ id: "brief", role: "assistant", content: one.reply, createdAt: Date.now(), plan: parseCreativePlan(JSON.stringify(one)) }]; saveCampaign(c); return c; };
+  const bodies: Record<string, unknown>[] = [];
+  const providers = {
+    kieReady: () => true,
+    generateImage: async (req: NextRequest) => { const body = await req.json(); bodies.push(body); return NextResponse.json({ taskId: `img-${bodies.length}` }); },
+    generateVideo: async () => NextResponse.json({ taskId: "video" }),
+    jobStatus: async (req: NextRequest) => { const t = req.nextUrl.searchParams.get("taskId"); const body = bodies[Number(t!.split("-")[1]) - 1]; return NextResponse.json(body.codexProvider ? { status: "error", error: "Responses stream ended without an image result", detail: "Provider: OpenAI account" } : { status: "done", imageUrl: `/generated/${t}.png` }); },
+  };
+  const c = make({});
+  startCampaignRun(c.id, "brief");
+  for (let i = 0; i < 4 && getCampaign(c.id).runs[0].status === "running"; i++) await advanceCampaign(c.id, providers);
+  const run = getCampaign(c.id).runs[0], step = run.steps[0];
+  assert.equal(run.status, "done", "the run finishes through the fallback");
+  assert.equal(step.status, "done"); assert.equal(step.fallback?.provider, "kie"); assert.equal(step.fallback?.model, "gpt-image-2");
+  assert.match(step.fallback?.reason ?? "", /image result|unavailable/); assert.equal(step.reservedUsd, 0.03, "the fallback is reserved at Kie's published GPT Image 2 price");
+  assert.equal(bodies.at(-1)?.codexProvider, false, "the resend goes to Kie.ai with the same model"); assert.equal(bodies.at(-1)?.model, "gpt-image-2");
+  assert.equal(getCampaign(c.id).assets.length, 1);
+  // Opted out: the failure stands.
+  bodies.length = 0; const off = make({ imageFallback: false });
+  startCampaignRun(off.id, "brief");
+  for (let i = 0; i < 4 && getCampaign(off.id).runs[0].status === "running"; i++) await advanceCampaign(off.id, providers);
+  assert.equal(getCampaign(off.id).runs[0].status, "error"); assert.equal(getCampaign(off.id).runs[0].steps[0].fallback, undefined); assert.ok(bodies.every(b => b.codexProvider !== false), "no Kie.ai submission when fallback is off");
+  // A dollar budget that cannot cover the Kie.ai price blocks the fallback rather than overspending.
+  bodies.length = 0; const capped = make({ budget: { maxGenerations: 24, maxEstimatedUsd: 0.01, imageEstimateUsd: 0.001, videoEstimateUsd: null } });
+  startCampaignRun(capped.id, "brief");
+  for (let i = 0; i < 4 && getCampaign(capped.id).runs[0].status === "running"; i++) await advanceCampaign(capped.id, providers);
+  assert.equal(getCampaign(capped.id).runs[0].status, "error"); assert.equal(getCampaign(capped.id).runs[0].steps[0].fallback, undefined);
+});

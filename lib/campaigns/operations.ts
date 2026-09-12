@@ -23,7 +23,7 @@ export function budgetUsage(c: Campaign) {
     estimatedUsd += run.jobs.reduce((n, j) => n + (j.reservedUsd ?? 0), 0);
     unknown ||= run.jobs.some(j => j.reservedUsd === undefined);
     if (run.approval && !["done", "stopped"].includes(run.status)) {
-      const remaining = Math.max(0, (run.approval.jobsAtApproval ?? 0) + run.approval.maxGenerations - run.jobs.length);
+      const remaining = Math.max(0, (run.approval.jobsAtApproval ?? 0) + run.approval.maxGenerations - run.jobs.filter(j => !j.fallbackOf).length);
       generations += remaining;
       estimatedUsd += remaining * Math.max(run.approval.imageEstimateUsd ?? 0, run.approval.motionEstimateUsd ?? 0);
       unknown ||= remaining > 0 && (run.approval.imageEstimateUsd === undefined || run.approval.motionEstimateUsd === undefined);

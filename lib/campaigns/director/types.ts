@@ -35,6 +35,10 @@ export interface DirectorJob {
   /** Route used for an identity candidate; other jobs follow the run's image provider. */
   route?: CandidateRoute; title: string; prompt: string;
   status: "submitting" | "running" | "done" | "error" | "uncertain"; taskId?: string; assetId?: string; startedAt: number; reservedUsd?: number; error?: string; errorDetail?: string;
+  /** The image request as submitted, kept so a failed account job can be resent to Kie.ai unchanged. */
+  request?: Record<string, unknown>;
+  /** Id of the failed account job this Kie.ai job replaces. */
+  fallbackOf?: string;
 }
 export interface DirectorRun {
   revisionOf?: string;
@@ -47,6 +51,8 @@ export interface DirectorRun {
   searchProvider?: "tiktok" | "web" | "scrapecreators"; searchEstimateUsd?: number; searchRequests?: number;
   /** Reference-video model for motion adaptation. Older runs without it use the default. */
   videoModel?: string;
+  /** Resend account-provider image failures to Kie.ai. Snapshot of the campaign setting. */
+  imageFallback?: boolean;
   createdAt: number; decisionCount: number; sources: DirectorSource[]; jobs: DirectorJob[];
   events: { id: string; at: number; tool: string; summary: string; outcome?: string }[];
   memory?: CampaignMemory; identity?: IdentityAsset; referenceUrls: string[]; imageProvider: CampaignImageProvider; imageModel: string;

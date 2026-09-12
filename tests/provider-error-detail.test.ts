@@ -12,7 +12,7 @@ test("detail lists context, the reading, and scrubbed raw output", () => {
   const detail = providerErrorDetail({ provider: "OpenAI account · codex-imagegen", model: "gpt-image-2", size: "1024x1536", references: 2, exitCode: 1, message: "Responses stream ended without an image result", raw: "codex-imagegen exited with code 1: /private/var/folders/ab/T/codex-in-1.png Error: Responses stream ended without an image result; last status was failed." });
   assert.match(detail, /^Provider: OpenAI account · codex-imagegen\nModel: gpt-image-2\nSize: 1024x1536\nReference images: 2\nExit code: 1\n/);
   assert.match(detail, /silent refusal/);
-  assert.match(detail, /Provider output:\n.*<tmp> Error: .*last status was failed/s);
+  assert.match(detail, /Provider output:\n[\s\S]*<tmp> Error: [\s\S]*last status was failed/);
   assert.doesNotMatch(detail, /var\/folders/);
 });
 

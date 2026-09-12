@@ -1,6 +1,7 @@
 import { directorBusy } from "./director/types";
-import { quotePlan } from "./operations";
-import { serverCampaignEstimates } from "./estimates";
+import { quotePlan, budgetSchema, budgetUsage } from "./operations";
+import { serverCampaignEstimates, serverEstimate } from "./estimates";
+import { getKieApiToken } from "../guest/db";
 import { claimLease } from "./lease";
 import { accountPlanner, accountStatus, agentProviderOf, isAccountChatModel, accountLabel } from "./agents";
 import { randomUUID } from "node:crypto";
@@ -131,7 +132,7 @@ function startRun(id: string, messageId: string) {
   }
   const quote = quotePlan(c, message.plan, serverCampaignEstimates(c));
   if (quote.reason) throw new Error(quote.reason);
-  const run: CampaignRun = { id: randomUUID(), memory: structuredClone(c.memory), revisionOf: message.revisionOf, messageId, workflowId: randomUUID(), status: "running", identity: c.identity ? structuredClone(c.identity) : undefined, referenceUrls: [...c.referenceUrls], imageModel: c.imageModel, imageProvider: c.imageProvider ?? "kie", videoModel: c.videoModel,
+  const run: CampaignRun = { id: randomUUID(), memory: structuredClone(c.memory), revisionOf: message.revisionOf, messageId, workflowId: randomUUID(), status: "running", identity: c.identity ? structuredClone(c.identity) : undefined, referenceUrls: [...c.referenceUrls], imageModel: c.imageModel, imageProvider: c.imageProvider ?? "kie", videoModel: c.videoModel, imageFallback: c.imageFallback !== false,
     steps: message.plan.steps.map((step, index) => ({ ...step, reservedUsd: quote.costs[index], id: randomUUID(), status: "queued" })) };
   c.runs.push(run); c.error = undefined;
   saveWorkflow(c, run);
@@ -145,7 +146,7 @@ function finishStep(c: Campaign, run: CampaignRun, step: ProductionStep, urls: s
   outputs.forEach(url => c.assets.push({ id: randomUUID(), messageId: run.messageId, stepId: step.id, title: step.title, pack: step.pack, kind: step.kind, url, text: step.kind === "text" ? step.prompt : undefined, prompt: effectivePrompt(step, run.identity), look: step.look, review: "pending", createdAt: Date.now(), parentAssetId: run.revisionOf, version: run.revisionOf ? (c.assets.find(a => a.id === run.revisionOf)?.version ?? 1) + 1 : 1 }));
 }
 
-type ProviderHandlers = Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>>;
+type ProviderHandlers = Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>> & { kieReady?: () => boolean };
 /** Media jobs in flight at once per campaign. Submissions are cheap; the providers do the waiting. */
 const MAX_IN_FLIGHT = 4;
 const settledStatuses = new Set(["done", "error"]);
@@ -170,6 +171,28 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
     if (!run) return c;
     const fail = (step: ProductionStep, error: unknown) => { step.status = "error"; step.error = error instanceof Error ? error.message : String(error); step.errorDetail = typeof (error as { detail?: unknown }).detail === "string" ? (error as { detail: string }).detail : undefined; };
     const withDetail = (message: string, detail?: unknown) => Object.assign(new Error(message), typeof detail === "string" && detail ? { detail } : {});
+    const kieReady = providers.kieReady ?? (() => !!getKieApiToken());
+    /**
+     * A connected account (OpenAI or Google) failing an image is usually a silent policy refusal or a dropped
+     * stream, not a bad brief. With the campaign's fallback on, the step is re-queued once for Kie.ai with the
+     * same model id at the published price, within the campaign's dollar budget. Returns false when it cannot.
+     */
+    const fallBack = (step: ProductionStep, error: unknown): boolean => {
+      const provider = step.fallback ? "kie" : run.imageProvider ?? "kie";
+      if (step.kind !== "image" || provider === "kie" || run.imageFallback === false || !kieReady() || !IMAGE_MODELS.some(m => m.id === run.imageModel)) return false;
+      const estimate = serverEstimate({ provider: "kie", modelId: run.imageModel, kind: "image" });
+      const budget = c.budget ?? budgetSchema.parse({});
+      if (budget.maxEstimatedUsd !== null) {
+        if (estimate.basis === "unknown") return false;
+        const projected = budgetUsage(c).estimatedUsd - (step.reservedUsd ?? 0) + estimate.usd;
+        if (projected > budget.maxEstimatedUsd) return false;
+      }
+      const detail = (error as { detail?: unknown }).detail;
+      step.fallback = { provider: "kie", model: run.imageModel, reason: error instanceof Error ? error.message : String(error), detail: typeof detail === "string" ? detail : undefined };
+      step.status = "queued"; step.error = undefined; step.errorDetail = undefined; step.taskId = undefined; step.startedAt = undefined;
+      if (estimate.basis !== "unknown") step.reservedUsd = estimate.usd;
+      return true;
+    };
     // 1. Poll every job in flight, in parallel.
     await Promise.all(run.steps.filter(s => s.status === "running").map(async step => {
       try {
@@ -178,7 +201,7 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
         if (result.status === "error" || result.status === "not_found") throw withDetail(result.error || "Job could not be recovered. Check the provider ledger before retrying.", result.detail);
         if (result.status === "done") finishStep(c, run, step, result.videoUrl ? [result.videoUrl] : result.imageUrls?.length ? result.imageUrls : result.imageUrl ? [result.imageUrl] : []);
         else if (Date.now() - (step.startedAt ?? Date.now()) > 60 * 60_000) throw new Error("Job has exceeded one hour. Check the provider ledger before continuing.");
-      } catch (error) { fail(step, error); }
+      } catch (error) { if (!fallBack(step, error)) fail(step, error); }
     }));
     // 2. A submission with no saved job ID cannot be retried automatically.
     for (const step of run.steps.filter(s => s.status === "submitting")) fail(step, new Error("Submission was interrupted before a job ID was saved. Check the provider ledger before retrying; this job may have been charged."));
@@ -197,14 +220,15 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
           const ref = step.referenceStep === null ? undefined : c.assets.find(a => a.stepId === run.steps[step.referenceStep!].id && a.kind === "image");
           if (step.referenceStep !== null && !ref?.url) throw new Error("The required reference image is missing.");
           const refs = ref?.url ? [ref.url] : [...(run.referenceUrls ?? c.referenceUrls), ...(run.identity?.references.map(r => r.url) ?? [])];
-          if (step.kind === "image" && run.imageProvider !== "kie" && run.imageProvider && !(await accountStatus(run.imageProvider)).imageReady) throw new Error(`${accountLabel(run.imageProvider)} image connection unavailable. Check Settings; no fallback provider was charged.`);
-          const body = { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", prompt: effectivePrompt(step, run.identity), model: run.imageModel, videoModel: run.videoModel, aspectRatio: step.aspectRatio, imageUrls: refs.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)!.maxImages), startFrameUrl: refs[0], duration: 5, workflowId: run.workflowId, nodeId: step.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
+          const provider = step.fallback ? "kie" : run.imageProvider ?? "kie";
+          if (step.kind === "image" && provider !== "kie" && !(await accountStatus(provider)).imageReady) throw new Error(`${accountLabel(provider)} image connection unavailable. Check Settings; no fallback provider was charged.`);
+          const body = { codexProvider: provider === "codex", antigravityProvider: provider === "antigravity", prompt: effectivePrompt(step, run.identity), model: run.imageModel, videoModel: run.videoModel, aspectRatio: step.aspectRatio, imageUrls: refs.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)!.maxImages), startFrameUrl: refs[0], duration: 5, workflowId: run.workflowId, nodeId: step.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
           release.assertOwned();
           const response = await (step.kind === "image" ? providers.generateImage : providers.generateVideo)(request(step.kind === "image" ? "/api/generate" : "/api/generate-video", body));
           const result = await response.json();
           if (!response.ok || !result.taskId) throw withDetail(result.error || "Provider returned no job ID.", result.detail);
           step.taskId = result.taskId; step.status = "running"; inFlight++;
-        } catch (error) { fail(step, error); }
+        } catch (error) { if (!fallBack(step, error)) fail(step, error); }
       }
     }
     propagate(); // a submission that failed this tick blocks its dependents now, so the run can settle
@@ -253,7 +277,7 @@ export function retryRun(id: string, runId: string) {
   if (failed.some(s => s.status === "submitting")) throw new Error("A submission has no saved job ID. Check the provider ledger before retrying.");
   const quote = quotePlan(c, { reply: "", title: c.title, assumptions: [], identityDraft: null, steps: failed.map(({ kind, title, pack, prompt, look, referenceStep, aspectRatio }) => ({ kind, title, pack, prompt, look, referenceStep, aspectRatio })) }, serverCampaignEstimates(c));
   if (quote.reason) throw new Error(quote.reason);
-  failed.forEach((s, i) => { s.status = "queued"; s.error = undefined; s.errorDetail = undefined; s.startedAt = undefined; s.taskId = undefined; s.reservedUsd = quote.costs[i]; });
+  failed.forEach((s, i) => { s.status = "queued"; s.error = undefined; s.errorDetail = undefined; s.fallback = undefined; s.startedAt = undefined; s.taskId = undefined; s.reservedUsd = quote.costs[i]; });
   run.status = "running"; c.error = undefined;
   saveWorkflow(c, run);
   return saveCampaign(c);

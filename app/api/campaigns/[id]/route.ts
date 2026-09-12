@@ -41,7 +41,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("save-identity"), assetId: z.string() }),
   z.object({ action: z.literal("review"), assetId: z.string(), review: z.enum(["pending", "approved", "rejected"]) }),
   z.object({ action: z.literal("run"), runId: z.string(), operation: z.enum(["pause", "resume", "stop", "retry"]) }),
-  z.object({ action: z.literal("settings"), title: z.string().trim().min(1).max(120).optional(), model: z.string().optional(), imageModel: z.string().optional(), imageProvider: z.enum(["codex", "antigravity", "kie"]).optional(), videoModel: z.string().optional(), motionModel: z.string().optional(), referenceUrls: z.array(z.string().refine(s => /^\/generated\/[\w./%-]+$/.test(s) || /^https:\/\//.test(s), "Use an uploaded image or HTTPS URL.")).max(8).optional() }),
+  z.object({ action: z.literal("settings"), title: z.string().trim().min(1).max(120).optional(), model: z.string().optional(), imageModel: z.string().optional(), imageProvider: z.enum(["codex", "antigravity", "kie"]).optional(), imageFallback: z.boolean().optional(), videoModel: z.string().optional(), motionModel: z.string().optional(), referenceUrls: z.array(z.string().refine(s => /^\/generated\/[\w./%-]+$/.test(s) || /^https:\/\//.test(s), "Use an uploaded image or HTTPS URL.")).max(8).optional() }),
 ]);
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try { return Response.json({ campaign: getCampaign((await context.params).id) }); }
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         if ((body.imageModel && body.imageModel !== c.imageModel) || (body.imageProvider && body.imageProvider !== c.imageProvider)) c.budget.imageEstimateUsd = null;
         if (body.videoModel && body.videoModel !== c.videoModel) c.budget.videoEstimateUsd = null;
       }
-      for (const key of ["title", "model", "imageProvider", "imageModel", "videoModel", "motionModel", "referenceUrls"] as const) {
+      for (const key of ["title", "model", "imageProvider", "imageFallback", "imageModel", "videoModel", "motionModel", "referenceUrls"] as const) {
         if (body[key] !== undefined) Object.assign(c, { [key]: body[key] });
       }
     } else if (body.action === "review") {

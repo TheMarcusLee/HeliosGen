@@ -327,7 +327,7 @@ test("when some influencer candidates fail, the run offers the ones that exist i
   const started = e.startDirector(c.id, { objective: "Find a trending dance video and design an influencer for it", sourceUrls: ["https://www.tiktok.com/@test/video/123"] });
   const run = started.directors![0], source = run.sources[0];
   source.media = structuredClone(media); source.status = "inspected"; source.inspection = structuredClone(inspection); source.selection = { start: 0, end: 5, direction: "Studio look", clip: { ...structuredClone(media), localUrl: "/generated/selected-clip.mp4", duration: 5 } };
-  run.status = "awaiting_approval"; run.identityProposal = { name: "Nova", dna: "Adult creator with long dark hair and athletic build", personality: "Playful", direction: "Streetwear", candidates: [], routes: [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }], count: 4 };
+  run.status = "awaiting_approval"; run.imageFallback = false; run.identityProposal = { name: "Nova", dna: "Adult creator with long dark hair and athletic build", personality: "Playful", direction: "Streetwear", candidates: [], routes: [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }], count: 4 };
   db.saveCampaign(started);
   e.approveDirector(c.id, run.id, { maxGenerations: 4 });
   const tools = fakeTools(); let images = 0;
@@ -355,7 +355,7 @@ test("the proposal can be edited before candidates exist, and a candidate whose 
   const started = e.startDirector(c.id, { objective: "Find a trending dance video and design an influencer for it", sourceUrls: ["https://www.tiktok.com/@test/video/123"] });
   const run = started.directors![0], source = run.sources[0];
   source.media = structuredClone(media); source.status = "inspected"; source.inspection = structuredClone(inspection); source.selection = { start: 0, end: 5, direction: "Studio look", clip: { ...structuredClone(media), localUrl: "/generated/selected-clip.mp4", duration: 5 } };
-  run.status = "awaiting_approval"; run.identityProposal = { name: "Nova", dna: "Adult creator with long dark hair and athletic build", personality: "Playful", direction: "Gym basics", candidates: [], routes: [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }], count: 2 };
+  run.status = "awaiting_approval"; run.imageFallback = false; run.identityProposal = { name: "Nova", dna: "Adult creator with long dark hair and athletic build", personality: "Playful", direction: "Gym basics", candidates: [], routes: [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }], count: 2 };
   db.saveCampaign(started);
   const edited = e.updateIdentityProposal(c.id, run.id, { name: "Sienna", dna: "Adult creator, striking editorial features, glossy dark waves, athletic hourglass build", personality: "Magnetic", direction: "Elevated streetwear: cropped leather jacket, high-waist tailored shorts, gold hoops" });
   assert.equal(edited.directors![0].identityProposal?.name, "Sienna"); assert.match(edited.directors![0].events.at(-1)!.summary, /updated by you/);
@@ -374,4 +374,30 @@ test("the proposal can be edited before candidates exist, and a candidate whose 
   assert.ok(current.events.some(ev => /recovered from the media library/.test(ev.summary)));
   assert.ok(prompts.every(p => /Sienna|glossy dark waves/.test(p) && /Editorial-quality|Magazine-grade/.test(p)), "candidates are generated from the edited proposal with the editorial standard");
   assert.throws(() => e.updateIdentityProposal(c.id, run.id, { name: "X", dna: "Twenty characters minimum here", personality: "", direction: "Something else entirely" }), /before candidates/);
+});
+
+test("a failed account image job is resent to Kie.ai as a new job that counts against the allowance", async () => {
+  const { c, run, tools } = await ready(), e = await engine, db = await database;
+  const bodies: Record<string, unknown>[] = [];
+  tools.generateImage = async req => { const body = await req.json(); bodies.push(body); return Response.json({ taskId: `image-${bodies.length}` }); };
+  tools.jobStatus = async req => Response.json(req.url.includes("image-1") ? { status: "error", error: "Responses stream ended without an image result", detail: "Provider: OpenAI account" } : { status: "done", imageUrls: ["/generated/fallback.jpg"] });
+  e.approveDirector(c.id, run.id, { maxGenerations: 4, referenceReuseConfirmed: true });
+  await e.advanceDirector(c.id, tools); // submits the anchor on the OpenAI account
+  assert.equal(bodies[0].codexProvider, true);
+  await e.advanceDirector(c.id, tools); // the account job fails; the same request goes to Kie.ai
+  let current = db.getCampaign(c.id).directors![0];
+  assert.equal(current.jobs.length, 2); assert.equal(current.jobs[0].status, "error");
+  assert.equal(current.jobs[1].fallbackOf, current.jobs[0].id); assert.deepEqual(current.jobs[1].route, { provider: "kie", model: "gpt-image-2" }); assert.equal(current.jobs[1].status, "running");
+  assert.equal(bodies[1].codexProvider, false); assert.equal(bodies[1].prompt, bodies[0].prompt); assert.equal(bodies[1].nodeId, current.jobs[1].id);
+  assert.ok(current.events.some(ev => ev.tool === "fallback"));
+  await e.advanceDirector(c.id, tools);
+  current = db.getCampaign(c.id).directors![0];
+  assert.equal(current.jobs[1].status, "done"); assert.ok(db.getCampaign(c.id).assets.some(a => a.stepId === current.jobs[1].id));
+  // With fallback off, the failure stands and nothing is resent.
+  const off = await ready(); off.run.imageFallback = false; db.saveCampaign(off.c); bodies.length = 0;
+  off.tools.generateImage = tools.generateImage; off.tools.jobStatus = tools.jobStatus;
+  e.approveDirector(off.c.id, off.run.id, { maxGenerations: 4, referenceReuseConfirmed: true });
+  await e.advanceDirector(off.c.id, off.tools); await e.advanceDirector(off.c.id, off.tools);
+  const offRun = db.getCampaign(off.c.id).directors![0];
+  assert.equal(offRun.jobs.length, 1); assert.equal(offRun.jobs[0].status, "error"); assert.equal(bodies.length, 1);
 });

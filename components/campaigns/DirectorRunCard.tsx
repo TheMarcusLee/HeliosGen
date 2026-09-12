@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import type { DirectorRun, DirectorSource } from "@/lib/campaigns/director/types";
 import { motionModel, motionModelSummary } from "@/lib/campaigns/director/motionModels";
 import { FailureNotice } from "./FailureNotice";
+
+/** Failures still standing: a job replaced by a Kie.ai fallback is shown through its replacement instead. */
+const failedJobs = (run: DirectorRun) => run.jobs.filter(j => j.status === "error" && !run.jobs.some(o => o.fallbackOf === j.id));
 import type { Campaign } from "@/lib/campaigns/types";
 import { IMAGE_MODELS } from "@/lib/modelConfig";
 
@@ -49,7 +52,7 @@ export function DirectorRunCard({ run, campaign, busy, action }: { run: Director
     <CardContent className="space-y-4">
       {last && <div role="status" className="rounded-lg bg-muted/40 p-3 text-sm"><p>{last.summary}</p>{last.outcome && <p className="mt-1 text-xs text-muted-foreground">{last.outcome}</p>}</div>}
       {run.error && <p role="alert" className="text-sm text-destructive">{run.error}</p>}
-      {run.jobs.some(j => j.status === "error") && <details className="text-xs"><summary className="cursor-pointer text-destructive">{run.jobs.filter(j => j.status === "error").length} failed generation{run.jobs.filter(j => j.status === "error").length === 1 ? "" : "s"}</summary><ul className="mt-2 space-y-3">{run.jobs.filter(j => j.status === "error").map(j => <li key={j.id}><p className="font-medium">{j.title}</p><FailureNotice className="mt-0" error={j.error ?? "Generation failed."} detail={j.errorDetail} /></li>)}</ul></details>}
+      {failedJobs(run).length > 0 && <details className="text-xs"><summary className="cursor-pointer text-destructive">{failedJobs(run).length} failed generation{failedJobs(run).length === 1 ? "" : "s"}</summary><ul className="mt-2 space-y-3">{failedJobs(run).map(j => <li key={j.id}><p className="font-medium">{j.title}</p><FailureNotice className="mt-0" error={j.error ?? "Generation failed."} detail={j.errorDetail} /></li>)}</ul></details>}
       {!!run.sources.length && <details open={run.status === "awaiting_approval" || run.sources.length <= 2}><summary className="cursor-pointer text-sm font-medium">{run.sources.length} sources · {run.sources.filter(s => s.media).length} retrieved · {run.sources.filter(s => s.selection).length} selected</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{run.sources.map(s => <SourceCard key={s.id} source={s} />)}</div></details>}
       {run.status === "awaiting_approval" && needsCandidates && <div className="space-y-4 rounded-xl border border-primary/20 p-4"><h4 className="flex items-center gap-2 text-sm font-medium"><Film size={16} />Step 1 · Generate influencer candidates</h4>
         <div className="rounded-lg bg-muted/40 p-3 text-xs"><p><strong>Proposed influencer · {run.identityProposal!.name}</strong></p><p className="mt-1">{run.identityProposal!.dna}</p><p className="mt-1 text-muted-foreground">{run.identityProposal!.direction}</p></div>

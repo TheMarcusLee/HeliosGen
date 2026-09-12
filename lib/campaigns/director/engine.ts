@@ -44,8 +44,23 @@ const defaults = { mediaReady: (kind: "anchor" | "motion" | "still" | "identity"
 export type DirectorTools = Omit<typeof defaults, "generateImage" | "generateVideo" | "jobStatus"> & Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>>;
 export const approveDirectorSchema = z.object({ maxGenerations: z.number().int().min(1).max(30), motionEstimateUsd: z.number().positive().max(1000).optional(), referenceReuseConfirmed: z.boolean().default(false) });
 /** Generations still available under the current approval. */
-export const allowanceLeft = (run: DirectorRun) => run.approval ? (run.approval.jobsAtApproval ?? 0) + run.approval.maxGenerations - run.jobs.length : 0;
+/** Approved generations not yet used. A Kie.ai fallback replaces a failed job, so it is charged in dollars but does not use a second slot. */
+export const allowanceLeft = (run: DirectorRun) => run.approval ? (run.approval.jobsAtApproval ?? 0) + run.approval.maxGenerations - run.jobs.filter(j => !j.fallbackOf).length : 0;
 function event(run: DirectorRun, tool: string, summary: string, outcome?: string) { run.events.push({ id: randomUUID(), at: Date.now(), tool, summary, outcome }); }
+/** Jobs that failed and were not replaced by a Kie.ai fallback job. */
+export const unresolvedFailures = (run: DirectorRun) => run.jobs.filter(j => j.status === "error" && !run.jobs.some(o => o.fallbackOf === j.id));
+/**
+ * Resend a failed account-provider image job to Kie.ai with the same model and request, as a new job.
+ * It is charged at Kie's published price but takes no extra slot of the approved allowance. Motion jobs already run on Kie.ai and are never resent.
+ */
+async function fallbackJob(run: DirectorRun, job: DirectorJob, tools: DirectorTools): Promise<DirectorJob | undefined> {
+  const provider = job.route?.provider ?? run.imageProvider, model = job.route?.model ?? run.imageModel;
+  if (job.kind === "motion" || !job.request || provider === "kie" || run.imageFallback === false || !tools.mediaReady(job.kind, "kie") || !IMAGE_MODELS.some(m => m.id === model)) return undefined;
+  const estimate = serverEstimate({ provider: "kie", modelId: model, kind: "image" });
+  const fallback: DirectorJob = { id: randomUUID(), sourceId: job.sourceId, kind: job.kind, route: { provider: "kie", model }, title: `${job.title} · Kie.ai fallback`, prompt: job.prompt, status: "submitting", startedAt: Date.now(), reservedUsd: estimate.basis === "unknown" ? job.reservedUsd : estimate.usd, fallbackOf: job.id };
+  fallback.request = { ...job.request, codexProvider: false, antigravityProvider: false, nodeId: fallback.id };
+  return fallback;
+}
 function findRun(c: Campaign, id: string) { const run = c.directors?.find(d => d.id === id); if (!run) throw new Error("Director run not found."); return run; }
 function inFlight(run: DirectorRun) { return run.jobs.some(j => j.status === "running" || j.status === "submitting"); }
 function withLock<T>(id: string, work: () => T) { const release = claimLease(`production:${id}`); if (!release) throw new Error("Production is updating. Try again shortly."); try { return work(); } finally { release(); } }
@@ -56,7 +71,7 @@ export function startDirector(id: string, input: z.input<typeof startDirectorSch
     if (data.revisionOf && !c.assets.some(a => a.id === data.revisionOf && a.directorId)) throw new Error("Director revision source not found.");
     const videoModel = motionModel(data.videoModel ?? c.motionModel).id;
     const urls = [...new Set(data.sourceUrls.map(sourceUrl))];
-    const run: DirectorRun = { id: randomUUID(), messageId: randomUUID(), ...data, videoModel, createdAt: Date.now(), decisionCount: 0, status: "running", jobs: [], events: [], sources: urls.map(url => ({ id: randomUUID(), url, title: url.startsWith("/generated/") ? "Uploaded motion reference" : "Supplied social reference", discoveredAt: Date.now(), status: "found" })), memory: structuredClone(c.memory), identity: structuredClone(c.identity), referenceUrls: [...c.referenceUrls], imageProvider: c.imageProvider ?? "kie", imageModel: c.imageModel, agentProvider: agentProviderOf(c) };
+    const run: DirectorRun = { id: randomUUID(), messageId: randomUUID(), ...data, videoModel, createdAt: Date.now(), decisionCount: 0, status: "running", jobs: [], events: [], sources: urls.map(url => ({ id: randomUUID(), url, title: url.startsWith("/generated/") ? "Uploaded motion reference" : "Supplied social reference", discoveredAt: Date.now(), status: "found" })), memory: structuredClone(c.memory), identity: structuredClone(c.identity), referenceUrls: [...c.referenceUrls], imageProvider: c.imageProvider ?? "kie", imageModel: c.imageModel, imageFallback: c.imageFallback !== false, agentProvider: agentProviderOf(c) };
     event(run, "start", "Research started. Source retrieval and visual inspection run in the background; media generation waits for your approval.");
     c.directors ??= []; c.directors.push(run); c.error = undefined;
     c.messages.push({ id: randomUUID(), role: "user", content: data.objective, createdAt: Date.now() }, { id: run.messageId, role: "assistant", content: "I’m finding and inspecting real source footage, then choosing a motion reference that fits this campaign.", createdAt: Date.now() });
@@ -215,7 +230,20 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
         if (job.status === "submitting") throw new Error("Submission interrupted before a job ID was saved. Check the provider ledger; automatic retry is disabled.");
         const response = await tools.jobStatus(request(`/api/job-status?taskId=${encodeURIComponent(job.taskId!)}`)), result = await response.json();
         if (!response.ok || result.status === "not_found") throw new Error("Cannot recover the provider job. Check the provider ledger before continuing.");
-        if (result.status === "error") { job.status = "error"; job.error = result.error || "Provider generation failed."; job.errorDetail = typeof result.detail === "string" ? result.detail : undefined; event(run, "generation_failed", job.error!); }
+        if (result.status === "error") {
+          job.status = "error"; job.error = result.error || "Provider generation failed."; job.errorDetail = typeof result.detail === "string" ? result.detail : undefined; event(run, "generation_failed", job.error!);
+          const fallback = await fallbackJob(run, job, tools);
+          if (fallback) {
+            run.jobs.push(fallback); commit(); release.assertOwned();
+            const modelName = IMAGE_MODELS.find(m => m.id === fallback.route!.model)?.name ?? fallback.route!.model;
+            try {
+              const r = await tools.generateImage(request("/api/generate", fallback.request)), res = await r.json();
+              if (!r.ok || !res.taskId) throw new Error(res.error || "Kie.ai did not return a job ID.");
+              Object.assign(fallback, { taskId: res.taskId, status: "running" });
+              event(run, "fallback", `${job.title} failed on ${accountLabel(job.route?.provider ?? run.imageProvider as "codex" | "antigravity")}; resent to Kie.ai (${modelName}) at the published price.`, job.error);
+            } catch (error) { fallback.status = "error"; fallback.error = (error as Error).message; event(run, "generation_failed", `Kie.ai fallback for ${job.title} could not be submitted: ${fallback.error}`); }
+          }
+        }
         else if (result.status === "done") {
           const url = result.videoUrl || result.imageUrls?.[0] || result.imageUrl;
           if (!url) throw new Error("Provider completed without a media output.");
@@ -245,10 +273,10 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
         }
         const candidates = ownAssets().filter(a => a.productionKind === "identity");
         if (candidates.length >= p.count) { run.status = "awaiting_identity"; event(run, "identity_choice", `${p.name}: ${p.count} reference candidates are ready (${p.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")}). Choose the one to save as the influencer for this campaign.`); return commit(); }
-        const submitted = run.jobs.filter(j => j.kind === "identity").length;
+        const submitted = run.jobs.filter(j => j.kind === "identity" && !j.fallbackOf).length;
         if (submitted >= p.count && !run.jobs.some(j => j.kind === "identity" && ["submitting", "running"].includes(j.status))) {
           // Every candidate job has settled but some failed. Offer what exists rather than asking the user to reason about failures.
-          const failed = run.jobs.filter(j => j.kind === "identity" && j.status === "error");
+          const failed = unresolvedFailures(run).filter(j => j.kind === "identity");
           if (!candidates.length) throw new Error(`All ${p.count} influencer candidates failed: ${failed.map(j => j.error).filter(Boolean).slice(0, 2).join(" · ") || "provider error"}. Check the image providers, then resume to try again.`);
           run.status = "awaiting_identity"; event(run, "identity_choice", `${p.name}: ${candidates.length} of ${p.count} reference candidates are ready; ${failed.length} failed (${[...new Set(failed.map(j => j.error).filter(Boolean))].join(" · ").slice(0, 200) || "provider error"}). Choose one of the available candidates, or stop and retry.`); return commit();
         }
@@ -262,6 +290,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           const newJob: DirectorJob = { id: randomUUID(), kind: "identity", route, title: `${p.name} · ${modelName} · candidate ${n}`, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: candidateEstimate.basis === "unknown" ? run.approval.imageEstimateUsd : candidateEstimate.usd };
           run.jobs.push(newJob); commit(); release.assertOwned();
           const body = { codexProvider: route.provider === "codex", antigravityProvider: route.provider === "antigravity", model: route.model, prompt, aspectRatio: "9:16", imageUrls: run.referenceUrls.slice(0, IMAGE_MODELS.find(m => m.id === route.model)?.maxImages ?? 3), workflowId: run.id, nodeId: newJob.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
+          newJob.request = body;
           const response = await tools.generateImage(request("/api/generate", body));
           const result = await response.json();
           if (!response.ok || !result.taskId) throw new Error(result.error || "Provider did not return a job ID. Check its ledger before another submission.");
@@ -328,12 +357,13 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
             const model = motionModel(run.videoModel);
             const startFrameUrl = decision.kind === "motion" ? await tools.motionImage(anchor!.url!, clipLimits(model)) : undefined;
             const prompt = effectivePrompt({ prompt: decision.prompt, look: source!.selection.direction }, run.identity);
-            const newJob = { id: randomUUID(), sourceId: source!.id, kind: decision.kind, title: decision.title, prompt, status: "submitting" as const, startedAt: Date.now(), reservedUsd: decision.kind === "motion" ? run.approval.motionEstimateUsd : run.approval.imageEstimateUsd };
+            const newJob: DirectorJob = { id: randomUUID(), sourceId: source!.id, kind: decision.kind, title: decision.title, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: decision.kind === "motion" ? run.approval.motionEstimateUsd : run.approval.imageEstimateUsd };
             run.jobs.push(newJob); commit(); release.assertOwned();
             const common = { workflowId: run.id, nodeId: newJob.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
             const body = decision.kind === "motion"
               ? { ...motionRequestBody(model, { prompt, anchorUrl: startFrameUrl!, clipUrl: source!.selection.clip.localUrl, clipDuration: source!.selection.end - source!.selection.start, identityUrls: run.identity?.references.map(r => r.url) ?? [] }), ...common }
               : { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", model: run.imageModel, prompt, aspectRatio: "9:16", imageUrls: imageUrls.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)?.maxImages ?? 3), ...common };
+            if (decision.kind !== "motion") newJob.request = body;
             const response = await (decision.kind === "motion" ? tools.generateVideo : tools.generateImage)(request(decision.kind === "motion" ? "/api/generate-video" : "/api/generate", body));
             const result = await response.json();
             if (!response.ok || !result.taskId) throw new Error(result.error || "Provider did not return a job ID. Check its ledger before another submission.");
