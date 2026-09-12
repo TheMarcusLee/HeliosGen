@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jobStore } from "@/lib/jobStore";
+import { isLocalTaskId, jobStore } from "@/lib/jobStore";
 import { resumeKieJob } from "@/lib/kieJobPoller";
 import { isWaveSpeedTaskId, resumeWaveSpeedJob } from "@/lib/wavespeedJobPoller";
 import * as guestDb from "@/lib/guest/db";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   if (result) {
     // If a restart killed the background poller for a job that's still pending,
     // restart it so the result can still land.
-    if (result.status === "pending" && !taskId.startsWith("azure-") && !taskId.startsWith("codex-")) {
+    if (result.status === "pending" && !isLocalTaskId(taskId)) {
       const kind = result.type === "video" ? "video" : "image";
       if (isWaveSpeedTaskId(taskId)) resumeWaveSpeedJob(taskId, kind);
       else resumeKieJob(taskId, kind);
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
   // Task not in local store (server restarted / cold start).
   // Azure jobs have no DB record and can't be recovered.
-  if (taskId.startsWith("azure-") || taskId.startsWith("codex-")) {
+  if (isLocalTaskId(taskId)) {
     return NextResponse.json({ status: "not_found" });
   }
 

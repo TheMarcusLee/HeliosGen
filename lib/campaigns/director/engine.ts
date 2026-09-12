@@ -225,6 +225,12 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
         const p = run.identityProposal, candidates = ownAssets().filter(a => a.productionKind === "identity");
         if (candidates.length >= p.count) { run.status = "awaiting_identity"; event(run, "identity_choice", `${p.name}: ${p.count} reference candidates are ready (${p.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")}). Choose the one to save as the influencer for this campaign.`); return commit(); }
         const submitted = run.jobs.filter(j => j.kind === "identity").length;
+        if (submitted >= p.count && !run.jobs.some(j => j.kind === "identity" && ["submitting", "running"].includes(j.status))) {
+          // Every candidate job has settled but some failed. Offer what exists rather than asking the user to reason about failures.
+          const failed = run.jobs.filter(j => j.kind === "identity" && j.status === "error");
+          if (!candidates.length) throw new Error(`All ${p.count} influencer candidates failed: ${failed.map(j => j.error).filter(Boolean).slice(0, 2).join(" · ") || "provider error"}. Check the image providers, then resume to try again.`);
+          run.status = "awaiting_identity"; event(run, "identity_choice", `${p.name}: ${candidates.length} of ${p.count} reference candidates are ready; ${failed.length} failed (${[...new Set(failed.map(j => j.error).filter(Boolean))].join(" · ").slice(0, 200) || "provider error"}). Choose one of the available candidates, or stop and retry.`); return commit();
+        }
         if (submitted < p.count) {
           if (allowanceLeft(run) <= 0) throw new Error("Approved candidate allowance exhausted before the influencer candidates were complete.");
           const n = submitted + 1, route = p.routes[submitted % p.routes.length], modelName = IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model;

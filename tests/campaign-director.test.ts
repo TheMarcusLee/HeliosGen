@@ -320,3 +320,30 @@ test("a run that reached approval without an influencer can hand the decision ba
   await e.advanceDirector(c.id, tools);
   assert.match(db.getCampaign(c.id).directors![0].events.find(ev => ev.tool === "tool_error")!.summary, /propose_identity/);
 });
+
+test("when some influencer candidates fail, the run offers the ones that exist instead of asking a question", async () => {
+  const db = await database, e = await engine;
+  const c = db.createCampaign({ model: "codex-account", imageModel: "gpt-image-2", imageProvider: "codex" });
+  const started = e.startDirector(c.id, { objective: "Find a trending dance video and design an influencer for it", sourceUrls: ["https://www.tiktok.com/@test/video/123"] });
+  const run = started.directors![0], source = run.sources[0];
+  source.media = structuredClone(media); source.status = "inspected"; source.inspection = structuredClone(inspection); source.selection = { start: 0, end: 5, direction: "Studio look", clip: { ...structuredClone(media), localUrl: "/generated/selected-clip.mp4", duration: 5 } };
+  run.status = "awaiting_approval"; run.identityProposal = { name: "Nova", dna: "Adult creator with long dark hair and athletic build", personality: "Playful", direction: "Streetwear", candidates: [], routes: [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }], count: 4 };
+  db.saveCampaign(started);
+  e.approveDirector(c.id, run.id, { maxGenerations: 4 });
+  const tools = fakeTools(); let images = 0;
+  tools.generateImage = async () => { images++; return Response.json({ taskId: `image-task-${images}` }); };
+  // Even-numbered candidates (the second route) fail at the provider; odd ones succeed.
+  tools.jobStatus = async req => { const n = Number(/image-task-(\d+)/.exec(req.url)?.[1]); return Response.json(n % 2 === 0 ? { status: "error", error: "recordInfo is null" } : { status: "done", imageUrls: [`/generated/candidate-${n}.jpg`] }); };
+  tools.decideNext = async () => { throw new Error("the agent must not be consulted while candidates are pending"); };
+  for (let i = 0; i < 12; i++) { await e.advanceDirector(c.id, tools); if (db.getCampaign(c.id).directors![0].status === "awaiting_identity") break; }
+  const current = db.getCampaign(c.id).directors![0];
+  assert.equal(current.status, "awaiting_identity", JSON.stringify(current.events.slice(-3)));
+  assert.equal(images, 4); assert.equal(db.getCampaign(c.id).assets.filter(a => a.productionKind === "identity").length, 2);
+  assert.match(current.events.at(-1)!.summary, /2 of 4 reference candidates are ready; 2 failed/);
+});
+
+test("local provider task ids are never polled against kie.ai", async () => {
+  const { isLocalTaskId } = await import("../lib/jobStore");
+  for (const id of ["codex-1-a", "azure-1-a", "antigravity-1789187327695-v5jgqp"]) assert.equal(isLocalTaskId(id), true, id);
+  assert.equal(isLocalTaskId("2f4c9b7e1a"), false);
+});

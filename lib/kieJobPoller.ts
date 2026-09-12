@@ -11,7 +11,7 @@
  * Not covered yet: Google Veo models (`/api/v1/veo/generate` +
  * `/api/v1/veo/record-info`, which use a different response shape).
  */
-import { jobStore, type JobResult } from "./jobStore";
+import { isLocalTaskId, jobStore, type JobResult } from "./jobStore";
 import { jobEvents } from "./jobEvents";
 import { mirrorToR2 } from "./storage";
 import * as guestDb from "./guest/db";
@@ -42,12 +42,12 @@ export function pollKieJob(taskId: string, apiKey: string, kind: Kind): void {
     .finally(() => active.delete(taskId));
 }
 
-// Local-only providers mint prefixed task IDs (`azure-…`, `codex-…`) and have no
+// Local-only providers mint prefixed task IDs (see LOCAL_TASK_PREFIXES) and have no
 // kie.ai job behind them. Polling kie.ai's recordInfo for one of these just
 // comes back `{ msg: "recordInfo is null" }`, which the loop then settles as a
 // spurious error — clobbering the real job that's still running locally.
 function isKieTaskId(taskId: string): boolean {
-  return !taskId.startsWith("azure-") && !taskId.startsWith("codex-");
+  return !isLocalTaskId(taskId);
 }
 
 /**

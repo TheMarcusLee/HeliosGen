@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { jobStore, type JobResult } from "@/lib/jobStore";
+import { isLocalTaskId, jobStore, type JobResult } from "@/lib/jobStore";
 import { jobEvents } from "@/lib/jobEvents";
 import { resumeKieJob } from "@/lib/kieJobPoller";
 import { isWaveSpeedTaskId, resumeWaveSpeedJob } from "@/lib/wavespeedJobPoller";
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Restart the kie.ai poller if a server restart lost it.
-  if (!taskId.startsWith("azure-") && !taskId.startsWith("codex-")) {
+  if (!isLocalTaskId(taskId)) {
     const kind = existing.type === "video" ? "video" : "image";
     if (isWaveSpeedTaskId(taskId)) resumeWaveSpeedJob(taskId, kind);
     else resumeKieJob(taskId, kind);

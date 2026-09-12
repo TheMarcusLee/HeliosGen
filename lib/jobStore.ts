@@ -2,6 +2,13 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { DATA_DIR } from "./guest/paths";
 
+/**
+ * Task ids minted by local providers (no kie.ai job behind them). Polling kie.ai
+ * for one of these returns "recordInfo is null" and would clobber the real result.
+ */
+export const LOCAL_TASK_PREFIXES = ["azure-", "codex-", "antigravity-"] as const;
+export const isLocalTaskId = (taskId: string) => LOCAL_TASK_PREFIXES.some(prefix => taskId.startsWith(prefix));
+
 export type JobResult =
   | { status: "pending"; type?: "image" | "video"; userId?: string }
   | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }
