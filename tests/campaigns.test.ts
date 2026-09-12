@@ -317,3 +317,14 @@ test("an account-provider image failure is resent to Kie.ai once, within the dol
   for (let i = 0; i < 4 && getCampaign(capped.id).runs[0].status === "running"; i++) await advanceCampaign(capped.id, providers);
   assert.equal(getCampaign(capped.id).runs[0].status, "error"); assert.equal(getCampaign(capped.id).runs[0].steps[0].fallback, undefined);
 });
+
+test("a chosen content format reaches the planner as a beat skeleton", async () => {
+  const { planCampaign } = await services;
+  const c = await fixture(); let context = "", system = "";
+  await planCampaign(c.id, "Make a carousel for my journaling app", {}, async (req: NextRequest) => { const body = await req.json(); system = body.messages[0].content; context = body.messages[1].content; return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(plan) } }] })}\n\ndata: [DONE]\n\n`); }, undefined, "genz-carousel");
+  assert.match(context, /"format":\{"id":"genz-carousel"/); assert.match(context, /The emotional closer/); assert.match(context, /"slideCount":\{"min":5,"max":5\}/);
+  assert.match(system, /Map its beats to steps in order/);
+  context = "";
+  await planCampaign(c.id, "Now something free-form", {}, async (req: NextRequest) => { context = (await req.json()).messages[1].content; return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(plan) } }] })}\n\ndata: [DONE]\n\n`); });
+  assert.doesNotMatch(context, /"format":\{/, "no format means no skeleton");
+});

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { IdentityTemplates } from "@/components/IdentityTemplates";
 import {
   ArrowUpRight,
   Boxes,
@@ -395,6 +396,8 @@ export default function IdentityLibrary() {
             </div>
           ))}
         </section>
+
+        <IdentityTemplates onCreated={() => void load(true)} />
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, trigger, model, or prompt…" className="pl-9" /></div>

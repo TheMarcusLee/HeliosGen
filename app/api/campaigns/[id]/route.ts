@@ -33,7 +33,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("draft-post"), draft: postDraftSchema }),
   z.object({ action: z.literal("queue-post"), postId: z.string() }),
   z.object({ action: z.literal("cancel-post"), postId: z.string() }),
-  z.object({ action: z.literal("message"), text: z.string().trim().min(1).max(12000), revisionOf: z.string().optional(), azureConfig: z.object({ azureEndpoint: z.string().optional(), azureDeployment: z.string().optional(), azureModelName: z.string().optional() }).optional() }),
+  z.object({ action: z.literal("message"), text: z.string().trim().min(1).max(12000), revisionOf: z.string().optional(), formatId: z.string().max(60).optional(), azureConfig: z.object({ azureEndpoint: z.string().optional(), azureDeployment: z.string().optional(), azureModelName: z.string().optional() }).optional() }),
   z.object({ action: z.literal("start"), messageId: z.string() }),
   planEditSchema.extend({ action: z.literal("edit-plan"), messageId: z.string() }),
   z.object({ action: z.literal("advance") }),
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (body.action === "director-advance") return Response.json({ campaign: await advanceDirector(id) });
     if (body.action === "director-identity") return Response.json({ campaign: chooseIdentity(id, body.runId, body.assetId) });
     if (body.action === "director-identity-proposal") return Response.json({ campaign: updateIdentityProposal(id, body.runId, body) });
-    if (body.action === "message") return Response.json({ campaign: await planCampaign(id, body.text, body.azureConfig, undefined, body.revisionOf) });
+    if (body.action === "message") return Response.json({ campaign: await planCampaign(id, body.text, body.azureConfig, undefined, body.revisionOf, body.formatId || undefined) });
     if (body.action === "start") return Response.json({ campaign: startCampaignRun(id, body.messageId) });
     if (body.action === "edit-plan") return Response.json({ campaign: editPlan(id, body.messageId, body) });
     if (body.action === "advance") return Response.json({ campaign: await advanceCampaign(id) });

@@ -95,6 +95,12 @@ The **prompt builder** on the same page ports prompt-palette-pro's edge function
 
 Results can be saved back into the library with their analysis, structured form, prose and negative list.
 
+### Content formats and starter identities
+
+The composer's **format** picker (Plan & create mode) applies a structural content format from the playbook brought over from App Promo Factory: a hook pattern, ordered beats, a slide count and the channels it suits, plus a five-slide Gen Z creator carousel recipe. The planner maps beats to steps in order, adds one caption step for the sequence, shapes the first caption on the hook pattern, and is held to the playbook's truthfulness rules (no invented metrics, testimonials or capabilities).
+
+The identity library has a **Starter templates** section: described personas with a reference image, uploaded as JSON (an array of `{ name, prompt, imageUrl?, category? }`, or an App Promo Factory / Viral Reel Creator `influencer_templates` export unchanged). "Use as identity" mirrors the image into local media and creates an identity whose base prompt is the persona description with its locked trait list. Templates stay in the local database, not the repo.
+
 ### Production workflows
 
 Built-in CloneMe-style templates turn identities into repeatable production pipelines:
