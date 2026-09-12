@@ -242,22 +242,21 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     return () => { rfNode.style.zIndex = ""; };
   }, [modelOpen, providerOpen, ratioOpen, qualityOpen, azureQualityOpen]);
 
+  // Closing the ratio dropdown also discards the custom-size subpanel and its error,
+  // done at the close sites rather than in an effect so no render cascades.
+  const closeRatio = useCallback(() => { setRatioOpen(false); setAzureCustomSizeOpen(false); setCustomSizeError(null); }, []);
+
   useEffect(() => {
     const anyOpen = modelOpen || providerOpen || ratioOpen || qualityOpen || azureQualityOpen || azureResolutionOpen;
     if (!anyOpen) return;
     const handler = (e: MouseEvent) => {
       if (controlBarRef.current && !controlBarRef.current.contains(e.target as unknown as globalThis.Node)) {
-        setModelOpen(false); setProviderOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false); setAzureResolutionOpen(false); setAzureCustomSizeOpen(false);
+        setModelOpen(false); setProviderOpen(false); closeRatio(); setQualityOpen(false); setAzureQualityOpen(false); setAzureResolutionOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [modelOpen, providerOpen, ratioOpen, qualityOpen, azureQualityOpen]);
-
-  // Reset the custom-size subpanel whenever the ratio dropdown itself closes
-  useEffect(() => {
-    if (!ratioOpen) { setAzureCustomSizeOpen(false); setCustomSizeError(null); }
-  }, [ratioOpen]);
+  }, [modelOpen, providerOpen, ratioOpen, qualityOpen, azureQualityOpen, azureResolutionOpen, closeRatio]);
 
   const openLightbox = useCallback(() => {
     setLightboxImgLoaded(false);
@@ -491,7 +490,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
   const closeDropdowns = () => {
     setModelOpen(false);
-    setRatioOpen(false);
+    closeRatio();
     setQualityOpen(false);
     setAzureQualityOpen(false);
   };
@@ -1085,7 +1084,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
                 if (data.imageUrl) return;
-                setModelOpen((o) => !o); setRatioOpen(false); setQualityOpen(false);
+                setModelOpen((o) => !o); closeRatio(); setQualityOpen(false);
               }}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all ${data.imageUrl ? "cursor-default" : "hover:brightness-125"}`}
               style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
@@ -1138,7 +1137,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             <div className="relative shrink-0">
               <button
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => { setProviderOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); }}
+                onClick={() => { setProviderOpen((o) => !o); setModelOpen(false); closeRatio(); setQualityOpen(false); }}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
                 style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
                 title="Provider"
@@ -1171,7 +1170,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           <div className="relative shrink-0">
             <button
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => { setRatioOpen((o) => !o); setModelOpen(false); setQualityOpen(false); }}
+              onClick={() => { if (ratioOpen) closeRatio(); else setRatioOpen(true); setModelOpen(false); setQualityOpen(false); }}
               className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
               style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
             >
@@ -1193,7 +1192,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                         <button
                           key={r}
                           onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}
+                          onClick={() => { updateNodeData(id, { aspectRatio: r }); closeRatio(); }}
                           className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[11px] hover:bg-[#141C28] transition-colors ${active ? "text-white" : "text-[#A0A0A0]"}`}
                         >
                           <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0">
@@ -1273,8 +1272,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                         const err = validateAzureCustomSize(customWidthDraft, customHeightDraft);
                         if (err) { setCustomSizeError(err); return; }
                         updateNodeData(id, { aspectRatio: "custom", azureCustomWidth: customWidthDraft, azureCustomHeight: customHeightDraft });
-                        setAzureCustomSizeOpen(false);
-                        setRatioOpen(false);
+                        closeRatio();
                       }}
                       className="w-full text-center text-[11px] font-medium text-white bg-[#1E2840] hover:bg-[#26324A] rounded py-1.5 transition-colors"
                     >
@@ -1291,7 +1289,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             <div className="relative shrink-0">
               <button
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => { setQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setAzureQualityOpen(false); }}
+                onClick={() => { setQualityOpen((o) => !o); setModelOpen(false); closeRatio(); setAzureQualityOpen(false); }}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
                 style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
               >
@@ -1331,7 +1329,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             <div className="relative shrink-0">
               <button
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => { setAzureQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureResolutionOpen(false); }}
+                onClick={() => { setAzureQualityOpen((o) => !o); setModelOpen(false); closeRatio(); setQualityOpen(false); setAzureResolutionOpen(false); }}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
                 style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
                 title="Quality (Azure Foundry)"
@@ -1375,7 +1373,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             <div className="relative shrink-0">
               <button
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => { setAzureResolutionOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false); }}
+                onClick={() => { setAzureResolutionOpen((o) => !o); setModelOpen(false); closeRatio(); setQualityOpen(false); setAzureQualityOpen(false); }}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
                 style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
                 title="Resolution (Azure)"
