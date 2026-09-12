@@ -25,6 +25,7 @@ import {
   ChevronRight,
   ChevronDown,
   ScanFace,
+  BookOpen,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -737,6 +738,7 @@ export function AppSidebar() {
     { label: "Image", href: `/gallery?tab=images${folderParam}`, icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
     { label: "Video", href: `/gallery?tab=videos${folderParam}`, icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
     { label: "Identities", href: "/identities", icon: ScanFace, active: pathname.startsWith("/identities") },
+    { label: "Prompts", href: "/prompts", icon: BookOpen, active: pathname.startsWith("/prompts") },
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); setSettingsOpen(true); } },

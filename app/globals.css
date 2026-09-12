@@ -1181,6 +1181,28 @@ body {
   display: none;
 }
 
+/* ── Scrollbars: thin, quiet, in the app's own palette ─────────────────── */
+/* Firefox and Chromium 121+ read scrollbar-color; older WebKit reads the
+   pseudo-elements. The thumb sits on a transparent track and only firms up on
+   hover, so it reads as part of the surface rather than a browser default. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-foreground) 18%, transparent) transparent;
+}
+*:hover {
+  scrollbar-color: color-mix(in srgb, var(--color-foreground) 30%, transparent) transparent;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-foreground) 18%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--color-foreground) 30%, transparent); }
+
 /* ── @mention chip in PromptNode ─────────────────────────────────────────── */
 /* ── Canvas hand/pan mode cursor ─────────────────────────────────────────── */
 .canvas-hand-mode,

@@ -82,6 +82,19 @@ Kie.ai image/video entries are maintained by the application catalog. The WaveSp
 
 Multiple images can be dropped into the reference area at once and classified individually as face or body references. Editing an identity creates a new version, so an existing workflow keeps its embedded snapshot until it is intentionally refreshed.
 
+### Prompt library and builder
+
+**Prompts** in the sidebar is a local library of proven image prompts. It lives in the app database, never in the repo: the seed library is personal, and another user brings their own by uploading a JSON file (an array of `{ prompt, title?, categories?, imageUrls? }`, or a prompt-palette-pro export as-is; duplicates by id update, duplicate bodies are skipped). The planner receives the three closest library prompts to the latest brief as *style references* and is instructed to match their specificity, not their subjects: ethnicity and age in the first sentence, exact garments and fabrics, pose geometry, focal length and distance, lighting in Kelvin, and skin realism language.
+
+The **prompt builder** on the same page ports prompt-palette-pro's edge functions onto the connected accounts (Google account through Antigravity first, then OpenAI), at the cheap inspection tier:
+
+- **Describe**: a short brief plus the closest library prompts as few-shot examples.
+- **From image**: a photo → VisionStruct analysis → Reality-First structured JSON prompt (for Nano Banana Pro) and narrative prose (for GPT Image and Grok).
+- **Enhance**: a rough prompt → inferred VisionStruct → the same two outputs. The brief editor on a plan offers this per step and shapes the output for the campaign's image model.
+- **Remix**: one change applied to a library prompt.
+
+Results can be saved back into the library with their analysis, structured form, prose and negative list.
+
 ### Production workflows
 
 Built-in CloneMe-style templates turn identities into repeatable production pipelines:
