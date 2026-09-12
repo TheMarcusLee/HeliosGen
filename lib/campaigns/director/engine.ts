@@ -15,12 +15,28 @@ import { accountStatus, agentProviderOf, accountLabel } from "../agents";
 import { IMAGE_MODELS } from "../../modelConfig";
 import { decideNext, inspectSource, reviewOutput, searchSocial } from "./intelligence";
 import { clipVideo, retrieveVideo, sourceUrl, motionImage } from "./media";
-import { directorBusy, startDirectorSchema, type DirectorJob, type DirectorRun, type Decision } from "./types";
+import { directorBusy, startDirectorSchema, type CandidateRoute, type DirectorJob, type DirectorRun, type Decision } from "./types";
 import { clipLimits, motionModel, motionModelSummary, motionRequestBody } from "./motionModels";
 
 const request = (path: string, body?: unknown) => new NextRequest(`http://localhost${path}`, body === undefined ? undefined : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-/** Reference candidates generated for an agent-proposed influencer before the user picks one. */
+/** Reference candidates generated for an agent-proposed influencer before the user picks one: a split test across image families. */
 export const IDENTITY_CANDIDATES = 3;
+export const IDENTITY_CANDIDATES_SPLIT = 4;
+/**
+ * One GPT Image route and one Gemini route, so the user compares families the
+ * way the split test in the source workflow did. Connected accounts win over
+ * Kie.ai for the same family; a family with no route is simply absent.
+ */
+export async function candidateRoutes(run: Pick<DirectorRun, "imageProvider" | "imageModel">, tools: Pick<DirectorTools, "accountStatus" | "mediaReady">): Promise<CandidateRoute[]> {
+  const routes: CandidateRoute[] = [];
+  const kie = tools.mediaReady("identity", "kie");
+  if ((await tools.accountStatus("codex")).imageReady) routes.push({ provider: "codex", model: "gpt-image-2" });
+  else if (kie && IMAGE_MODELS.some(m => m.id === "gpt-image-2")) routes.push({ provider: "kie", model: "gpt-image-2" });
+  if ((await tools.accountStatus("antigravity")).imageReady) routes.push({ provider: "antigravity", model: "nano-banana-pro" });
+  else if (kie && IMAGE_MODELS.some(m => m.id === "nano-banana-pro")) routes.push({ provider: "kie", model: "nano-banana-pro" });
+  return routes.length ? routes : [{ provider: run.imageProvider, model: run.imageModel }];
+}
+export const candidateCount = (routes: CandidateRoute[]) => routes.length >= 2 ? IDENTITY_CANDIDATES_SPLIT : IDENTITY_CANDIDATES;
 const defaults = { mediaReady: (kind: "anchor" | "motion" | "still" | "identity", provider: "codex" | "antigravity" | "kie") => kind !== "motion" && provider !== "kie" || !!getKieApiToken(), decideNext, inspectSource, reviewOutput, searchSocial, searchTikTok, clipVideo, retrieveVideo, motionImage, generateImage, generateVideo, jobStatus, accountStatus };
 export type DirectorTools = Omit<typeof defaults, "generateImage" | "generateVideo" | "jobStatus"> & Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>>;
 export const approveDirectorSchema = z.object({ maxGenerations: z.number().int().min(2).max(30), motionEstimateUsd: z.number().positive().max(1000).optional(), referenceReuseConfirmed: z.literal(true) });
@@ -53,7 +69,8 @@ export function approveDirector(id: string, runId: string, input: z.input<typeof
     if (c.identity?.defaults.contentClass === "adult") throw new Error("Director production currently supports SFW identities.");
     if (!IMAGE_MODELS.some(m => m.id === c.imageModel && m.supportsImages && m.ratios.includes("9:16"))) throw new Error("Choose a reference-capable image model supporting 9:16.");
     const model = motionModel(run.videoModel);
-    if (data.maxGenerations < run.reels * (2 + run.stillsPerReel) + (needsCandidates ? IDENTITY_CANDIDATES : 0)) throw new Error(`The allowance must cover ${needsCandidates ? `${IDENTITY_CANDIDATES} influencer candidates plus ` : ""}at least one anchor, motion video, and requested stills for each Reel.`);
+    const candidates = needsCandidates ? run.identityProposal!.count : 0;
+    if (data.maxGenerations < run.reels * (2 + run.stillsPerReel) + candidates) throw new Error(`The allowance must cover ${candidates ? `${candidates} influencer candidates plus ` : ""}at least one anchor, motion video, and requested stills for each Reel.`);
     const budget = c.budget ?? budgetSchema.parse({}), used = budgetUsage(c);
     const imageEstimateUsd = c.imageProvider === "codex" ? 0 : budget.imageEstimateUsd ?? undefined;
     const known = imageEstimateUsd !== undefined && data.motionEstimateUsd !== undefined;
@@ -71,7 +88,7 @@ export function approveDirector(id: string, runId: string, input: z.input<typeof
     }
     run.imageProvider = c.imageProvider ?? "kie"; run.imageModel = c.imageModel;
     run.approval = { ...data, imageEstimateUsd, maxReservedUsd, at: Date.now() }; run.status = "running"; run.error = undefined;
-    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized, including revisions${needsCandidates ? ` and ${IDENTITY_CANDIDATES} influencer candidates` : ""}. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
+    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized, including revisions${candidates ? ` and ${candidates} influencer candidates (${run.identityProposal!.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")})` : ""}. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
     return saveCampaign(c);
   });
 }
@@ -112,10 +129,13 @@ export function chooseIdentity(id: string, runId: string, assetId: string) {
     const asset = c.assets.find(a => a.id === assetId && a.directorId === run.id && a.productionKind === "identity" && a.url);
     if (!asset) throw new Error("Choose one of this run's influencer candidates.");
     const p = run.identityProposal;
-    const identity = createIdentityAsset({ name: p.name, triggerWord: p.name, basePrompts: [p.dna, p.personality], references: [{ url: asset.url!, kind: "face", label: "Chosen director candidate" }], defaults: { contentClass: "sfw", provider: run.imageProvider, modelId: run.imageModel, aspectRatio: "9:16" } });
+    // The winning family produced this face, so the rest of the run and the campaign follow that route.
+    const route = run.jobs.find(j => j.assetId === asset.id)?.route ?? { provider: run.imageProvider, model: run.imageModel };
+    const identity = createIdentityAsset({ name: p.name, triggerWord: p.name, basePrompts: [p.dna, p.personality], references: [{ url: asset.url!, kind: "face", label: `Chosen director candidate (${IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model})` }], defaults: { contentClass: "sfw", provider: route.provider, modelId: route.model, aspectRatio: "9:16" } });
     c.identity = identity; run.identity = structuredClone(identity); asset.identityId = identity.id; asset.review = "approved";
+    run.imageProvider = route.provider; run.imageModel = route.model; c.imageProvider = route.provider; c.imageModel = route.model;
     run.proposal = undefined; run.status = "running"; run.error = undefined;
-    event(run, "identity_saved", `${identity.name} is saved to Identities and will anchor every adaptation in this run.`);
+    event(run, "identity_saved", `${identity.name} is saved to Identities and will anchor every adaptation in this run. Images continue on ${IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model}.`);
     c.messages.push({ id: randomUUID(), role: "assistant", content: `${identity.name} is saved. Producing the adaptations with this influencer now.`, createdAt: Date.now() });
     return saveCampaign(c);
   });
@@ -170,18 +190,18 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
       if (run.status !== "running") return c;
       // An approved influencer proposal is fulfilled deterministically: no reasoning call per candidate.
       if (run.approval && run.identityProposal && !run.identity?.references.length) {
-        const candidates = ownAssets().filter(a => a.productionKind === "identity");
-        if (candidates.length >= IDENTITY_CANDIDATES) { run.status = "awaiting_identity"; event(run, "identity_choice", `${run.identityProposal.name}: ${IDENTITY_CANDIDATES} reference candidates are ready. Choose the one to save as the influencer for this campaign.`); return commit(); }
+        const p = run.identityProposal, candidates = ownAssets().filter(a => a.productionKind === "identity");
+        if (candidates.length >= p.count) { run.status = "awaiting_identity"; event(run, "identity_choice", `${p.name}: ${p.count} reference candidates are ready (${p.routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")}). Choose the one to save as the influencer for this campaign.`); return commit(); }
         const submitted = run.jobs.filter(j => j.kind === "identity").length;
-        if (submitted < IDENTITY_CANDIDATES) {
+        if (submitted < p.count) {
           if (run.jobs.length >= run.approval.maxGenerations) throw new Error("Approved generation allowance exhausted before the influencer candidates were complete.");
-          if (run.imageProvider !== "kie" && !(await tools.accountStatus(run.imageProvider)).imageReady) throw new Error(`${accountLabel(run.imageProvider)} image generation is unavailable. No fallback provider will be charged.`);
-          if (!tools.mediaReady("identity", run.imageProvider)) throw new Error("Connect Kie.ai in Settings before generating influencer candidates.");
-          const n = submitted + 1, p = run.identityProposal;
-          const prompt = `Photoreal reference portrait of a new Instagram creator, candidate ${n} of ${IDENTITY_CANDIDATES}: a distinct interpretation of this identity.\n\nIdentity: ${p.dna}\n\nPersonality: ${p.personality}\n\nStyling and setting for this campaign: ${p.direction}\n\nFull body visible, facing camera, natural light, simple background, no text or logos.`;
-          const newJob: DirectorJob = { id: randomUUID(), kind: "identity", title: `${p.name} · candidate ${n}`, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: run.approval.imageEstimateUsd };
+          const n = submitted + 1, route = p.routes[submitted % p.routes.length], modelName = IMAGE_MODELS.find(m => m.id === route.model)?.name ?? route.model;
+          if (route.provider !== "kie" && !(await tools.accountStatus(route.provider)).imageReady) throw new Error(`${accountLabel(route.provider)} image generation is unavailable. No fallback provider will be charged.`);
+          if (!tools.mediaReady("identity", route.provider)) throw new Error("Connect Kie.ai in Settings before generating influencer candidates.");
+          const prompt = `Photoreal reference portrait of a new Instagram creator, candidate ${n} of ${p.count}: a distinct interpretation of this identity.\n\nIdentity: ${p.dna}\n\nPersonality: ${p.personality}\n\nStyling and setting for this campaign: ${p.direction}\n\nFull body visible, facing camera, natural light, simple background, no text or logos.`;
+          const newJob: DirectorJob = { id: randomUUID(), kind: "identity", route, title: `${p.name} · ${modelName} · candidate ${n}`, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: route.provider === "kie" ? run.approval.imageEstimateUsd : 0 };
           run.jobs.push(newJob); commit(); release.assertOwned();
-          const body = { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", model: run.imageModel, prompt, aspectRatio: "9:16", imageUrls: run.referenceUrls.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)?.maxImages ?? 3), workflowId: run.id, nodeId: newJob.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
+          const body = { codexProvider: route.provider === "codex", antigravityProvider: route.provider === "antigravity", model: route.model, prompt, aspectRatio: "9:16", imageUrls: run.referenceUrls.slice(0, IMAGE_MODELS.find(m => m.id === route.model)?.maxImages ?? 3), workflowId: run.id, nodeId: newJob.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
           const response = await tools.generateImage(request("/api/generate", body));
           const result = await response.json();
           if (!response.ok || !result.taskId) throw new Error(result.error || "Provider did not return a job ID. Check its ledger before another submission.");
@@ -264,9 +284,10 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
             if (run.identity?.references.length) throw new Error("An influencer is already saved for this run. Generate the anchor instead.");
             if (run.identityProposal) break; // already proposed; candidates are produced deterministically after approval
             if (run.sources.filter(s => s.selection).length < run.reels) throw new Error("Select all requested sources first so the influencer can be designed to fit the footage.");
-            run.identityProposal = { name: decision.name, dna: decision.dna, personality: decision.personality, direction: decision.direction, candidates: [] };
+            const routes = await candidateRoutes(run, tools);
+            run.identityProposal = { name: decision.name, dna: decision.dna, personality: decision.personality, direction: decision.direction, candidates: [], routes, count: candidateCount(routes) };
             event(run, "identity_proposed", `${decision.name}: ${decision.dna.slice(0, 200)}`, decision.direction);
-            if (!run.approval) { run.proposal = decision; run.status = "awaiting_approval"; event(run, "approval_needed", `Sources selected and an influencer designed to fit them. Approve the generation allowance to produce ${IDENTITY_CANDIDATES} reference candidates and the adaptations.`); }
+            if (!run.approval) { run.proposal = decision; run.status = "awaiting_approval"; event(run, "approval_needed", `Sources selected and an influencer designed to fit them. Approve the generation allowance to produce ${run.identityProposal.count} reference candidates (${routes.map(r => IMAGE_MODELS.find(m => m.id === r.model)?.name ?? r.model).join(" vs ")}) and the adaptations.`); }
             break;
           }
           case "finish":

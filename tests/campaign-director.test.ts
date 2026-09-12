@@ -186,8 +186,8 @@ test("a run without a saved identity designs one to fit the footage, generates c
   const run = started.directors![0], source = run.sources[0];
   source.media = structuredClone(media); source.status = "inspected"; source.inspection = structuredClone(inspection); source.selection = { start: 0, end: 5, direction: "Streetwear, studio backdrop", clip: { ...structuredClone(media), localUrl: "/generated/selected-clip.mp4", duration: 5 } };
   db.saveCampaign(started);
-  const tools = fakeTools(); let images = 0;
-  tools.generateImage = async req => { images++; const body = await req.json(); assert.equal(body.aspectRatio, "9:16"); return Response.json({ taskId: `image-task-${images}` }); };
+  const tools = fakeTools(); let images = 0; const candidateBodies: Record<string, unknown>[] = [];
+  tools.generateImage = async req => { images++; const body = await req.json(); candidateBodies.push(body); assert.equal(body.aspectRatio, "9:16"); return Response.json({ taskId: `image-task-${images}` }); };
   tools.jobStatus = async req => Response.json(req.url.includes("video-task") ? { status: "done", videoUrl: "/generated/output.mp4" } : { status: "done", imageUrls: [`/generated/candidate-${images}.jpg`] });
   tools.decideNext = async (r, assets) => {
     if (!r.identityProposal) return { tool: "propose_identity", name: "Nova", dna: "Adult creator, early twenties, long dark hair, athletic build, warm skin tone, small nose stud", personality: "Playful and confident", direction: "Streetwear that matches the studio backdrop of the selected clip", reason: "Fit the footage" };
@@ -199,23 +199,42 @@ test("a run without a saved identity designs one to fit the footage, generates c
   await e.advanceDirector(c.id, tools);
   let current = db.getCampaign(c.id).directors![0];
   assert.equal(current.status, "awaiting_approval"); assert.equal(current.identityProposal?.name, "Nova"); assert.equal(current.proposal?.tool, "propose_identity");
-  assert.throws(() => e.approveDirector(c.id, run.id, { maxGenerations: 3, referenceReuseConfirmed: true }), /influencer candidates/);
+  // Both accounts report image generation ready, so the split test runs GPT Image against Nano Banana, two candidates each.
+  assert.deepEqual(current.identityProposal!.routes, [{ provider: "codex", model: "gpt-image-2" }, { provider: "antigravity", model: "nano-banana-pro" }]); assert.equal(current.identityProposal!.count, 4);
+  assert.throws(() => e.approveDirector(c.id, run.id, { maxGenerations: 6, referenceReuseConfirmed: true }), /4 influencer candidates/);
   e.approveDirector(c.id, run.id, { maxGenerations: 8, referenceReuseConfirmed: true });
   for (let i = 0; i < 10; i++) { await e.advanceDirector(c.id, tools); if (db.getCampaign(c.id).directors![0].status === "awaiting_identity") break; }
   current = db.getCampaign(c.id).directors![0];
   assert.equal(current.status, "awaiting_identity", JSON.stringify(current.events.slice(-3)));
-  assert.equal(images, 3); assert.equal(current.identityProposal!.candidates.length, 3);
+  assert.equal(images, 4); assert.equal(current.identityProposal!.candidates.length, 4);
+  assert.deepEqual(candidateBodies.map(b => [b.model, !!b.codexProvider, !!b.antigravityProvider]), [["gpt-image-2", true, false], ["nano-banana-pro", false, true], ["gpt-image-2", true, false], ["nano-banana-pro", false, true]]);
   const candidates = db.getCampaign(c.id).assets.filter(a => a.productionKind === "identity");
-  assert.equal(candidates.length, 3); assert.ok(candidates.every(a => a.pack === "Influencer candidates" && a.kind === "image"));
+  assert.equal(candidates.length, 4); assert.ok(candidates.every(a => a.pack === "Influencer candidates" && a.kind === "image")); assert.match(candidates[1].title, /Nano Banana Pro/);
   assert.throws(() => e.chooseIdentity(c.id, run.id, "not-a-candidate"), /candidates/);
   const chosen = e.chooseIdentity(c.id, run.id, candidates[1].id);
   assert.equal(chosen.identity?.name, "Nova"); assert.equal(chosen.identity?.references[0].url, candidates[1].url); assert.equal(chosen.directors![0].status, "running"); assert.equal(chosen.directors![0].identity?.id, chosen.identity?.id);
   assert.equal(chosen.assets.find(a => a.id === candidates[1].id)?.identityId, chosen.identity?.id);
+  // The winning family (Nano Banana via the Google account) becomes the run's and campaign's image route.
+  assert.equal(chosen.directors![0].imageProvider, "antigravity"); assert.equal(chosen.imageModel, "nano-banana-pro"); assert.equal(chosen.identity?.defaults.modelId, "nano-banana-pro");
   // Production now proceeds with the saved influencer as the anchor's reference.
   let anchorBody: Record<string, unknown> | undefined;
   tools.generateImage = async req => { anchorBody = await req.json(); images++; return Response.json({ taskId: `image-task-${images}` }); };
   for (let i = 0; i < 4 && !anchorBody; i++) await e.advanceDirector(c.id, tools);
-  assert.ok(anchorBody, "anchor was submitted"); assert.deepEqual(anchorBody!.imageUrls, [candidates[1].url]); assert.equal(anchorBody!.identityAssetId, chosen.identity?.id);
+  assert.ok(anchorBody, "anchor was submitted"); assert.deepEqual(anchorBody!.imageUrls, [candidates[1].url]); assert.equal(anchorBody!.identityAssetId, chosen.identity?.id); assert.equal(anchorBody!.antigravityProvider, true); assert.equal(anchorBody!.model, "nano-banana-pro");
+});
+
+test("candidate routes fall back to Kie.ai per family and to the run's own route when nothing else is available", async () => {
+  const { candidateRoutes, candidateCount } = await engine;
+  const status = (ready: Record<string, boolean>) => async (p: string) => ({ chatReady: !!ready[p], imageReady: !!ready[p], installed: true, authFound: true, ready: true });
+  const run = { imageProvider: "kie" as const, imageModel: "seedream-5-pro" };
+  const both = await candidateRoutes(run, { accountStatus: status({ codex: true, antigravity: true }), mediaReady: () => true });
+  assert.deepEqual(both.map(r => r.provider), ["codex", "antigravity"]); assert.equal(candidateCount(both), 4);
+  const kieOnly = await candidateRoutes(run, { accountStatus: status({}), mediaReady: () => true });
+  assert.deepEqual(kieOnly, [{ provider: "kie", model: "gpt-image-2" }, { provider: "kie", model: "nano-banana-pro" }]);
+  const codexNoKie = await candidateRoutes(run, { accountStatus: status({ codex: true }), mediaReady: (_k, p) => p !== "kie" });
+  assert.deepEqual(codexNoKie, [{ provider: "codex", model: "gpt-image-2" }]); assert.equal(candidateCount(codexNoKie), 3);
+  const none = await candidateRoutes(run, { accountStatus: status({}), mediaReady: () => false });
+  assert.deepEqual(none, [{ provider: "kie", model: "seedream-5-pro" }]);
 });
 
 test("dance objectives favour clips that read as routines and drop obvious non-dance formats", async () => {

@@ -29,8 +29,11 @@ export interface DirectorSource {
   inspection?: z.infer<typeof inspectionSchema>;
   selection?: { start: number; end: number; clip: MediaEvidence; direction: string };
 }
+export interface CandidateRoute { provider: CampaignImageProvider; model: string }
 export interface DirectorJob {
-  id: string; sourceId?: string; kind: "anchor" | "motion" | "still" | "identity"; title: string; prompt: string;
+  id: string; sourceId?: string; kind: "anchor" | "motion" | "still" | "identity";
+  /** Route used for an identity candidate; other jobs follow the run's image provider. */
+  route?: CandidateRoute; title: string; prompt: string;
   status: "submitting" | "running" | "done" | "error" | "uncertain"; taskId?: string; assetId?: string; startedAt: number; reservedUsd?: number; error?: string;
 }
 export interface DirectorRun {
@@ -38,7 +41,7 @@ export interface DirectorRun {
   id: string; messageId: string; objective: string; reels: number; stillsPerReel: number;
   status: "running" | "awaiting_approval" | "awaiting_identity" | "paused" | "blocked" | "done" | "stopped";
   /** Influencer designed by the agent to fit the selected footage; candidates are generated, the user picks one. */
-  identityProposal?: { name: string; dna: string; personality: string; direction: string; candidates: string[] };
+  identityProposal?: { name: string; dna: string; personality: string; direction: string; candidates: string[]; /** Image routes the candidates alternate across: one GPT Image route and one Gemini route when both are available. */ routes: CandidateRoute[]; count: number };
   userReplies?: string[];
   /** "tiktok" is the built-in live browser search; "web" is OpenAI account web search. Older records may carry "scrapecreators". */
   searchProvider?: "tiktok" | "web" | "scrapecreators"; searchEstimateUsd?: number; searchRequests?: number;
