@@ -6,15 +6,19 @@ import { NextRequest } from "next/server";
 import { codexAccountEnv, getCodexAccountStatus } from "../codexAccount";
 import { MEDIA_DIR } from "../guest/paths";
 
-export function plannerArgs(directory: string, imagePaths: string[], webSearch = false) {
-  return ["exec", "--ignore-user-config", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--cd", directory,
+/** The account default model decides; HELIOS_CODEX_INSPECTION_MODEL (for example a mini model) can take frame inspection and output review. */
+export function codexModel(tier: "reasoning" | "inspection" = "reasoning") {
+  return tier === "inspection" ? process.env.HELIOS_CODEX_INSPECTION_MODEL || process.env.HELIOS_CODEX_MODEL : process.env.HELIOS_CODEX_MODEL;
+}
+export function plannerArgs(directory: string, imagePaths: string[], webSearch = false, model?: string) {
+  return ["exec", "--ignore-user-config", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--cd", directory, ...(model ? ["-m", model] : []),
     "-c", 'model_provider="openai"', "-c", 'forced_login_method="chatgpt"',
     "-c", "features.shell_tool=false", "-c", "features.unified_exec=false", "-c", webSearch ? 'web_search="live"' : 'web_search="disabled"',
     "--output-last-message", join(directory, "response.txt"), ...imagePaths.flatMap(path => ["--image", path]), "-"];
 }
 
 /** Uses the supported CLI auth flow, with no API tokens exposed to the browser. */
-export async function codexPlanner(req: NextRequest, options: { webSearch?: boolean; maxImages?: number } = {}): Promise<Response> {
+export async function codexPlanner(req: NextRequest, options: { webSearch?: boolean; maxImages?: number; tier?: "reasoning" | "inspection" } = {}): Promise<Response> {
   if (!(await getCodexAccountStatus()).chatReady) throw new Error("OpenAI account disconnected. Reconnect Codex in Settings, or explicitly choose another chat provider.");
   const { messages, imageUrls = [] } = await req.json() as { messages: { role: string; content: string }[]; imageUrls?: string[] };
   const directory = await mkdtemp(join(tmpdir(), "ugc-producer-"));
@@ -32,7 +36,7 @@ export async function codexPlanner(req: NextRequest, options: { webSearch?: bool
       await writeFile(copied, data); imagePaths.push(copied);
     }
     await new Promise<void>((resolvePromise, reject) => {
-      const proc = spawn("codex", plannerArgs(directory, imagePaths, options.webSearch), { env: codexAccountEnv(), stdio: ["pipe", "ignore", "pipe"] });
+      const proc = spawn("codex", plannerArgs(directory, imagePaths, options.webSearch, codexModel(options.tier ?? "reasoning")), { env: codexAccountEnv(), stdio: ["pipe", "ignore", "pipe"] });
       let stderr = "";
       const timer = setTimeout(() => { proc.kill("SIGKILL"); reject(new Error("OpenAI planning timed out. Your brief is saved; try again.")); }, 240_000);
       proc.stderr.on("data", data => { stderr = (stderr + data).slice(-4000); });

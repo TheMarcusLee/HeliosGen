@@ -31,7 +31,12 @@ export function antigravityEnv(): NodeJS.ProcessEnv {
   env.PATH = [...CLI_DIRS, process.env.PATH ?? ""].join(":");
   return env;
 }
-export function antigravityModel() { return process.env.HELIOS_ANTIGRAVITY_MODEL || ANTIGRAVITY_DEFAULT_MODEL; }
+export const ANTIGRAVITY_INSPECTION_MODEL = "gemini-3.8-flash-high";
+/** Pro for decisions; a Flash-class model for frame inspection and output review unless overridden. */
+export function antigravityModel(tier: "reasoning" | "inspection" = "reasoning") {
+  if (tier === "inspection") return process.env.HELIOS_ANTIGRAVITY_INSPECTION_MODEL || ANTIGRAVITY_INSPECTION_MODEL;
+  return process.env.HELIOS_ANTIGRAVITY_MODEL || ANTIGRAVITY_DEFAULT_MODEL;
+}
 export function agyBinary(): string | undefined {
   const override = process.env.HELIOS_ANTIGRAVITY_BIN;
   if (override) return existsSync(override) ? override : undefined;

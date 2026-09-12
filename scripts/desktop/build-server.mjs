@@ -123,6 +123,9 @@ cpSync(STANDALONE, STAGE, { recursive: true });
 rmSync(join(STAGE, "src-tauri"), { recursive: true, force: true }); // never nest ourselves
 cpSync(join(ROOT, ".next", "static"), join(STAGE, ".next", "static"), { recursive: true });
 copyFileSync(join(ROOT, "scripts", "desktop", "sidecar-guard.js"), join(STAGE, "sidecar-guard.js"));
+// The InstaVault browser extension ships inside the bundle; the app copies it to a
+// user-visible folder on request (app/api/campaigns/extension).
+cpSync(join(ROOT, "extensions", "instavault"), join(STAGE, "extensions", "instavault"), { recursive: true, filter: (src) => !/node_modules|\.DS_Store/.test(src) });
 if (existsSync(join(ROOT, "public"))) {
   cpSync(join(ROOT, "public"), join(STAGE, "public"), {
     recursive: true,

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile, realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { NextRequest } from "next/server";
-import { getAntigravityStatus, runAgy, type AgySpawner } from "../antigravityAccount";
+import { antigravityModel, getAntigravityStatus, runAgy, type AgySpawner } from "../antigravityAccount";
 import { MEDIA_DIR } from "../guest/paths";
 
 /**
@@ -19,7 +19,7 @@ export function agyPrompt(messages: { role: string; content: string }[], imagePa
     ...messages.map(m => `${m.role.toUpperCase()}:\n${m.content}`),
   ].filter(Boolean).join("\n\n");
 }
-export async function agyPlanner(req: NextRequest, options: { webSearch?: boolean; maxImages?: number; spawner?: AgySpawner } = {}): Promise<Response> {
+export async function agyPlanner(req: NextRequest, options: { webSearch?: boolean; maxImages?: number; tier?: "reasoning" | "inspection"; spawner?: AgySpawner } = {}): Promise<Response> {
   if (!(await getAntigravityStatus()).chatReady) throw new Error("Google account disconnected. Sign in to the Antigravity CLI, or explicitly choose another chat provider.");
   const { messages, imageUrls = [] } = await req.json() as { messages: { role: string; content: string }[]; imageUrls?: string[] };
   const directory = await mkdtemp(join(tmpdir(), "ugc-antigravity-"));
@@ -35,7 +35,7 @@ export async function agyPlanner(req: NextRequest, options: { webSearch?: boolea
       const copied = join(directory, `reference-${imagePaths.length}${/\.(png|jpe?g|webp)$/i.exec(path)?.[0] ?? ".png"}`);
       await writeFile(copied, data); imagePaths.push(copied);
     }
-    const run = await runAgy({ prompt: agyPrompt(messages, imagePaths, !!options.webSearch), workspace: directory, spawner: options.spawner });
+    const run = await runAgy({ prompt: agyPrompt(messages, imagePaths, !!options.webSearch), workspace: directory, spawner: options.spawner, model: antigravityModel(options.tier ?? "reasoning") });
     const content = run.response.trim();
     if (!content) throw new Error(run.denied.length ? `Antigravity needed a tool that headless mode denies (${run.denied.join(", ")}). Try again.` : "Antigravity returned no plan. Try again.");
     return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`, { headers: { "Content-Type": "text/event-stream" } });

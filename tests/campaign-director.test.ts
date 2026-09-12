@@ -247,3 +247,54 @@ test("dance objectives favour clips that read as routines and drop obvious non-d
   assert.equal(ranked[0].id, "d1"); assert.equal(dropped["not dance"], 6); assert.ok(ranked[0].reasons.includes("reads as a dance routine"));
   assert.equal(rankVideos(videos, {}).ranked.length, 7);
 });
+
+test("a source is never retrieved or inspected twice: later runs reuse cached evidence and assessments", async () => {
+  const db = await database, e = await engine;
+  const { setCachedMedia, getCachedInspection } = await import("../lib/campaigns/director/cache");
+  const m = await import("../lib/campaigns/director/media");
+  const file = join(process.env.HELIOS_MEDIA_DIR!, "cache-fixture.mp4");
+  await m.processOutput("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=360x640:rate=24", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y", file]);
+  const url = "https://www.tiktok.com/@cache/video/777";
+  const tools = fakeTools(); let retrievals = 0, inspections = 0;
+  tools.retrieveVideo = async () => { retrievals++; return { media: { ...structuredClone(media), localUrl: "/generated/cache-fixture.mp4" }, title: "Cached source", metrics: { checkedAt: Date.now(), views: 10, likes: 1, publishedAt: undefined } }; };
+  tools.inspectSource = async () => { inspections++; return structuredClone(inspection); };
+  const runTo = async (id: string) => { for (let i = 0; i < 3; i++) await e.advanceDirector(id, tools); return db.getCampaign(id).directors![0]; };
+  const decide = (r: { sources: { id: string; status: string; media?: unknown; inspection?: unknown }[] }) => { const s = r.sources[0]; if (s.status === "found") return { tool: "retrieve" as const, sourceId: s.id, reason: "get" }; if (s.media && !s.inspection) return { tool: "inspect_source" as const, sourceId: s.id, reason: "look" }; return { tool: "need_input" as const, question: "stop" }; };
+  tools.decideNext = async r => decide(r);
+  const first = db.createCampaign(); e.startDirector(first.id, { objective: "Adapt a clip, first pass with no identity", sourceUrls: [url] });
+  const one = await runTo(first.id);
+  assert.equal(one.sources[0].status, "inspected"); assert.equal(retrievals, 1); assert.equal(inspections, 1);
+  const second = db.createCampaign(); e.startDirector(second.id, { objective: "Adapt the same clip again in another campaign", sourceUrls: [url] });
+  const two = await runTo(second.id);
+  assert.equal(two.sources[0].status, "inspected"); assert.equal(retrievals, 1, "media evidence reused"); assert.equal(inspections, 1, "assessment reused");
+  assert.match(two.events.find(ev => ev.tool === "retrieved")!.outcome!, /Reused evidence/); assert.match(two.events.find(ev => ev.tool === "inspected")!.outcome!, /reused assessment/);
+  // A different influencer changes aesthetic fit, so the assessment is redone while the media is still reused.
+  const third = db.createCampaign(); third.identity = { id: "other-persona", name: "Other", version: 1, triggerWord: "other", basePrompts: ["Adult"], references: [{ url: "/generated/identity.png", kind: "face" }], defaults: { contentClass: "sfw" } } as NonNullable<typeof third.identity>; db.saveCampaign(third);
+  e.startDirector(third.id, { objective: "Adapt the same clip for a different influencer", sourceUrls: [url] });
+  await runTo(third.id);
+  assert.equal(retrievals, 1); assert.equal(inspections, 2); assert.ok(getCachedInspection(url, "other-persona"));
+  // Cached media whose file is gone is dropped and retrieved afresh.
+  setCachedMedia("https://www.tiktok.com/@cache/video/778", { media: { ...structuredClone(media), localUrl: "/generated/missing.mp4" } });
+  const fourth = db.createCampaign(); e.startDirector(fourth.id, { objective: "Adapt a clip whose cached media vanished", sourceUrls: ["https://www.tiktok.com/@cache/video/778"] });
+  await runTo(fourth.id); assert.equal(retrievals, 2);
+});
+
+test("frame inspection and review use the inspection model tier while decisions stay on the reasoning tier", async () => {
+  const { antigravityModel } = await import("../lib/antigravityAccount");
+  const { codexModel, plannerArgs } = await import("../lib/campaigns/codexPlanner");
+  const { agyPlanner } = await import("../lib/campaigns/agyPlanner");
+  const { getAntigravityStatus } = await import("../lib/antigravityAccount");
+  assert.equal(antigravityModel("reasoning"), "gemini-3.1-pro-high"); assert.equal(antigravityModel("inspection"), "gemini-3.8-flash-high");
+  assert.equal(codexModel("inspection"), undefined); assert.ok(!plannerArgs("/tmp/x", []).includes("-m"));
+  const before = process.env.HELIOS_CODEX_INSPECTION_MODEL; process.env.HELIOS_CODEX_INSPECTION_MODEL = "gpt-5-mini";
+  try { assert.deepEqual(plannerArgs("/tmp/x", [], false, codexModel("inspection")).slice(8, 10), ["-m", "gpt-5-mini"]); assert.equal(codexModel("reasoning"), undefined); }
+  finally { if (before === undefined) delete process.env.HELIOS_CODEX_INSPECTION_MODEL; else process.env.HELIOS_CODEX_INSPECTION_MODEL = before; }
+  process.env.HELIOS_ANTIGRAVITY_BIN = process.execPath;
+  await getAntigravityStatus(true, async () => ({ stdout: "gemini-3.1-pro-high\tGemini\n", stderr: "", code: 0 }));
+  const models: string[] = [];
+  const spawner = async (_bin: string, args: string[]) => { models.push(args[args.indexOf("--model") + 1]); return { stdout: JSON.stringify({ conversation_id: "c", status: "SUCCESS", response: "{}" }), stderr: "", code: 0 }; };
+  const { NextRequest } = await import("next/server");
+  const req = () => new NextRequest("http://localhost/api/assistant", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "{}" }] }) });
+  await agyPlanner(req(), { spawner }); await agyPlanner(req(), { spawner, tier: "inspection" });
+  assert.deepEqual(models, ["gemini-3.1-pro-high", "gemini-3.8-flash-high"]);
+});

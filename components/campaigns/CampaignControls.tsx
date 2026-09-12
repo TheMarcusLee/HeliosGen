@@ -12,6 +12,7 @@ import { budgetSchema, budgetUsage, memorySchema } from "@/lib/campaigns/operati
 import type { Campaign } from "@/lib/campaigns/types";
 import { campaignRequest, useCampaignStore } from "@/lib/campaigns/client";
 import type { SocialAccount } from "@/lib/campaigns/integrations";
+import { ExtensionInstall } from "./ExtensionInstall";
 
 type Action = (body: unknown) => Promise<void>;
 async function connection(path = "", body?: unknown) {
@@ -38,7 +39,7 @@ export function CampaignControls({ campaign, open, onOpenChange, initialTab = "m
     <Tabs key={initialTab} defaultValue={initialTab}><TabsList className="w-full"><TabsTrigger value="memory">Memory</TabsTrigger><TabsTrigger value="budget">Budget</TabsTrigger><TabsTrigger value="trends">Discover</TabsTrigger><TabsTrigger value="publishing">Publish</TabsTrigger></TabsList>
       <TabsContent value="memory"><Memory key={campaign.memoryHistory?.length ?? 0} campaign={campaign} action={action} disabled={busy || active} /></TabsContent>
       <TabsContent value="budget"><Budget campaign={campaign} action={action} disabled={busy || active} /></TabsContent>
-      <TabsContent value="trends"><p className="mt-4 text-sm text-muted-foreground">Live TikTok discovery runs through a local headless browser with an anonymous visitor session. No account, key, or vendor is involved.</p><p className={`mt-2 text-xs ${status?.tiktok?.available ? "text-muted-foreground" : "text-destructive"}`}>{status?.tiktok?.note ?? "Checking the local browser…"}</p><Discovery campaign={campaign} action={action} disabled={busy} /><Connect name="youtube" connected={status?.youtube} refresh={() => connection().then(setStatus)} /></TabsContent>
+      <TabsContent value="trends"><p className="mt-4 text-sm text-muted-foreground">Live TikTok discovery runs through a local headless browser with an anonymous visitor session. No account, key, or vendor is involved.</p><p className={`mt-2 text-xs ${status?.tiktok?.available ? "text-muted-foreground" : "text-destructive"}`}>{status?.tiktok?.note ?? "Checking the local browser…"}</p><Discovery campaign={campaign} action={action} disabled={busy} /><details className="mt-6 border-t pt-4"><summary className="cursor-pointer">Instagram Reels · browser extension</summary><div className="mt-4"><ExtensionInstall /></div></details><Connect name="youtube" connected={status?.youtube} refresh={() => connection().then(setStatus)} /></TabsContent>
       <TabsContent value="publishing"><Publishing campaign={campaign} action={action} disabled={busy} /><Connect name="postbridge" connected={status?.postbridge} refresh={() => connection().then(setStatus)} /></TabsContent>
     </Tabs>
   </div></SheetContent></Sheet>;

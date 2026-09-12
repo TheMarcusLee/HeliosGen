@@ -8,6 +8,8 @@ import { POST as generateVideo } from "@/app/api/generate-video/route";
 import { GET as jobStatus } from "@/app/api/job-status/route";
 import { getCampaign, saveCampaign } from "../db";
 import { createIdentityAsset } from "../../guest/identityAssets";
+import { getCachedInspection, getCachedMedia, setCachedInspection, setCachedMedia, dropCachedMedia } from "./cache";
+import { localPath } from "./media";
 import { claimLease } from "../lease";
 import { budgetSchema, budgetUsage } from "../operations";
 import { effectivePrompt, type Campaign, type CampaignAsset } from "../types";
@@ -228,12 +230,21 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           }
           case "retrieve": {
             if (source!.status !== "found") throw new Error("This source was already retrieved or is unavailable.");
-            try { const result = await tools.retrieveVideo(source!.url, source!.downloadUrl); source!.media = result.media; source!.metrics = { ...source!.metrics, ...Object.fromEntries(Object.entries(result.metrics).filter(([, v]) => v !== undefined)) } as typeof result.metrics; source!.title = result.title || source!.title; source!.status = "retrieved"; event(run, "retrieved", `${source!.title}: ${result.media.duration.toFixed(1)} seconds, ${result.media.sampleTimes.length} sampled frames.`); }
+            try {
+              // Same URL, same file: reuse the evidence from an earlier run when its media is still on disk.
+              const cached = getCachedMedia(source!.url);
+              const reusable = cached && await localPath(cached.media.localUrl).then(() => true, () => { dropCachedMedia(source!.url); return false; });
+              const result = reusable ? { media: cached!.media, title: cached!.title, metrics: { ...(cached!.metrics ?? { checkedAt: cached!.createdAt }), checkedAt: cached!.metrics?.checkedAt ?? cached!.createdAt } } : await tools.retrieveVideo(source!.url, source!.downloadUrl);
+              if (!reusable) setCachedMedia(source!.url, { media: result.media, title: result.title, metrics: result.metrics });
+              source!.media = result.media; source!.metrics = { ...source!.metrics, ...Object.fromEntries(Object.entries(result.metrics).filter(([, v]) => v !== undefined)) } as typeof result.metrics; source!.title = result.title || source!.title; source!.status = "retrieved"; event(run, "retrieved", `${source!.title}: ${result.media.duration.toFixed(1)} seconds, ${result.media.sampleTimes.length} sampled frames.`, reusable ? `Reused evidence retrieved ${new Date(cached!.createdAt).toLocaleString()}` : undefined); }
             catch (error) { source!.status = "unavailable"; source!.error = (error as Error).message; event(run, "unavailable", source!.error); } break;
           }
           case "inspect_source": {
             if (!source!.media || source!.inspection) throw new Error("Retrieve an uninspected source first.");
-            source!.inspection = await tools.inspectSource(run, source!); source!.status = "inspected"; event(run, "inspected", source!.inspection.summary, source!.inspection.suitable ? `Suitable · ${source!.inspection.score}/100` : "Rejected"); break;
+            const cachedInspection = getCachedInspection(source!.url, run.identity?.id);
+            source!.inspection = cachedInspection?.inspection ?? await tools.inspectSource(run, source!);
+            if (!cachedInspection) setCachedInspection(source!.url, run.identity?.id, source!.inspection);
+            source!.status = "inspected"; event(run, "inspected", source!.inspection.summary, `${source!.inspection.suitable ? `Suitable · ${source!.inspection.score}/100` : "Rejected"}${cachedInspection ? ` · reused assessment from ${new Date(cachedInspection.createdAt).toLocaleString()}` : ""}`); break;
           }
           case "select_source": {
             if (!source!.inspection?.suitable || !source!.media) throw new Error("Only a retrieved source that passed visual inspection can be selected.");

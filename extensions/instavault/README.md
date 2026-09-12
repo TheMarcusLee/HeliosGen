@@ -21,10 +21,10 @@ It is not affiliated with Instagram or Meta. This project does not contain or de
 
 ## Install locally
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Choose **Load unpacked**.
-4. Select the `extensions/instavault` folder of your UGC{Gen} checkout.
+1. In UGC{Gen}, open Campaign controls → Discover → **Instagram Reels · browser extension** (or the Captured clips section in Research & adapt) and choose **Get the browser extension**. The app copies this folder to its data directory and reveals it. From a source checkout you can also use `extensions/instavault` directly.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Choose **Load unpacked** and select the revealed folder.
 5. Open `https://www.instagram.com/` and sign in normally.
 
 Chrome 116 or newer is required. This baseline provides the Side Panel API and the Promise-based extension APIs used by the resilient queue coordinator.

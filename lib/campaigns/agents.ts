@@ -18,7 +18,9 @@ export async function accountStatus(provider: AccountProvider | CampaignImagePro
   if (provider === "codex") return getCodexAccountStatus();
   return { chatReady: false, imageReady: false, installed: false, authFound: false, ready: false };
 }
-export type AccountPlanner = (req: NextRequest, options?: { webSearch?: boolean; maxImages?: number }) => Promise<Response>;
+/** "reasoning" decides and plans; "inspection" looks at frames and grades. Inspection can run on a cheaper model. */
+export type ModelTier = "reasoning" | "inspection";
+export type AccountPlanner = (req: NextRequest, options?: { webSearch?: boolean; maxImages?: number; tier?: ModelTier }) => Promise<Response>;
 export function accountPlanner(provider: AccountProvider): AccountPlanner {
   return provider === "antigravity" ? agyPlanner : codexPlanner;
 }
