@@ -178,3 +178,53 @@ test("motion model is selectable per run and shapes the video request for refere
   for (let i = 0; i < 8 && !videoBody; i++) await e.advanceDirector(c.id, tools);
   assert.equal(videoBody?.videoModel, "seedance-2"); assert.deepEqual(videoBody?.referenceVideoUrls, ["/generated/selected-clip.mp4"]); assert.equal(videoBody?.startFrameUrl, "/generated/motion-anchor.jpg"); assert.equal(videoBody?.videoRefUrl, undefined); assert.equal(videoBody?.duration, 5);
 });
+
+test("a run without a saved identity designs one to fit the footage, generates candidates after approval, and continues once the user picks", async () => {
+  const db = await database, e = await engine;
+  const c = db.createCampaign({ model: "codex-account", imageModel: "gpt-image-2", imageProvider: "codex" });
+  const started = e.startDirector(c.id, { objective: "Find a trending dance video and create an Instagram-ready influencer to recreate it", sourceUrls: ["https://www.tiktok.com/@test/video/123"] });
+  const run = started.directors![0], source = run.sources[0];
+  source.media = structuredClone(media); source.status = "inspected"; source.inspection = structuredClone(inspection); source.selection = { start: 0, end: 5, direction: "Streetwear, studio backdrop", clip: { ...structuredClone(media), localUrl: "/generated/selected-clip.mp4", duration: 5 } };
+  db.saveCampaign(started);
+  const tools = fakeTools(); let images = 0;
+  tools.generateImage = async req => { images++; const body = await req.json(); assert.equal(body.aspectRatio, "9:16"); return Response.json({ taskId: `image-task-${images}` }); };
+  tools.jobStatus = async req => Response.json(req.url.includes("video-task") ? { status: "done", videoUrl: "/generated/output.mp4" } : { status: "done", imageUrls: [`/generated/candidate-${images}.jpg`] });
+  tools.decideNext = async (r, assets) => {
+    if (!r.identityProposal) return { tool: "propose_identity", name: "Nova", dna: "Adult creator, early twenties, long dark hair, athletic build, warm skin tone, small nose stud", personality: "Playful and confident", direction: "Streetwear that matches the studio backdrop of the selected clip", reason: "Fit the footage" };
+    const unreviewed = assets.find(a => a.kind !== "text" && a.productionKind !== "identity" && !a.automatedReview); if (unreviewed) return { tool: "review_output", assetId: unreviewed.id, reason: "check" };
+    if (!assets.some(a => a.productionKind === "anchor")) return { tool: "generate", sourceId: source.id, kind: "anchor", title: "Anchor", prompt: "Anchor of Nova matching the clip framing", reason: "start" };
+    return { tool: "need_input", question: "enough for the test" };
+  };
+  // Anchor generation is refused until an influencer exists; the agent must propose one.
+  await e.advanceDirector(c.id, tools);
+  let current = db.getCampaign(c.id).directors![0];
+  assert.equal(current.status, "awaiting_approval"); assert.equal(current.identityProposal?.name, "Nova"); assert.equal(current.proposal?.tool, "propose_identity");
+  assert.throws(() => e.approveDirector(c.id, run.id, { maxGenerations: 3, referenceReuseConfirmed: true }), /influencer candidates/);
+  e.approveDirector(c.id, run.id, { maxGenerations: 8, referenceReuseConfirmed: true });
+  for (let i = 0; i < 10; i++) { await e.advanceDirector(c.id, tools); if (db.getCampaign(c.id).directors![0].status === "awaiting_identity") break; }
+  current = db.getCampaign(c.id).directors![0];
+  assert.equal(current.status, "awaiting_identity", JSON.stringify(current.events.slice(-3)));
+  assert.equal(images, 3); assert.equal(current.identityProposal!.candidates.length, 3);
+  const candidates = db.getCampaign(c.id).assets.filter(a => a.productionKind === "identity");
+  assert.equal(candidates.length, 3); assert.ok(candidates.every(a => a.pack === "Influencer candidates" && a.kind === "image"));
+  assert.throws(() => e.chooseIdentity(c.id, run.id, "not-a-candidate"), /candidates/);
+  const chosen = e.chooseIdentity(c.id, run.id, candidates[1].id);
+  assert.equal(chosen.identity?.name, "Nova"); assert.equal(chosen.identity?.references[0].url, candidates[1].url); assert.equal(chosen.directors![0].status, "running"); assert.equal(chosen.directors![0].identity?.id, chosen.identity?.id);
+  assert.equal(chosen.assets.find(a => a.id === candidates[1].id)?.identityId, chosen.identity?.id);
+  // Production now proceeds with the saved influencer as the anchor's reference.
+  let anchorBody: Record<string, unknown> | undefined;
+  tools.generateImage = async req => { anchorBody = await req.json(); images++; return Response.json({ taskId: `image-task-${images}` }); };
+  for (let i = 0; i < 4 && !anchorBody; i++) await e.advanceDirector(c.id, tools);
+  assert.ok(anchorBody, "anchor was submitted"); assert.deepEqual(anchorBody!.imageUrls, [candidates[1].url]); assert.equal(anchorBody!.identityAssetId, chosen.identity?.id);
+});
+
+test("dance objectives favour clips that read as routines and drop obvious non-dance formats", async () => {
+  const { rankVideos, isDanceQuery, danceTextScore } = await import("../lib/campaigns/discovery");
+  assert.ok(isDanceQuery("trending dance challenge")); assert.ok(!isDanceQuery("outfit transition"));
+  assert.ok(danceTextScore({ caption: "dc @choreo_king #dancechallenge" }) > 0.6); assert.equal(danceTextScore({ caption: "my skincare routine grwm" }) < 0.2, true);
+  const base = { platform: "tiktok" as const, url: "", authorHandle: "a", hashtags: [], collectedAt: new Date().toISOString(), views: 100000, likes: 5000, durationSec: 8, postedAt: new Date().toISOString() };
+  const videos = [...Array.from({ length: 6 }, (_, i) => ({ ...base, id: `n${i}`, caption: "cooking recipe haul" })), { ...base, id: "d1", caption: "new dance challenge dc @me", hashtags: ["dancechallenge"] }];
+  const { ranked, dropped } = rankVideos(videos, { dance: true });
+  assert.equal(ranked[0].id, "d1"); assert.equal(dropped["not dance"], 6); assert.ok(ranked[0].reasons.includes("reads as a dance routine"));
+  assert.equal(rankVideos(videos, {}).ranked.length, 7);
+});

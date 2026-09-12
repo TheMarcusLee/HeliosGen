@@ -1,4 +1,5 @@
 import type { DiscoveredVideo, RankedVideo } from "./types";
+import { danceTextScore } from "./danceSignals";
 
 /**
  * Ranking philosophy: the goal is not "biggest video", it is "video we can
@@ -14,6 +15,8 @@ export interface RankOptions {
   maxAgeDays?: number;
   /** Ideal clip window; a source longer than this still works but needs trimming. */
   clipSeconds?: { min: number; max: number };
+  /** Favour clips whose text reads as a dance routine and drop clear non-dance formats. */
+  dance?: boolean;
   now?: number;
 }
 export interface RankWeights { velocity: number; engagement: number; duration: number; freshness: number }
@@ -38,6 +41,7 @@ export function rankVideos(videos: DiscoveredVideo[], options: RankOptions = {},
   const now = options.now ?? Date.now(), dropped: Record<string, number> = {};
   const kept = videos.filter(v => {
     if (options.minViews && (v.views ?? 0) < options.minViews) { dropped.views = (dropped.views ?? 0) + 1; return false; }
+    if (options.dance && danceTextScore(v) === 0 && videos.length > 6) { dropped["not dance"] = (dropped["not dance"] ?? 0) + 1; return false; }
     const age = ageInDays(v, now);
     if (options.maxAgeDays && age !== undefined && age > options.maxAgeDays) { dropped.age = (dropped.age ?? 0) + 1; return false; }
     return true;
@@ -60,7 +64,9 @@ export function rankVideos(videos: DiscoveredVideo[], options: RankOptions = {},
     if (seconds !== undefined && seconds < window.min) reasons.push(`${seconds}s is shorter than the minimum clip`);
     if (age !== undefined && age <= 7) reasons.push("posted this week");
     if (age !== undefined && age > 30) reasons.push(`${Math.round(age)} days old`);
-    const score = clamp01(velocity * weights.velocity + engagementScore * weights.engagement + duration * weights.duration + freshness * weights.freshness);
+    const dance = options.dance ? danceTextScore(v) : 0;
+    if (options.dance && dance >= 0.35) reasons.push("reads as a dance routine");
+    const score = clamp01(velocity * weights.velocity + engagementScore * weights.engagement + duration * weights.duration + freshness * weights.freshness + dance * 0.3);
     return { ...v, score: Number(score.toFixed(4)), viewsPerDay: perDay, engagement: Number(engagement.toFixed(4)), reasons };
   }).sort((a, b) => b.score - a.score);
   return { ranked, dropped };

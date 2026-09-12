@@ -8,6 +8,7 @@ export const decisionSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("retrieve"), sourceId: z.string(), reason: z.string().max(1200) }),
   z.object({ tool: z.literal("inspect_source"), sourceId: z.string(), reason: z.string().max(1200) }),
   z.object({ tool: z.literal("select_source"), sourceId: z.string(), start: z.number().min(0), end: z.number().min(3), direction: z.string().min(10).max(2000), reason: z.string().max(1200) }),
+  z.object({ tool: z.literal("propose_identity"), name: z.string().min(1).max(120), dna: z.string().min(20).max(4000), personality: z.string().max(2000), direction: z.string().min(10).max(2000), reason: z.string().max(1200) }),
   z.object({ tool: z.literal("generate"), sourceId: z.string(), kind: z.enum(["anchor", "motion", "still"]), title: z.string().min(1).max(120), prompt: z.string().min(10).max(2500), reason: z.string().max(1200) }),
   z.object({ tool: z.literal("review_output"), assetId: z.string(), reason: z.string().max(1200) }),
   z.object({ tool: z.literal("caption"), sourceId: z.string(), text: z.string().min(1).max(4000), reason: z.string().max(1200) }),
@@ -29,13 +30,15 @@ export interface DirectorSource {
   selection?: { start: number; end: number; clip: MediaEvidence; direction: string };
 }
 export interface DirectorJob {
-  id: string; sourceId: string; kind: "anchor" | "motion" | "still"; title: string; prompt: string;
+  id: string; sourceId?: string; kind: "anchor" | "motion" | "still" | "identity"; title: string; prompt: string;
   status: "submitting" | "running" | "done" | "error" | "uncertain"; taskId?: string; assetId?: string; startedAt: number; reservedUsd?: number; error?: string;
 }
 export interface DirectorRun {
   revisionOf?: string;
   id: string; messageId: string; objective: string; reels: number; stillsPerReel: number;
-  status: "running" | "awaiting_approval" | "paused" | "blocked" | "done" | "stopped";
+  status: "running" | "awaiting_approval" | "awaiting_identity" | "paused" | "blocked" | "done" | "stopped";
+  /** Influencer designed by the agent to fit the selected footage; candidates are generated, the user picks one. */
+  identityProposal?: { name: string; dna: string; personality: string; direction: string; candidates: string[] };
   userReplies?: string[];
   /** "tiktok" is the built-in live browser search; "web" is OpenAI account web search. Older records may carry "scrapecreators". */
   searchProvider?: "tiktok" | "web" | "scrapecreators"; searchEstimateUsd?: number; searchRequests?: number;
@@ -46,7 +49,7 @@ export interface DirectorRun {
   memory?: CampaignMemory; identity?: IdentityAsset; referenceUrls: string[]; imageProvider: CampaignImageProvider; imageModel: string;
   /** Connected account that reasons, inspects and reviews for this run. Older runs default to Codex. */
   agentProvider?: AccountProvider;
-  proposal?: Extract<Decision, { tool: "generate" }>;
+  proposal?: Extract<Decision, { tool: "generate" | "propose_identity" }>;
   approval?: { at: number; maxGenerations: number; imageEstimateUsd?: number; motionEstimateUsd?: number; maxReservedUsd?: number; referenceReuseConfirmed: boolean };
   error?: string;
 }

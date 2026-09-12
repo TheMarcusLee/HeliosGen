@@ -7,6 +7,7 @@ export type { DiscoveredVideo, RankedVideo, TrendSignal } from "./types";
 export { tiktokBrowserStatus, sharedTikTokSession, closeTikTokSession } from "./tiktokSession";
 export { rankVideos } from "./rank";
 export { deriveTrends } from "./tiktokItems";
+export { danceTextScore, isDanceQuery } from "./danceSignals";
 
 export interface DiscoveryResult { videos: RankedVideo[]; trends: TrendSignal[]; summary: string }
 /** Live TikTok keyword discovery: search, drop what is not worth looking at, rank, and read the trends off the results. */

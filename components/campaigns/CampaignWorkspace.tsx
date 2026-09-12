@@ -34,6 +34,7 @@ import { quotePlan, budgetUsage } from "@/lib/campaigns/operations";
 
 const starters = [
   { icon: ScanFace, title: "Build an influencer", description: "A new identity, from the first idea.", prompt: "Help me build a new influencer. Develop a distinctive adult lifestyle creator with a warm personality and an outdoorsy aesthetic. Propose reference directions so I can choose a favorite." },
+  { icon: Film, title: "Dance trend, new influencer", description: "Find a trending dance and design a creator to fit it.", prompt: "Find a trending dance video to use as a reference, and create an Instagram-ready influencer to recreate the video with." },
   { icon: Film, title: "Research & adapt Reels", description: "Find real footage. Inspect it. Make it yours.", prompt: "Find currently performing TikToks or Reels that fit my influencer. Retrieve and compare the actual footage, choose a clear continuous motion reference, and create an adaptation with matching stills and a caption." },
   { icon: Sparkles, title: "Explore a campaign", description: "Turn a loose idea into a creative direction.", prompt: "Help me shape a new campaign. Let's develop the audience, creative direction, and content concepts before generating anything." },
 ];
@@ -242,7 +243,7 @@ function CampaignSession({ id }: { id: string | null }) {
             <p className="campaign-eyebrow">FROM FIRST IDEA TO FINAL FRAME</p>
             <TypewriterHeading text="What are we creating today?" />
             <p className="campaign-intro">Build an influencer. Shape a campaign. Bring it to life.<br />Your ideas, references, and finished work stay together.</p>
-            <div className="campaign-starters">{starters.map(({ icon: Icon, title, description, prompt }) => <button key={title} className="campaign-starter" onClick={() => { setDirectorMode(title === "Research & adapt Reels"); setInput(prompt); composer.current?.focus(); }}><Icon size={20} /><strong>{title}</strong><span>{description}</span><ChevronRight size={14} className="campaign-starter-arrow" /></button>)}</div>
+            <div className="campaign-starters">{starters.map(({ icon: Icon, title, description, prompt }) => <button key={title} className="campaign-starter" onClick={() => { setDirectorMode(title === "Research & adapt Reels" || title === "Dance trend, new influencer"); setInput(prompt); composer.current?.focus(); }}><Icon size={20} /><strong>{title}</strong><span>{description}</span><ChevronRight size={14} className="campaign-starter-arrow" /></button>)}</div>
           </div> : <div className="campaign-messages">{campaign.messages.map(message => <article key={message.id} id={`message-${message.id}`} className={cn("campaign-message", message.role === "user" && "campaign-message-user")}>
             <p className="campaign-message-author">{message.role === "user" ? "YOU" : "CREATIVE PRODUCER"}</p>
             <div className="whitespace-pre-wrap text-sm leading-7">{message.content}</div>

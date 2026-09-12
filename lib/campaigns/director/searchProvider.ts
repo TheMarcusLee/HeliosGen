@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { discoverTikTok } from "../discovery";
 import type { RankOptions } from "../discovery/rank";
+import { isDanceQuery } from "../discovery/danceSignals";
 import { sourceUrl } from "./media";
 import type { DirectorSource } from "./types";
 
@@ -10,7 +11,7 @@ export function isTikTokMedia(input: string) {
 }
 /** Live TikTok keyword search through the built-in browser session. No vendor, no per-call cost. */
 export async function searchTikTok(query: string, excluded: string[], options: RankOptions & { keep?: number } = {}) {
-  const result = await discoverTikTok(query, { keep: 8, ...options });
+  const result = await discoverTikTok(query, { keep: 8, dance: isDanceQuery(query), ...options });
   const sources: DirectorSource[] = [];
   for (const v of result.videos) {
     let url: string;

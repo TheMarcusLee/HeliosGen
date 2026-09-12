@@ -7,6 +7,7 @@ import { POST as generateImage } from "@/app/api/generate/route";
 import { POST as generateVideo } from "@/app/api/generate-video/route";
 import { GET as jobStatus } from "@/app/api/job-status/route";
 import { getCampaign, saveCampaign } from "../db";
+import { createIdentityAsset } from "../../guest/identityAssets";
 import { claimLease } from "../lease";
 import { budgetSchema, budgetUsage } from "../operations";
 import { effectivePrompt, type Campaign, type CampaignAsset } from "../types";
@@ -14,11 +15,13 @@ import { accountStatus, agentProviderOf, accountLabel } from "../agents";
 import { IMAGE_MODELS } from "../../modelConfig";
 import { decideNext, inspectSource, reviewOutput, searchSocial } from "./intelligence";
 import { clipVideo, retrieveVideo, sourceUrl, motionImage } from "./media";
-import { directorBusy, startDirectorSchema, type DirectorRun, type Decision } from "./types";
+import { directorBusy, startDirectorSchema, type DirectorJob, type DirectorRun, type Decision } from "./types";
 import { clipLimits, motionModel, motionModelSummary, motionRequestBody } from "./motionModels";
 
 const request = (path: string, body?: unknown) => new NextRequest(`http://localhost${path}`, body === undefined ? undefined : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-const defaults = { mediaReady: (kind: "anchor" | "motion" | "still", provider: "codex" | "antigravity" | "kie") => kind !== "motion" && provider !== "kie" || !!getKieApiToken(), decideNext, inspectSource, reviewOutput, searchSocial, searchTikTok, clipVideo, retrieveVideo, motionImage, generateImage, generateVideo, jobStatus, accountStatus };
+/** Reference candidates generated for an agent-proposed influencer before the user picks one. */
+export const IDENTITY_CANDIDATES = 3;
+const defaults = { mediaReady: (kind: "anchor" | "motion" | "still" | "identity", provider: "codex" | "antigravity" | "kie") => kind !== "motion" && provider !== "kie" || !!getKieApiToken(), decideNext, inspectSource, reviewOutput, searchSocial, searchTikTok, clipVideo, retrieveVideo, motionImage, generateImage, generateVideo, jobStatus, accountStatus };
 export type DirectorTools = Omit<typeof defaults, "generateImage" | "generateVideo" | "jobStatus"> & Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>>;
 export const approveDirectorSchema = z.object({ maxGenerations: z.number().int().min(2).max(30), motionEstimateUsd: z.number().positive().max(1000).optional(), referenceReuseConfirmed: z.literal(true) });
 function event(run: DirectorRun, tool: string, summary: string, outcome?: string) { run.events.push({ id: randomUUID(), at: Date.now(), tool, summary, outcome }); }
@@ -45,11 +48,12 @@ export function approveDirector(id: string, runId: string, input: z.input<typeof
     const c = getCampaign(id), run = findRun(c, runId), data = approveDirectorSchema.parse(input);
     if (run.status !== "awaiting_approval" || !run.proposal) throw new Error("This run is not awaiting production approval.");
     if (c.planning || c.runs.some(r => ["running", "paused"].includes(r.status)) || directorBusy({ directors: c.directors?.filter(d => d.id !== runId) })) throw new Error("Finish other production first.");
-    if (!c.identity?.references.length) throw new Error("Select or build and save an influencer identity before production.");
-    if (c.identity.defaults.contentClass === "adult") throw new Error("Director production currently supports SFW identities.");
+    const needsCandidates = !c.identity?.references.length;
+    if (needsCandidates && !run.identityProposal) throw new Error("Select or build and save an influencer identity before production, or let the agent propose one.");
+    if (c.identity?.defaults.contentClass === "adult") throw new Error("Director production currently supports SFW identities.");
     if (!IMAGE_MODELS.some(m => m.id === c.imageModel && m.supportsImages && m.ratios.includes("9:16"))) throw new Error("Choose a reference-capable image model supporting 9:16.");
     const model = motionModel(run.videoModel);
-    if (data.maxGenerations < run.reels * (2 + run.stillsPerReel)) throw new Error("The allowance must cover at least one anchor, motion video, and requested stills for each Reel.");
+    if (data.maxGenerations < run.reels * (2 + run.stillsPerReel) + (needsCandidates ? IDENTITY_CANDIDATES : 0)) throw new Error(`The allowance must cover ${needsCandidates ? `${IDENTITY_CANDIDATES} influencer candidates plus ` : ""}at least one anchor, motion video, and requested stills for each Reel.`);
     const budget = c.budget ?? budgetSchema.parse({}), used = budgetUsage(c);
     const imageEstimateUsd = c.imageProvider === "codex" ? 0 : budget.imageEstimateUsd ?? undefined;
     const known = imageEstimateUsd !== undefined && data.motionEstimateUsd !== undefined;
@@ -67,7 +71,7 @@ export function approveDirector(id: string, runId: string, input: z.input<typeof
     }
     run.imageProvider = c.imageProvider ?? "kie"; run.imageModel = c.imageModel;
     run.approval = { ...data, imageEstimateUsd, maxReservedUsd, at: Date.now() }; run.status = "running"; run.error = undefined;
-    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized, including revisions. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
+    event(run, "approved", `Up to ${data.maxGenerations} media generations authorized, including revisions${needsCandidates ? ` and ${IDENTITY_CANDIDATES} influencer candidates` : ""}. Motion: ${motionModelSummary(model)}. Outputs still need human review.`);
     return saveCampaign(c);
   });
 }
@@ -97,6 +101,22 @@ export function replyDirector(id: string, runId: string, input: z.input<typeof d
     run.userReplies = [...(run.userReplies ?? []), data.text].slice(-6); run.status = "running"; run.error = undefined; run.decisionCount = Math.min(run.decisionCount, 48);
     event(run, "user_guidance", data.text);
     c.messages.push({ id: randomUUID(), role: "user", content: data.text, createdAt: Date.now() });
+    return saveCampaign(c);
+  });
+}
+/** The user picks one generated candidate; it becomes a saved identity and the run continues into production. */
+export function chooseIdentity(id: string, runId: string, assetId: string) {
+  return withLock(id, () => {
+    const c = getCampaign(id), run = findRun(c, runId);
+    if (run.status !== "awaiting_identity" || !run.identityProposal) throw new Error("This run is not waiting for an influencer choice.");
+    const asset = c.assets.find(a => a.id === assetId && a.directorId === run.id && a.productionKind === "identity" && a.url);
+    if (!asset) throw new Error("Choose one of this run's influencer candidates.");
+    const p = run.identityProposal;
+    const identity = createIdentityAsset({ name: p.name, triggerWord: p.name, basePrompts: [p.dna, p.personality], references: [{ url: asset.url!, kind: "face", label: "Chosen director candidate" }], defaults: { contentClass: "sfw", provider: run.imageProvider, modelId: run.imageModel, aspectRatio: "9:16" } });
+    c.identity = identity; run.identity = structuredClone(identity); asset.identityId = identity.id; asset.review = "approved";
+    run.proposal = undefined; run.status = "running"; run.error = undefined;
+    event(run, "identity_saved", `${identity.name} is saved to Identities and will anchor every adaptation in this run.`);
+    c.messages.push({ id: randomUUID(), role: "assistant", content: `${identity.name} is saved. Producing the adaptations with this influencer now.`, createdAt: Date.now() });
     return saveCampaign(c);
   });
 }
@@ -137,13 +157,38 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           const url = result.videoUrl || result.imageUrls?.[0] || result.imageUrl;
           if (!url) throw new Error("Provider completed without a media output.");
           const parent = ownAssets().filter(a => a.sourceId === job.sourceId && a.productionKind === job.kind && a.automatedReview?.pass === false).at(-1) ?? c.assets.find(a => a.id === run.revisionOf && a.productionKind === job.kind);
-          const source = run.sources.find(s => s.id === job.sourceId)!;
-          const asset: CampaignAsset = { id: randomUUID(), directorId: run.id, sourceId: job.sourceId, productionKind: job.kind, messageId: run.messageId, stepId: job.id, title: job.title, pack: source.title, kind: job.kind === "motion" ? "video" : "image", url, prompt: job.prompt, look: source.selection!.direction, review: "pending", createdAt: Date.now(), parentAssetId: parent?.id, version: (parent?.version ?? 0) + 1 };
-          c.assets.push(asset); job.assetId = asset.id; job.status = "done"; event(run, "generated", `${job.title} is ready for visual QA.`);
+          const source = run.sources.find(s => s.id === job.sourceId);
+          const asset: CampaignAsset = job.kind === "identity"
+            ? { id: randomUUID(), directorId: run.id, productionKind: "identity", messageId: run.messageId, stepId: job.id, title: job.title, pack: "Influencer candidates", kind: "image", url, prompt: job.prompt, look: run.identityProposal?.direction ?? "", review: "pending", createdAt: Date.now(), version: 1 }
+            : { id: randomUUID(), directorId: run.id, sourceId: job.sourceId, productionKind: job.kind, messageId: run.messageId, stepId: job.id, title: job.title, pack: source!.title, kind: job.kind === "motion" ? "video" : "image", url, prompt: job.prompt, look: source!.selection!.direction, review: "pending", createdAt: Date.now(), parentAssetId: parent?.id, version: (parent?.version ?? 0) + 1 };
+          c.assets.push(asset); job.assetId = asset.id; job.status = "done";
+          if (job.kind === "identity") { run.identityProposal!.candidates.push(asset.id); event(run, "generated", `${job.title} is ready for you to compare.`); }
+          else event(run, "generated", `${job.title} is ready for visual QA.`);
         } else if (Date.now() - job.startedAt > 60 * 60_000) { job.status = "error"; job.error = "Polling exceeded one hour. Check the provider ledger."; throw new Error(job.error); }
         return commit();
       }
       if (run.status !== "running") return c;
+      // An approved influencer proposal is fulfilled deterministically: no reasoning call per candidate.
+      if (run.approval && run.identityProposal && !run.identity?.references.length) {
+        const candidates = ownAssets().filter(a => a.productionKind === "identity");
+        if (candidates.length >= IDENTITY_CANDIDATES) { run.status = "awaiting_identity"; event(run, "identity_choice", `${run.identityProposal.name}: ${IDENTITY_CANDIDATES} reference candidates are ready. Choose the one to save as the influencer for this campaign.`); return commit(); }
+        const submitted = run.jobs.filter(j => j.kind === "identity").length;
+        if (submitted < IDENTITY_CANDIDATES) {
+          if (run.jobs.length >= run.approval.maxGenerations) throw new Error("Approved generation allowance exhausted before the influencer candidates were complete.");
+          if (run.imageProvider !== "kie" && !(await tools.accountStatus(run.imageProvider)).imageReady) throw new Error(`${accountLabel(run.imageProvider)} image generation is unavailable. No fallback provider will be charged.`);
+          if (!tools.mediaReady("identity", run.imageProvider)) throw new Error("Connect Kie.ai in Settings before generating influencer candidates.");
+          const n = submitted + 1, p = run.identityProposal;
+          const prompt = `Photoreal reference portrait of a new Instagram creator, candidate ${n} of ${IDENTITY_CANDIDATES}: a distinct interpretation of this identity.\n\nIdentity: ${p.dna}\n\nPersonality: ${p.personality}\n\nStyling and setting for this campaign: ${p.direction}\n\nFull body visible, facing camera, natural light, simple background, no text or logos.`;
+          const newJob: DirectorJob = { id: randomUUID(), kind: "identity", title: `${p.name} · candidate ${n}`, prompt, status: "submitting", startedAt: Date.now(), reservedUsd: run.approval.imageEstimateUsd };
+          run.jobs.push(newJob); commit(); release.assertOwned();
+          const body = { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", model: run.imageModel, prompt, aspectRatio: "9:16", imageUrls: run.referenceUrls.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)?.maxImages ?? 3), workflowId: run.id, nodeId: newJob.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
+          const response = await tools.generateImage(request("/api/generate", body));
+          const result = await response.json();
+          if (!response.ok || !result.taskId) throw new Error(result.error || "Provider did not return a job ID. Check its ledger before another submission.");
+          Object.assign(newJob, { taskId: result.taskId, status: "running" });
+          return commit();
+        }
+      }
       if (run.decisionCount >= 64) throw new Error("The research/decision limit was reached. Review the evidence and resume if more work is needed.");
       if (!(await tools.accountStatus(run.agentProvider ?? "codex")).chatReady) throw new Error(`Connect your ${accountLabel(run.agentProvider ?? "codex")} in Settings for director search and visual review.`);
       const decision: Decision = run.proposal && run.approval ? run.proposal : await tools.decideNext(run, ownAssets());
@@ -181,6 +226,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           case "generate": {
             if (!source!.selection) throw new Error("Select and clip an inspected source first.");
             if (run.sources.filter(s => s.selection).length < run.reels) throw new Error("Select all requested sources before proposing production approval.");
+            if (!run.identity?.references.length) throw new Error("No influencer is saved for this campaign. Call propose_identity to design one that fits the selected footage.");
             if (!run.approval) { run.proposal = decision; run.status = "awaiting_approval"; event(run, "approval_needed", "Sources selected. Approve the generation allowance to begin media production."); break; }
             if (run.jobs.length >= run.approval.maxGenerations) throw new Error("Approved generation allowance exhausted. Stop and create a new run if more production is needed.");
             if (run.jobs.filter(j => j.sourceId === source!.id && j.kind === decision.kind).length >= (decision.kind === "still" ? run.stillsPerReel + 2 : 3)) throw new Error("Revision limit reached for this source and output type.");
@@ -206,7 +252,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           }
           case "review_output": {
             const asset = ownAssets().find(a => a.id === decision.assetId);
-            if (!asset || asset.kind === "text" || asset.automatedReview) throw new Error("Choose an unreviewed generated media output.");
+            if (!asset || asset.kind === "text" || asset.productionKind === "identity" || asset.automatedReview) throw new Error("Choose an unreviewed generated media output. Influencer candidates are chosen by the user, not reviewed.");
             const result = await tools.reviewOutput(run, asset, run.sources.find(s => s.id === asset.sourceId)); asset.url = result.localUrl; asset.automatedReview = result.review; asset.reviewEvidence = result.evidence;
             event(run, "qa_result", result.review.summary, result.review.pass ? "Visual QA passed · human approval pending" : `Revision needed: ${result.review.correction}`); break;
           }
@@ -214,8 +260,17 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
             if (!ownAssets().some(a => a.sourceId === source!.id && a.productionKind === "motion" && a.automatedReview?.pass)) throw new Error("Complete and review this source's motion adaptation before its caption.");
             if (ownAssets().some(a => a.sourceId === source!.id && a.kind === "text")) throw new Error("A caption already exists. Revise it through the asset controls.");
             c.assets.push({ id: randomUUID(), directorId: run.id, sourceId: source!.id, messageId: run.messageId, stepId: randomUUID(), title: `${source!.title.slice(0, 100)} · caption`, pack: source!.title, kind: "text", text: decision.text, prompt: decision.text, look: source!.selection!.direction, review: "pending", createdAt: Date.now(), version: 1 }); break;
+          case "propose_identity": {
+            if (run.identity?.references.length) throw new Error("An influencer is already saved for this run. Generate the anchor instead.");
+            if (run.identityProposal) break; // already proposed; candidates are produced deterministically after approval
+            if (run.sources.filter(s => s.selection).length < run.reels) throw new Error("Select all requested sources first so the influencer can be designed to fit the footage.");
+            run.identityProposal = { name: decision.name, dna: decision.dna, personality: decision.personality, direction: decision.direction, candidates: [] };
+            event(run, "identity_proposed", `${decision.name}: ${decision.dna.slice(0, 200)}`, decision.direction);
+            if (!run.approval) { run.proposal = decision; run.status = "awaiting_approval"; event(run, "approval_needed", `Sources selected and an influencer designed to fit them. Approve the generation allowance to produce ${IDENTITY_CANDIDATES} reference candidates and the adaptations.`); }
+            break;
+          }
           case "finish":
-            if (!delivered(run, ownAssets()) || ownAssets().some(a => a.kind !== "text" && !a.automatedReview)) throw new Error("The requested Reels, stills, captions and visual reviews are not complete.");
+            if (!delivered(run, ownAssets()) || ownAssets().some(a => a.kind !== "text" && a.productionKind !== "identity" && !a.automatedReview)) throw new Error("The requested Reels, stills, captions and visual reviews are not complete.");
             run.status = "done"; break;
           case "need_input": run.status = "blocked"; run.error = decision.question; break;
         }

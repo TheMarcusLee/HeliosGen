@@ -40,7 +40,7 @@ export type ProductionStep = z.infer<typeof stepSchema> & {
 export interface CampaignAsset {
   directorId?: string;
   sourceId?: string;
-  productionKind?: "anchor" | "motion" | "still";
+  productionKind?: "anchor" | "motion" | "still" | "identity";
   reviewEvidence?: MediaEvidence;
   automatedReview?: Zod.infer<typeof reviewSchema>;
   id: string;
