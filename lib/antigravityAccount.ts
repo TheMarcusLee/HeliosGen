@@ -19,7 +19,8 @@ import type { AccountCapabilities } from "./campaigns/providers";
  * AspectRatio, ImageName, ImagePaths) writes a JPEG under the CLI's brain folder
  * for that conversation. There is no video generation tool.
  */
-export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.1-pro-high";
+/** Gemini 3.8 Flash outperforms 3.1 Pro on this work; effort level is the only knob worth turning between tiers. */
+export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.8-flash-high";
 export const ANTIGRAVITY_INSTALL_CMD = "curl -fsSL https://antigravity.google/cli/install.sh | bash";
 const CLI_DIRS = [join(homedir(), ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
 export const ANTIGRAVITY_BRAIN_DIR = join(homedir(), ".gemini", "antigravity-cli", "brain");
@@ -31,8 +32,8 @@ export function antigravityEnv(): NodeJS.ProcessEnv {
   env.PATH = [...CLI_DIRS, process.env.PATH ?? ""].join(":");
   return env;
 }
-export const ANTIGRAVITY_INSPECTION_MODEL = "gemini-3.8-flash-high";
-/** Pro for decisions; a Flash-class model for frame inspection and output review unless overridden. */
+export const ANTIGRAVITY_INSPECTION_MODEL = "gemini-3.8-flash-medium";
+/** High effort for decisions; medium effort for frame inspection and output review unless overridden. */
 export function antigravityModel(tier: "reasoning" | "inspection" = "reasoning") {
   if (tier === "inspection") return process.env.HELIOS_ANTIGRAVITY_INSPECTION_MODEL || ANTIGRAVITY_INSPECTION_MODEL;
   return process.env.HELIOS_ANTIGRAVITY_MODEL || ANTIGRAVITY_DEFAULT_MODEL;

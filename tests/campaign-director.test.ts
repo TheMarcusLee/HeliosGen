@@ -284,7 +284,7 @@ test("frame inspection and review use the inspection model tier while decisions 
   const { codexModel, plannerArgs } = await import("../lib/campaigns/codexPlanner");
   const { agyPlanner } = await import("../lib/campaigns/agyPlanner");
   const { getAntigravityStatus } = await import("../lib/antigravityAccount");
-  assert.equal(antigravityModel("reasoning"), "gemini-3.1-pro-high"); assert.equal(antigravityModel("inspection"), "gemini-3.8-flash-high");
+  assert.equal(antigravityModel("reasoning"), "gemini-3.8-flash-high"); assert.equal(antigravityModel("inspection"), "gemini-3.8-flash-medium");
   assert.equal(codexModel("inspection"), undefined); assert.ok(!plannerArgs("/tmp/x", []).includes("-m"));
   const before = process.env.HELIOS_CODEX_INSPECTION_MODEL; process.env.HELIOS_CODEX_INSPECTION_MODEL = "gpt-5-mini";
   try { assert.deepEqual(plannerArgs("/tmp/x", [], false, codexModel("inspection")).slice(8, 10), ["-m", "gpt-5-mini"]); assert.equal(codexModel("reasoning"), undefined); }
@@ -296,5 +296,5 @@ test("frame inspection and review use the inspection model tier while decisions 
   const { NextRequest } = await import("next/server");
   const req = () => new NextRequest("http://localhost/api/assistant", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "{}" }] }) });
   await agyPlanner(req(), { spawner }); await agyPlanner(req(), { spawner, tier: "inspection" });
-  assert.deepEqual(models, ["gemini-3.1-pro-high", "gemini-3.8-flash-high"]);
+  assert.deepEqual(models, ["gemini-3.8-flash-high", "gemini-3.8-flash-medium"]);
 });

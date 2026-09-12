@@ -17,7 +17,7 @@ test("antigravity child environment never carries Gemini or Google API keys and 
     for (const key of ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_USE_VERTEXAI", "OPENAI_API_KEY", "KIE_API_TOKEN"]) assert.equal(key in env, false, key);
     assert.match(env.PATH!, /\.local\/bin/);
   } finally { for (const [k, v] of [["GEMINI_API_KEY", before.g], ["GOOGLE_API_KEY", before.k], ["GOOGLE_GENAI_USE_VERTEXAI", before.v]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
-  const args = agyArgs("prompt", "/tmp/ws", "gemini-3.1-pro-high", 240_000);
+  const args = agyArgs("prompt", "/tmp/ws", "gemini-3.8-flash-high", 240_000);
   assert.ok(args.includes("--sandbox") && args.includes("--disable-slash-commands") && !args.includes("--dangerously-skip-permissions"));
   assert.deepEqual(args.slice(0, 2), ["-p", "prompt"]); assert.equal(args[args.indexOf("--print-timeout") + 1], "4m");
 });
