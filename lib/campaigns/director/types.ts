@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CampaignMemory } from "../operations";
 import type { IdentityAsset } from "../../cloneMe";
+import type { AccountProvider, CampaignImageProvider } from "../providers";
 export const startDirectorSchema = z.object({ revisionOf: z.string().optional(), objective: z.string().trim().min(10).max(8000), searchProvider: z.enum(["tiktok", "web"]).default("tiktok"), videoModel: z.string().optional(), sourceUrls: z.array(z.string().max(2000)).max(8).default([]), reels: z.number().int().min(1).max(3).default(1), stillsPerReel: z.number().int().min(0).max(3).default(1) });
 export const decisionSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("search"), query: z.string().min(3).max(400), reason: z.string().max(1200) }),
@@ -42,7 +43,9 @@ export interface DirectorRun {
   videoModel?: string;
   createdAt: number; decisionCount: number; sources: DirectorSource[]; jobs: DirectorJob[];
   events: { id: string; at: number; tool: string; summary: string; outcome?: string }[];
-  memory?: CampaignMemory; identity?: IdentityAsset; referenceUrls: string[]; imageProvider: "codex" | "kie"; imageModel: string;
+  memory?: CampaignMemory; identity?: IdentityAsset; referenceUrls: string[]; imageProvider: CampaignImageProvider; imageModel: string;
+  /** Connected account that reasons, inspects and reviews for this run. Older runs default to Codex. */
+  agentProvider?: AccountProvider;
   proposal?: Extract<Decision, { tool: "generate" }>;
   approval?: { at: number; maxGenerations: number; imageEstimateUsd?: number; motionEstimateUsd?: number; maxReservedUsd?: number; referenceReuseConfirmed: boolean };
   error?: string;

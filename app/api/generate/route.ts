@@ -1,4 +1,6 @@
 import { codexAccountEnv } from "@/lib/codexAccount";
+import { generateImageWithAntigravity } from "@/lib/antigravityAccount";
+import { mkdtemp, rm } from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import https from "node:https";
 import http from "node:http";
@@ -288,6 +290,7 @@ export async function POST(req: NextRequest) {
     azureCustomWidth,
     azureCustomHeight,
     codexProvider,
+    antigravityProvider,
     debugOnly,
     workflowId,
     nodeId,
@@ -306,6 +309,7 @@ export async function POST(req: NextRequest) {
     azureCustomWidth?:   number;     // manual size — used when aspectRatio === "custom"
     azureCustomHeight?:  number;
     codexProvider?:      boolean;    // route through the server's local codex-imagegen CLI
+    antigravityProvider?: boolean;   // route through the server's Antigravity CLI (native generate_image)
     debugOnly?:          boolean;
     workflowId?:         string;
     nodeId?:             string;
@@ -323,7 +327,7 @@ export async function POST(req: NextRequest) {
 
   const cfg = IMAGE_MODELS.find((m) => m.id === model);
   if (!cfg) return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
-  const provider = azureBaseUrl && azureDeployment ? "azure" : codexProvider ? "codex" : "kie";
+  const provider = azureBaseUrl && azureDeployment ? "azure" : codexProvider ? "codex" : antigravityProvider ? "antigravity" : "kie";
   let workflowPolicy: WorkflowMetadata;
   try {
     workflowPolicy = validateContentRoute({ prompt, metadata: workflowMetadata, provider, modelId: model });
@@ -520,6 +524,37 @@ export async function POST(req: NextRequest) {
     })();
 
     return NextResponse.json({ taskId: codexTaskId });
+  }
+
+  // ── Antigravity branch ─────────────────────────────────────────────────────────
+  // The Google login lives in the CLI's keyring; nothing here touches a key.
+  if (antigravityProvider) {
+    const taskId = `antigravity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    insertProviderLedgerAttempt({ taskId, workflowId, nodeId, identityAssetId, provider: "antigravity", modelId: model, metadata: { contentClass: workflowPolicy.contentClass, route: workflowPolicy.routes[workflowPolicy.contentClass] } });
+    jobStore.set(taskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
+    const userId = currentUserId;
+    const cleanPrompt = prompt.slice(0, cfg.apiInput.promptMaxLength ?? 8000).replace(/<<<image (\d+)>>>/gi, (_m, n) => `reference image ${n}`).trim();
+    (async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "ugc-antigravity-image-"));
+      try {
+        const references = await Promise.all(r2ImageUrls.slice(0, 8).map(async (url) => {
+          const buf = await fetchBuffer(url);
+          const raw = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
+          return { buffer: buf, ext: raw === "jpg" ? "jpeg" : raw };
+        }));
+        const out = await generateImageWithAntigravity({ prompt: cleanPrompt, aspectRatio, references, workspace });
+        const imageUrl = await uploadBuffer(out.buffer, out.contentType, "generated");
+        jobStore.set(taskId, { status: "done", imageUrl });
+        settleProviderLedgerTask(taskId, "done", undefined, undefined, imageUrl);
+        guestDb.insertGeneration({ task_id: taskId, user_id: userId, generation_type: "image", status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000), model, aspect_ratio: aspectRatio, quality });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[antigravity] background error:", msg);
+        jobStore.set(taskId, { status: "error", error: msg });
+        settleProviderLedgerTask(taskId, "error", msg);
+      } finally { await rm(workspace, { recursive: true, force: true }); }
+    })();
+    return NextResponse.json({ taskId });
   }
 
   // ── Kie.ai branch ─────────────────────────────────────────────────────────────

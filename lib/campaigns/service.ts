@@ -1,9 +1,7 @@
 import { directorBusy } from "./director/types";
 import { quotePlan } from "./operations";
 import { claimLease } from "./lease";
-import { CODEX_CHAT_MODEL } from "./providers";
-import { codexPlanner } from "./codexPlanner";
-import { getCodexAccountStatus } from "../codexAccount";
+import { accountPlanner, accountStatus, agentProviderOf, isAccountChatModel, accountLabel } from "./agents";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { POST as assistant } from "@/app/api/assistant/route";
@@ -70,13 +68,13 @@ export async function planCampaign(id: string, text: string, azureConfig: Record
   let c = getCampaign(id);
   if (directorBusy(c) || c.planning || c.runs.some(r => r.status === "running" || r.status === "paused")) throw new Error("Finish or stop the current production before creating a new plan.");
   if (revisionOf && !c.assets.some(a => a.id === revisionOf)) throw new Error("Revision source not found.");
-  if (c.budget?.maxEstimatedUsd !== null && c.budget?.maxEstimatedUsd !== undefined && c.model !== CODEX_CHAT_MODEL) throw new Error("API chat costs are unquoted. Choose connected-account chat or remove the dollar planning limit.");
+  if (c.budget?.maxEstimatedUsd !== null && c.budget?.maxEstimatedUsd !== undefined && !isAccountChatModel(c.model)) throw new Error("API chat costs are unquoted. Choose connected-account chat or remove the dollar planning limit.");
   const messageId = randomUUID();
   c.messages.push({ id: messageId, role: "user", content: text, revisionOf, createdAt: Date.now() });
   c.planning = true; c.planningStartedAt = Date.now(); c.error = undefined;
   saveCampaign(c);
   try {
-    const response = await (complete ?? (c.model === CODEX_CHAT_MODEL ? codexPlanner : assistant))(request("/api/assistant", {
+    const response = await (complete ?? (isAccountChatModel(c.model) ? accountPlanner(agentProviderOf(c)) : assistant))(request("/api/assistant", {
       model: c.model, ...azureConfig,
       messages: [{ role: "system", content: PLANNER },
         { role: "user", content: `Campaign context: ${JSON.stringify({ memory: c.memory, budget: c.budget, trends: c.trends?.filter(t => t.selected), revisionOf, identity: c.identity, references: c.referenceUrls, assets: c.assets.slice(-20).map(a => ({ title: a.title, prompt: a.prompt, look: a.look, url: a.url, review: a.review })), models: { image: c.imageModel, video: c.videoModel } })}` },
@@ -166,8 +164,8 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
         const ref = step.referenceStep === null ? undefined : c.assets.find(a => a.stepId === run.steps[step.referenceStep!].id && a.kind === "image");
         if (step.referenceStep !== null && !ref?.url) throw new Error("The required reference image is missing.");
         const refs = ref?.url ? [ref.url] : [...(run.referenceUrls ?? c.referenceUrls), ...(run.identity?.references.map(r => r.url) ?? [])];
-        if (step.kind === "image" && run.imageProvider === "codex" && !(await getCodexAccountStatus()).imageReady) throw new Error("OpenAI image connection unavailable. Check Settings; no fallback provider was charged.");
-        const body = { codexProvider: run.imageProvider === "codex", prompt: effectivePrompt(step, run.identity), model: run.imageModel, videoModel: run.videoModel, aspectRatio: step.aspectRatio, imageUrls: refs.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)!.maxImages), startFrameUrl: refs[0], duration: 5, workflowId: run.workflowId, nodeId: step.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
+        if (step.kind === "image" && run.imageProvider !== "kie" && run.imageProvider && !(await accountStatus(run.imageProvider)).imageReady) throw new Error(`${accountLabel(run.imageProvider)} image connection unavailable. Check Settings; no fallback provider was charged.`);
+        const body = { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", prompt: effectivePrompt(step, run.identity), model: run.imageModel, videoModel: run.videoModel, aspectRatio: step.aspectRatio, imageUrls: refs.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)!.maxImages), startFrameUrl: refs[0], duration: 5, workflowId: run.workflowId, nodeId: step.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
         release.assertOwned();
         const response = await (step.kind === "image" ? providers.generateImage : providers.generateVideo)(request(step.kind === "image" ? "/api/generate" : "/api/generate-video", body));
         const result = await response.json();

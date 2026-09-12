@@ -390,7 +390,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     };
   }, [model, data.generationProvider]);
   const isAzureProvider = currentProvider === "azure";
-  const isCodexProvider = currentProvider === "codex";
+  const isCodexProvider = currentProvider === "codex" || currentProvider === "antigravity";
 
   const promptInfo = (() => {
     const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
@@ -642,10 +642,11 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     const azureQuality = (data.azureQuality as string | undefined) ?? "auto";
     const azureResolution = (data.azureResolution as string | undefined) ?? "1k";
 
-    const isCodex = !!(() => {
-      try { return (data.generationProvider ?? JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "codex"; }
-      catch { return false; }
+    const accountProvider = (() => {
+      try { return data.generationProvider ?? JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie"; }
+      catch { return "kie"; }
     })();
+    const isCodex = accountProvider === "codex", isAntigravity = accountProvider === "antigravity";
 
     const workflowState = useWorkflowStore.getState();
     const workflowMetadata = workflowState.spaces.find((space) => space.id === workflowState.activeSpaceId)?.metadata;
@@ -668,6 +669,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         } : {}),
       } : {}),
       ...(isCodex ? { codexProvider: true } : {}),
+      ...(isAntigravity ? { antigravityProvider: true } : {}),
     };
 
     if (!resolvedPrompt.trim()) {

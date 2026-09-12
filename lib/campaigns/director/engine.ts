@@ -10,7 +10,7 @@ import { getCampaign, saveCampaign } from "../db";
 import { claimLease } from "../lease";
 import { budgetSchema, budgetUsage } from "../operations";
 import { effectivePrompt, type Campaign, type CampaignAsset } from "../types";
-import { getCodexAccountStatus } from "../../codexAccount";
+import { accountStatus, agentProviderOf, accountLabel } from "../agents";
 import { IMAGE_MODELS } from "../../modelConfig";
 import { decideNext, inspectSource, reviewOutput, searchSocial } from "./intelligence";
 import { clipVideo, retrieveVideo, sourceUrl, motionImage } from "./media";
@@ -18,7 +18,7 @@ import { directorBusy, startDirectorSchema, type DirectorRun, type Decision } fr
 import { clipLimits, motionModel, motionModelSummary, motionRequestBody } from "./motionModels";
 
 const request = (path: string, body?: unknown) => new NextRequest(`http://localhost${path}`, body === undefined ? undefined : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-const defaults = { mediaReady: (kind: "anchor" | "motion" | "still", provider: "codex" | "kie") => kind !== "motion" && provider === "codex" || !!getKieApiToken(), decideNext, inspectSource, reviewOutput, searchSocial, searchTikTok, clipVideo, retrieveVideo, motionImage, generateImage, generateVideo, jobStatus, accountStatus: getCodexAccountStatus };
+const defaults = { mediaReady: (kind: "anchor" | "motion" | "still", provider: "codex" | "antigravity" | "kie") => kind !== "motion" && provider !== "kie" || !!getKieApiToken(), decideNext, inspectSource, reviewOutput, searchSocial, searchTikTok, clipVideo, retrieveVideo, motionImage, generateImage, generateVideo, jobStatus, accountStatus };
 export type DirectorTools = Omit<typeof defaults, "generateImage" | "generateVideo" | "jobStatus"> & Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>>;
 export const approveDirectorSchema = z.object({ maxGenerations: z.number().int().min(2).max(30), motionEstimateUsd: z.number().positive().max(1000).optional(), referenceReuseConfirmed: z.literal(true) });
 function event(run: DirectorRun, tool: string, summary: string, outcome?: string) { run.events.push({ id: randomUUID(), at: Date.now(), tool, summary, outcome }); }
@@ -32,7 +32,7 @@ export function startDirector(id: string, input: z.input<typeof startDirectorSch
     if (data.revisionOf && !c.assets.some(a => a.id === data.revisionOf && a.directorId)) throw new Error("Director revision source not found.");
     const videoModel = motionModel(data.videoModel ?? c.motionModel).id;
     const urls = [...new Set(data.sourceUrls.map(sourceUrl))];
-    const run: DirectorRun = { id: randomUUID(), messageId: randomUUID(), ...data, videoModel, createdAt: Date.now(), decisionCount: 0, status: "running", jobs: [], events: [], sources: urls.map(url => ({ id: randomUUID(), url, title: url.startsWith("/generated/") ? "Uploaded motion reference" : "Supplied social reference", discoveredAt: Date.now(), status: "found" })), memory: structuredClone(c.memory), identity: structuredClone(c.identity), referenceUrls: [...c.referenceUrls], imageProvider: c.imageProvider ?? "kie", imageModel: c.imageModel };
+    const run: DirectorRun = { id: randomUUID(), messageId: randomUUID(), ...data, videoModel, createdAt: Date.now(), decisionCount: 0, status: "running", jobs: [], events: [], sources: urls.map(url => ({ id: randomUUID(), url, title: url.startsWith("/generated/") ? "Uploaded motion reference" : "Supplied social reference", discoveredAt: Date.now(), status: "found" })), memory: structuredClone(c.memory), identity: structuredClone(c.identity), referenceUrls: [...c.referenceUrls], imageProvider: c.imageProvider ?? "kie", imageModel: c.imageModel, agentProvider: agentProviderOf(c) };
     event(run, "start", "Research started. Source retrieval and visual inspection run in the background; media generation waits for your approval.");
     c.directors ??= []; c.directors.push(run); c.error = undefined;
     c.messages.push({ id: randomUUID(), role: "user", content: data.objective, createdAt: Date.now() }, { id: run.messageId, role: "assistant", content: "I’m finding and inspecting real source footage, then choosing a motion reference that fits this campaign.", createdAt: Date.now() });
@@ -145,7 +145,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
       }
       if (run.status !== "running") return c;
       if (run.decisionCount >= 64) throw new Error("The research/decision limit was reached. Review the evidence and resume if more work is needed.");
-      if (!(await tools.accountStatus()).chatReady) throw new Error("Connect your OpenAI account in Settings for director search and visual review.");
+      if (!(await tools.accountStatus(run.agentProvider ?? "codex")).chatReady) throw new Error(`Connect your ${accountLabel(run.agentProvider ?? "codex")} in Settings for director search and visual review.`);
       const decision: Decision = run.proposal && run.approval ? run.proposal : await tools.decideNext(run, ownAssets());
       run.proposal = undefined; run.decisionCount++;
       event(run, decision.tool, "reason" in decision ? decision.reason : decision.tool === "finish" ? decision.summary : decision.question);
@@ -159,7 +159,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
           case "search": {
             if (run.events.filter(e => e.tool === "search").length > 4 || run.sources.length >= 24) throw new Error("Search allowance exhausted. Use retrieved sources or request a supplied video.");
             run.searchRequests = (run.searchRequests ?? 0) + 1; commit();
-            const result = await (run.searchProvider === "web" ? tools.searchSocial : tools.searchTikTok)(decision.query, run.sources.map(s => s.url)); run.sources.push(...result.sources); event(run, "search_result", result.summary, `${result.sources.length} direct source links found`); break;
+            const result = await (run.searchProvider === "web" ? tools.searchSocial : tools.searchTikTok)(decision.query, run.sources.map(s => s.url), run.agentProvider ?? "codex"); run.sources.push(...result.sources); event(run, "search_result", result.summary, `${result.sources.length} direct source links found`); break;
           }
           case "retrieve": {
             if (source!.status !== "found") throw new Error("This source was already retrieved or is unavailable.");
@@ -187,7 +187,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
             if (run.jobs.some(j => j.sourceId === source!.id && j.kind === decision.kind && j.prompt.includes(decision.prompt))) throw new Error("Do not repeat the same generation prompt. Apply the visual review correction.");
             const anchor = ownAssets().filter(a => a.sourceId === source!.id && a.productionKind === "anchor" && a.automatedReview?.pass).at(-1);
             if (decision.kind !== "anchor" && !anchor?.url) throw new Error("Generate and visually approve an anchor before motion or matching stills.");
-            if (decision.kind !== "motion" && run.imageProvider === "codex" && !(await tools.accountStatus()).imageReady) throw new Error("OpenAI account image generation is unavailable. No fallback provider will be charged.");
+            if (decision.kind !== "motion" && run.imageProvider !== "kie" && !(await tools.accountStatus(run.imageProvider)).imageReady) throw new Error(`${accountLabel(run.imageProvider)} image generation is unavailable. No fallback provider will be charged.`);
             if (!tools.mediaReady(decision.kind, run.imageProvider)) throw new Error("Connect Kie.ai in Settings before submitting motion transfer or Kie images.");
             const imageUrls = [...(anchor?.url && decision.kind !== "anchor" ? [anchor.url] : []), ...(run.identity?.references.map(r => r.url) ?? []), ...run.referenceUrls];
             const model = motionModel(run.videoModel);
@@ -198,7 +198,7 @@ export async function advanceDirector(id: string, tools: DirectorTools = default
             const common = { workflowId: run.id, nodeId: newJob.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
             const body = decision.kind === "motion"
               ? { ...motionRequestBody(model, { prompt, anchorUrl: startFrameUrl!, clipUrl: source!.selection.clip.localUrl, clipDuration: source!.selection.end - source!.selection.start, identityUrls: run.identity?.references.map(r => r.url) ?? [] }), ...common }
-              : { codexProvider: run.imageProvider === "codex", model: run.imageModel, prompt, aspectRatio: "9:16", imageUrls: imageUrls.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)?.maxImages ?? 3), ...common };
+              : { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", model: run.imageModel, prompt, aspectRatio: "9:16", imageUrls: imageUrls.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)?.maxImages ?? 3), ...common };
             const response = await (decision.kind === "motion" ? tools.generateVideo : tools.generateImage)(request(decision.kind === "motion" ? "/api/generate-video" : "/api/generate", body));
             const result = await response.json();
             if (!response.ok || !result.taskId) throw new Error(result.error || "Provider did not return a job ID. Check its ledger before another submission.");

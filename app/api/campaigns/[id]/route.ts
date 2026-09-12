@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { memorySchema, budgetSchema, budgetUsage } from "@/lib/campaigns/operations";
 import { discoverTrends, discoverTikTokTrends } from "@/lib/campaigns/trends";
 import { draftPost, queuePost, cancelPost, postDraftSchema } from "@/lib/campaigns/publishing";
-import { CODEX_CHAT_MODEL } from "@/lib/campaigns/providers";
+import { ACCOUNT_IMAGE_MODEL } from "@/lib/campaigns/providers";
+import { isAccountChatModel } from "@/lib/campaigns/agents";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getCampaign, saveCampaign } from "@/lib/campaigns/db";
@@ -37,7 +38,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("save-identity"), assetId: z.string() }),
   z.object({ action: z.literal("review"), assetId: z.string(), review: z.enum(["pending", "approved", "rejected"]) }),
   z.object({ action: z.literal("run"), runId: z.string(), operation: z.enum(["pause", "resume", "stop"]) }),
-  z.object({ action: z.literal("settings"), title: z.string().trim().min(1).max(120).optional(), model: z.string().optional(), imageModel: z.string().optional(), imageProvider: z.enum(["codex", "kie"]).optional(), videoModel: z.string().optional(), motionModel: z.string().optional(), referenceUrls: z.array(z.string().refine(s => /^\/generated\/[\w./%-]+$/.test(s) || /^https:\/\//.test(s), "Use an uploaded image or HTTPS URL.")).max(8).optional() }),
+  z.object({ action: z.literal("settings"), title: z.string().trim().min(1).max(120).optional(), model: z.string().optional(), imageModel: z.string().optional(), imageProvider: z.enum(["codex", "antigravity", "kie"]).optional(), videoModel: z.string().optional(), motionModel: z.string().optional(), referenceUrls: z.array(z.string().refine(s => /^\/generated\/[\w./%-]+$/.test(s) || /^https:\/\//.test(s), "Use an uploaded image or HTTPS URL.")).max(8).optional() }),
 ]);
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try { return Response.json({ campaign: getCampaign((await context.params).id) }); }
@@ -86,11 +87,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
     if (body.action === "settings") {
       if (directorBusy(c) || c.planning || c.runs.some(r => r.status === "running" || r.status === "paused")) throw new Error("Wait for the current production before changing campaign settings.");
-      if (body.model && body.model !== CODEX_CHAT_MODEL && !MODELS.some(m => m.id === body.model)) throw new Error("Unknown assistant model.");
+      if (body.model && !isAccountChatModel(body.model) && !MODELS.some(m => m.id === body.model)) throw new Error("Unknown assistant model.");
       if (body.imageModel && !IMAGE_MODELS.some(m => m.id === body.imageModel && m.supportsImages)) throw new Error("Choose a reference-capable image model.");
       if (body.videoModel && !VIDEO_MODELS.some(m => m.id === body.videoModel && m.handles.includes("startFrame") && m.durations.includes(5) && !m.apiInput.useMotionControl && !m.requiredHandles?.some(h => h !== "startFrame"))) throw new Error("Choose an image-to-video model.");
       if (body.motionModel && !MOTION_MODELS.some(m => m.id === body.motionModel)) throw new Error("Choose a video model that accepts a reference video.");
-      if ((body.imageProvider ?? c.imageProvider) === "codex" && (body.imageModel ?? c.imageModel) !== "gpt-image-2") throw new Error("OpenAI account images require GPT Image 2.");
+      const provider = body.imageProvider ?? c.imageProvider ?? "kie";
+      if (provider !== "kie" && (body.imageModel ?? c.imageModel) !== ACCOUNT_IMAGE_MODEL[provider]) throw new Error(provider === "codex" ? "OpenAI account images require GPT Image 2." : "Google account images use Nano Banana Pro through Antigravity.");
       if (c.budget) {
         if ((body.imageModel && body.imageModel !== c.imageModel) || (body.imageProvider && body.imageProvider !== c.imageProvider)) c.budget.imageEstimateUsd = null;
         if (body.videoModel && body.videoModel !== c.videoModel) c.budget.videoEstimateUsd = null;

@@ -22,7 +22,7 @@ export type NodeStatus = "idle" | "pending" | "running" | "done" | "error";
 export type GenerateMode = "t2i" | "t2v" | "i2i" | "i2v";
 
 export interface NodeData extends Record<string, unknown> {
-  generationProvider?: "codex" | "kie" | "azure";
+  generationProvider?: "codex" | "antigravity" | "kie" | "azure";
   label: string;
   status?: NodeStatus;
   // shared

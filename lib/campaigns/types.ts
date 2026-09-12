@@ -4,6 +4,7 @@ import type { reviewSchema } from "./director/types";
 import type { CampaignMemory, CampaignBudget, TrendCandidate, CampaignPost } from "./operations";
 import { z } from "zod";
 import type { IdentityAsset } from "../cloneMe";
+import type { CampaignImageProvider } from "./providers";
 
 export const stepSchema = z.object({
   kind: z.enum(["image", "video", "text"]),
@@ -76,7 +77,7 @@ export interface CampaignRun {
   steps: ProductionStep[];
   identity?: IdentityAsset;
   referenceUrls?: string[];
-  imageProvider?: "codex" | "kie";
+  imageProvider?: CampaignImageProvider;
   imageModel: string;
   videoModel: string;
 }
@@ -97,7 +98,7 @@ export interface Campaign {
   identity?: IdentityAsset;
   referenceUrls: string[];
   model: string;
-  imageProvider?: "codex" | "kie";
+  imageProvider?: CampaignImageProvider;
   imageModel: string;
   videoModel: string;
   /** Default reference-video model for Research & adapt runs. */

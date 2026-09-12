@@ -7,7 +7,7 @@ export interface IdentityReference {
 }
 
 export type WorkflowContentClass = "sfw" | "adult";
-export type WorkflowProvider = "kie" | "wavespeed" | "comfyui" | "azure" | "codex";
+export type WorkflowProvider = "kie" | "wavespeed" | "comfyui" | "azure" | "codex" | "antigravity";
 
 export interface IdentityDefaults {
   contentClass: WorkflowContentClass;
@@ -60,7 +60,7 @@ export const DEFAULT_IDENTITY_DEFAULTS: IdentityDefaults = {
 export function normalizeIdentityDefaults(value: unknown): IdentityDefaults {
   if (!value || typeof value !== "object") return { ...DEFAULT_IDENTITY_DEFAULTS };
   const raw = value as Partial<IdentityDefaults>;
-  const provider = ["kie", "wavespeed", "comfyui", "azure", "codex"].includes(raw.provider ?? "")
+  const provider = ["kie", "wavespeed", "comfyui", "azure", "codex", "antigravity"].includes(raw.provider ?? "")
     ? raw.provider as WorkflowProvider
     : undefined;
   return {
@@ -91,7 +91,7 @@ export function normalizeWorkflowMetadata(value: unknown): WorkflowMetadata {
   const normalizeRoute = (route: unknown): ProviderRoute | undefined => {
     if (!route || typeof route !== "object") return undefined;
     const item = route as Partial<ProviderRoute>;
-    if (!["kie", "wavespeed", "comfyui", "azure", "codex"].includes(item.provider ?? "")) return undefined;
+    if (!["kie", "wavespeed", "comfyui", "azure", "codex", "antigravity"].includes(item.provider ?? "")) return undefined;
     if (typeof item.modelId !== "string" || !item.modelId.trim()) return undefined;
     return { provider: item.provider!, modelId: item.modelId.trim() };
   };

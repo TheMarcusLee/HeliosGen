@@ -9,6 +9,7 @@ export const PROVIDERS = [
   { id: "kie",   label: "Kie.ai" },
   { id: "azure", label: "Azure Foundry" },
   { id: "codex", label: "Codex CLI" },
+  { id: "antigravity", label: "Antigravity" },
 ] as const;
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];

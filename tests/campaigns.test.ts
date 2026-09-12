@@ -169,6 +169,7 @@ test("invalid planner output leaves a recoverable error and preserves the user's
 test("connected account defaults distinguish chat and image capabilities", async () => {
   const { campaignDefaults, CODEX_CHAT_MODEL } = await import("../lib/campaigns/providers");
   assert.deepEqual(campaignDefaults({ chatReady: true, imageReady: true }), { model: CODEX_CHAT_MODEL, imageModel: "gpt-image-2", imageProvider: "codex" });
+  assert.equal(campaignDefaults({ chatReady: true, imageReady: false }, { chatReady: false, imageReady: false }).imageProvider, "kie");
   assert.equal(campaignDefaults({ chatReady: true, imageReady: false }).imageProvider, "kie");
   assert.notEqual(campaignDefaults({ chatReady: false, imageReady: false }).model, CODEX_CHAT_MODEL);
   const { createCampaign, saveCampaign } = await database;
