@@ -19,6 +19,9 @@ let _db: DatabaseSync | null = null;
 
 export function db(): DatabaseSync {
   if (_db) return _db;
+  // A test process must never open the real database: node:test sets NODE_TEST_CONTEXT,
+  // and every test file points HELIOS_DATA_DIR at a temp dir before touching the DB.
+  if (process.env.NODE_TEST_CONTEXT && !process.env.HELIOS_DATA_DIR) throw new Error("Refusing to open the app database from a test without HELIOS_DATA_DIR set to a temporary directory.");
   mkdirSync(DATA_DIR, { recursive: true });
   const database = new DatabaseSync(DB_PATH);
   database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
