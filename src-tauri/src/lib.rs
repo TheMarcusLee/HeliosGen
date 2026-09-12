@@ -202,6 +202,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Sidecar::default())
+        .on_window_event(|window, event| {
+            // Closing the Mac window leaves the local production server alive.
+            // Quit from the app menu still exits and terminates the sidecar.
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (window, event);
+        })
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -236,6 +247,13 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running UGC{Gen}")
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen { .. } = &event {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
             if let RunEvent::Exit = event {
                 kill_sidecar(app);
             }

@@ -380,7 +380,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
   const [currentProvider, setCurrentProvider] = useState<ProviderId>("kie");
   useEffect(() => {
-    const read = () => setCurrentProvider(getModelProvider(model));
+    const read = () => setCurrentProvider(data.generationProvider ?? getModelProvider(model));
     read();
     window.addEventListener("storage", read);
     window.addEventListener("aiui-providers-changed", read);
@@ -388,7 +388,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       window.removeEventListener("storage", read);
       window.removeEventListener("aiui-providers-changed", read);
     };
-  }, [model]);
+  }, [model, data.generationProvider]);
   const isAzureProvider = currentProvider === "azure";
   const isCodexProvider = currentProvider === "codex";
 
@@ -636,14 +636,14 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       catch { return ""; }
     })();
     const isAzure = !!(azureBaseUrl && azureDeployment && (() => {
-      try { return (JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "azure"; }
+      try { return (data.generationProvider ?? JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "azure"; }
       catch { return false; }
     })());
     const azureQuality = (data.azureQuality as string | undefined) ?? "auto";
     const azureResolution = (data.azureResolution as string | undefined) ?? "1k";
 
     const isCodex = !!(() => {
-      try { return (JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "codex"; }
+      try { return (data.generationProvider ?? JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "codex"; }
       catch { return false; }
     })();
 
@@ -729,7 +729,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         setLoading(false);
       }
     }, 3000);
-  }, [id, nodes, edges, model, aspectRatio, quality, data.azureQuality, data.azureCustomWidth, data.azureCustomHeight, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError, kieKeySet, addToast]);
+  }, [id, nodes, edges, model, aspectRatio, quality, data.generationProvider, data.azureQuality, data.azureCustomWidth, data.azureCustomHeight, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError, kieKeySet, addToast]);
 
   const handleGenerateBatch = useCallback(() => {
     generate();
@@ -1112,7 +1112,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                           const validQuality = newCaps.qualityOptions && !newCaps.qualityOptions.includes(quality as "1k" | "2k" | "4k")
                             ? newCaps.qualityOptions[0]
                             : quality;
-                          updateNodeData(id, { model: m.id, aspectRatio: validRatio, quality: validQuality });
+                          updateNodeData(id, { model: m.id, generationProvider: undefined, aspectRatio: validRatio, quality: validQuality });
                           if (!newCaps.supportsImages) removeEdgesForHandle(id, "image");
                           setModelOpen(false);
                         }}
@@ -1153,7 +1153,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                     <button
                       key={p.id}
                       onMouseDown={(e) => e.stopPropagation()}
-                      onClick={() => { setModelProvider(model, p.id); setProviderOpen(false); }}
+                      onClick={() => { setModelProvider(model, p.id); updateNodeData(id, { generationProvider: p.id }); setProviderOpen(false); }}
                       className={`w-full flex items-center gap-1.5 px-3 py-[7px] text-[11px] hover:bg-[#141C28] transition-colors ${currentProvider === p.id ? "text-white" : "text-[#A0A0A0]"}`}
                     >
                       <ProviderBrandIcon id={p.id} />

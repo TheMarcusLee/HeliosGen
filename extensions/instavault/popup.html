@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InstaVault for UGC{Gen}</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="popup">
+  <main class="app">
+    <div class="brand"><div class="mark">IV</div><div><h1>InstaVault for UGC{Gen}</h1><span class="hint">Unofficial · local only</span></div></div>
+    <div class="notice">Save only media you own or are authorized to download.</div>
+    <div class="quick-grid">
+      <button id="open-library" class="button primary" type="button">Open media library</button>
+      <button id="scan-page" class="button" type="button">Scan active Instagram page</button>
+      <button id="collect-visible" class="button" type="button">Collect visible media</button>
+    </div>
+    <section class="card">
+      <div class="row spread"><span>Collected</span><span id="library-count" class="stat">0</span></div>
+      <div class="divider"></div>
+      <div class="row spread"><span>Queue</span><span id="queue-status" class="stat">Idle</span></div>
+      <p id="status" class="hint" style="margin:10px 0 0">Open Instagram to begin.</p>
+    </section>
+    <div class="row spread" style="margin-top:12px"><a href="options.html" target="_blank">Settings & privacy</a><span class="hint">v1.0.0</span></div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

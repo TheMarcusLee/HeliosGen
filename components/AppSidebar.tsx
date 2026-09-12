@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkflowStore } from "@/lib/store";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
+import { useCampaignStore } from "@/lib/campaigns/client";
 import { useFolderStore } from "@/lib/folderStore";
 import {
   Workflow,
@@ -653,6 +654,8 @@ export function AppSidebar() {
   }, []);
 
   const { sessions, deleteSession } = useChatSessionStore();
+  const campaigns = useCampaignStore(s => s.campaigns);
+  const [chatSearch, setChatSearch] = React.useState("");
 
   const {
     folders, selectedFolderId, itemFolderMap,
@@ -730,12 +733,12 @@ export function AppSidebar() {
 
   const folderParam = selectedFolderId ? `&folder=${selectedFolderId}` : "";
   const navItems = [
+    { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
     { label: "Image", href: `/gallery?tab=images${folderParam}`, icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
     { label: "Video", href: `/gallery?tab=videos${folderParam}`, icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
     { label: "Identities", href: "/identities", icon: ScanFace, active: pathname.startsWith("/identities") },
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
-    { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
     { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); setSettingsOpen(true); } },
   ];
 
@@ -870,7 +873,7 @@ export function AppSidebar() {
 
           {/* Section header */}
           <div className="flex items-center justify-between px-1 py-2 shrink-0">
-            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-white/25">Chats</span>
+            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-white/25">Campaigns & chats</span>
             <button
               onClick={startNewChat}
               title="New chat"
@@ -881,10 +884,12 @@ export function AppSidebar() {
           </div>
 
           {/* Session list */}
+          <input aria-label="Search chat history" placeholder="Search campaigns…" value={chatSearch} onChange={e => setChatSearch(e.target.value)} className="mx-1 mb-2 min-w-0 rounded-md border border-white/10 bg-transparent px-2 py-1.5 text-xs outline-none focus:border-white/30" />
           <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 min-h-0">
-            {sessions.length === 0 ? (
+            {campaigns.filter(c => c.title.toLowerCase().includes(chatSearch.toLowerCase())).map(c => <button key={c.id} onClick={() => router.push(`/chat?id=${c.id}`)} className={cn("flex items-center gap-2 rounded-lg px-2 py-2 text-left text-xs transition-colors", pathname === "/chat" && c.id === activeChatId ? "bg-white/[0.07] text-white/90" : "text-white/55 hover:bg-white/[0.04]")}><Bot size={13} className="shrink-0" /><span className="min-w-0 flex-1 truncate">{c.title}</span><span className="text-[10px] text-white/30">{c.running ? "●" : c.assetCount || ""}</span></button>)}
+            {sessions.length === 0 && campaigns.length === 0 ? (
               <p className="text-center text-[11px] text-white/20 px-2 py-4">No chats yet</p>
-            ) : sessions.map(sess => {
+            ) : sessions.filter(s => s.title.toLowerCase().includes(chatSearch.toLowerCase())).map(sess => {
               const isActive = pathname === "/chat" && sess.id === activeChatId;
               return (
                 <div

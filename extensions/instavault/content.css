@@ -1,0 +1,22 @@
+.iv-positioned { position: relative !important; }
+.iv-download-button {
+  appearance: none;
+  position: absolute;
+  z-index: 2147483000;
+  top: 10px;
+  right: 10px;
+  border: 1px solid rgba(255, 255, 255, .45);
+  border-radius: 999px;
+  padding: 6px 11px;
+  color: #fff;
+  background: rgba(12, 15, 24, .78);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .28);
+  font: 600 12px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+  opacity: .18;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.iv-positioned:hover > .iv-download-button,
+.iv-download-button:focus-visible { opacity: 1; transform: translateY(-1px); }
+.iv-download-button:disabled { cursor: progress; }
+@media (prefers-reduced-motion: reduce) { .iv-download-button { transition: none; } }

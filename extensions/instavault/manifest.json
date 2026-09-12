@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "InstaVault for UGC{Gen}",
+  "version": "1.2.0",
+  "description": "Unofficial, local-only tools for saving Instagram media you are authorized to use, and sending it to your local UGC{Gen} as source clips.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "alarms",
+    "downloads",
+    "sidePanel",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://*.cdninstagram.com/*",
+    "https://*.fbcdn.net/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "InstaVault Downloader",
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "shared/utils.js",
+        "shared/instagram-metadata.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html"
+}

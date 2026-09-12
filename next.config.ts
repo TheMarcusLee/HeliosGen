@@ -15,15 +15,15 @@ const nextConfig: NextConfig = {
   experimental: {
     proxyClientMaxBodySize: '30mb',
   },
-  serverExternalPackages: ["undici"],
+  serverExternalPackages: ["undici", "playwright-core"],
   // `sharp` is a native module; the file tracer misses its platform binaries
   // unless we point at them explicitly for the standalone bundle.
   outputFileTracingIncludes: {
     "/**": ["node_modules/sharp/**/*", "node_modules/@img/**/*"],
   },
-  // Never trace the Tauri desktop staging area into the standalone output.
+  // Runtime user data and local secrets must never enter the standalone bundle.
   outputFileTracingExcludes: {
-    "/**": ["src-tauri/**/*"],
+    "/**": ["src-tauri/**/*", "data/**/*", "public/generated/**/*", ".env*", ".codex/**/*"],
   },
   images: {
     remotePatterns: [

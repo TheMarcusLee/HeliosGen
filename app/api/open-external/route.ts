@@ -6,7 +6,8 @@
  * http(s) URLs only.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "node:child_process";
+// Resolve the OS helper at runtime; it is not a file dependency to bundle.
+const { spawn } = process.getBuiltinModule("child_process") as typeof import("node:child_process");
 
 export const runtime = "nodejs";
 

@@ -43,6 +43,34 @@ function createServer(): McpServer {
   const server = new McpServer({ name: "ugc-gen-mcp-server", version: "0.3.0" });
   const client = new HeliosClient();
 
+  server.registerTool("helios_list_campaigns", {
+    title: "List campaign chats",
+    description: "List durable campaign chats, asset counts, and active production status.",
+    inputSchema: z.object({}),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async () => result(await client.json<JsonObject>("/api/campaigns")));
+
+  server.registerTool("helios_create_campaign", {
+    title: "Create campaign chat",
+    description: "Create an empty persistent campaign workspace. Does not start generation.",
+    inputSchema: z.object({}),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async () => result(await client.json<JsonObject>("/api/campaigns", { method: "POST", body: JSON.stringify({}) })));
+
+  server.registerTool("helios_get_campaign", {
+    title: "Get campaign workspace",
+    description: "Read a campaign's messages, identity snapshot, plans, production jobs, inline assets, and review states.",
+    inputSchema: z.object({ campaignId: z.string().min(1) }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ campaignId }) => result(await client.json<JsonObject>(`/api/campaigns/${encodeURIComponent(campaignId)}`)));
+
+  server.registerTool("helios_campaign_action", {
+    title: "Operate a campaign chat",
+    description: "Use the same campaign service as the chat UI. Request forms: {action:'message',text} plans using the configured text model (billable); {action:'start',messageId} authorizes the listed media generations; {action:'advance'} submits/polls the next authorized step; {action:'identity',identityId} selects a saved identity (null clears); {action:'save-identity',assetId} saves an approved reference as an influencer; {action:'review',assetId,review:'approved'|'rejected'|'pending'}; {action:'run',runId,operation:'pause'|'resume'|'stop'}; {action:'settings',title?,model?,imageModel?,videoModel?,motionModel?,referenceUrls?} (motionModel: default reference-video model for director runs). Show the plan and obtain user authorization before start. Additional actions: {action:'memory',memory:{brand,brief,audience,voice,constraints,products:[{name,description,url}]}}; {action:'budget',budget:{maxGenerations,maxEstimatedUsd,imageEstimateUsd,videoEstimateUsd}} (nullable dollar fields); {action:'discover',query,source?:'tiktok'|'youtube',region?}; {action:'select-trend',trendId,selected}; {action:'add-trend',title,url,notes}; {action:'revise-text',assetId,text}; {action:'draft-post',draft:{assetIds,caption,accountIds,scheduledAt}}; {action:'queue-post',postId}; {action:'cancel-post',postId}. Director actions: {action:'director-start',objective,sourceUrls?:[],reels?:1,stillsPerReel?:1,videoModel?:'any Kie.ai model accepting a reference video, default kling-3.0-motion-control',searchProvider?:'tiktok'|'web' (tiktok = built-in live browser search, free; web = OpenAI account web search)}; {action:'director-approve',runId,maxGenerations,motionEstimateUsd?,referenceReuseConfirmed:true}; {action:'director-control',runId,operation:'pause'|'resume'|'stop'}; {action:'director-advance'}; {action:'director-reply',runId,text,sourceUrls?:[]} resumes blocked/paused work with user guidance using the same allowance. Director start authorizes research, including up to four live searches; production requires approval of selected sources, footage reuse and bounded generation allowance. It retrieves real media and performs sampled-frame inspection, motion transfer and output QA. Do not describe web-index search as a complete platform trend feed. Message can include revisionOf. Dollar limits use estimates, not guaranteed bills. The server worker advances runs independently. Publishing requires explicit authorization of exact assets, caption, accounts and time before queue-post. Never retry uncertain submissions without checking the provider.",
+    inputSchema: z.object({ campaignId: z.string().min(1), request: jsonObject }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async ({ campaignId, request }) => result(await client.json<JsonObject>(`/api/campaigns/${encodeURIComponent(campaignId)}`, { method: "POST", body: JSON.stringify(request) })));
+
   server.registerTool("helios_get_status", {
     title: "Get UGC{Gen} status",
     description: "Check whether the local UGC{Gen} app is reachable and report workflow, model, and Kie key status.",

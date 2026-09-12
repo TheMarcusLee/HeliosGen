@@ -1,3 +1,4 @@
+import { codexAccountEnv } from "@/lib/codexAccount";
 import { NextRequest, NextResponse } from "next/server";
 import https from "node:https";
 import http from "node:http";
@@ -247,7 +248,7 @@ async function runCodexImagegen(opts: {
 
     const { exitCode, stderr } = await new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
       let err = "";
-      const proc = spawn("codex-imagegen", args);
+      const proc = spawn("codex-imagegen", args, { env: codexAccountEnv({ imageGeneration: true }) });
       proc.stderr.on("data", (d: Buffer) => err += d.toString());
       proc.on("close", (code) => resolve({ exitCode: code ?? -1, stderr: err }));
       proc.on("error", (e) => reject(new Error(`codex-imagegen spawn failed: ${e.message} — is it installed and on PATH?`)));

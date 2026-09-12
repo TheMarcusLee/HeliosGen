@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { cookies } from "next/headers";
 import { DragDropGuard } from "@/components/DragDropGuard";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/brand";
+import { CampaignMonitor } from "@/components/campaigns/CampaignMonitor";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,6 +55,7 @@ export default async function RootLayout({
     >
       <body className="bg-black text-white h-full overflow-hidden">
         <TooltipProvider>
+          <CampaignMonitor />
           <SidebarProvider defaultOpen={sidebarOpen} className="h-full">
             <AppSidebar />
             <SidebarInset style={{ backgroundColor: "transparent" }} className="flex flex-col min-h-0 min-w-0 border-l border-r border-t border-white/[0.08] mx-2 mt-2 rounded-tl-xl rounded-tr-xl">

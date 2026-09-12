@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InstaVault for UGC{Gen} · Settings & Privacy</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+  <main class="options">
+    <div class="brand"><div class="mark">IV</div><div><h1>InstaVault for UGC{Gen}</h1><span class="muted">Settings, privacy & help</span></div></div>
+    <div class="notice">InstaVault is an unofficial tool and is not affiliated with, endorsed by, or sponsored by Instagram or Meta.</div>
+
+    <section class="card stack">
+      <h2>Download settings</h2>
+      <label>Delay between downloads (milliseconds)
+        <input id="delay-ms" type="number" min="250" max="60000" step="50">
+      </label>
+      <p class="hint">A modest delay keeps large batches orderly. Downloads run sequentially.</p>
+      <label>Default filename template
+        <input id="filename-template" type="text" maxlength="160" spellcheck="false">
+      </label>
+      <p class="hint">Available tokens: <code>{username}</code>, <code>{type}</code>, <code>{date}</code>, <code>{id}</code>, <code>{sequence}</code>.</p>
+      <div class="grid">
+        <label>Sequence start <input id="sequence-start" type="number" min="0" max="99999999"></label>
+        <label>Sequence padding <input id="sequence-padding" type="number" min="1" max="8"></label>
+      </div>
+      <div class="row"><button id="save" class="button primary" type="button">Save settings</button><span id="save-status" class="hint"></span></div>
+    </section>
+
+    <section class="card stack">
+      <h2>UGC{Gen}</h2>
+      <p class="hint">Where your UGC{Gen} server runs. Selected media is sent there as source clips for Research &amp; adapt. No key is needed: the server accepts captures only from a browser extension.</p>
+      <label>UGC{Gen} address
+        <input id="ugcgen-endpoint" type="url" spellcheck="false" placeholder="http://localhost:3000">
+      </label>
+      <div class="row"><button id="save-ugcgen" class="button primary" type="button">Save UGC{Gen} settings</button><span id="ugcgen-save-status" class="hint"></span></div>
+    </section>
+
+    <section class="card">
+      <h2>Privacy by design</h2>
+      <ul>
+        <li>No analytics, advertising, telemetry, or remote code.</li>
+        <li>No passwords, cookies, session tokens, or private browser storage are read.</li>
+        <li>Collected links and settings stay on this device unless you explicitly send selected media to your UGC{Gen} server.</li>
+        <li>Page access is limited to Instagram, its media delivery hosts, and your configured UGC{Gen} address.</li>
+        <li>Media is downloaded directly by Chrome using links already present in the page you can view.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Responsible use</h2>
+      <p>Download only content you created, own, or have explicit permission to save. You are responsible for complying with copyright, privacy rights, local law, and Instagram’s Terms of Use. Do not use this extension to evade access controls or redistribute other people’s content.</p>
+    </section>
+
+    <section class="card">
+      <h2>How it works</h2>
+      <ol>
+        <li>Sign in to Instagram normally and open a post, reel, story, highlight, profile, Explore, tagged, or saved page you are allowed to view.</li>
+        <li>Use the popup to collect what is visible, or open the library and scan as you scroll.</li>
+        <li>Filter, manually select media, choose a sequence, and download.</li>
+      </ol>
+      <p class="hint">Instagram changes its site often. If an item is missing, open it directly and collect again. Expired CDN links can be refreshed by reloading the Instagram page. The extension intentionally does not call private Instagram APIs or bypass availability restrictions.</p>
+    </section>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

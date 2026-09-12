@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InstaVault Library</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+  <main class="app">
+    <header class="toolbar">
+      <div class="row spread">
+        <div class="brand"><div class="mark">IV</div><div><h1>InstaVault</h1><span class="hint">Unofficial local downloader</span></div></div>
+        <button id="refresh" class="button" type="button">Refresh</button>
+      </div>
+      <div class="notice">Download only media you own or have permission to save. Respect copyright, privacy, and Instagram’s Terms.</div>
+      <div class="row wrap">
+        <button id="scan" class="button primary" type="button">Scan page</button>
+        <button id="stop-scan" class="button" type="button" disabled>Stop scan</button>
+        <span id="scan-status" class="hint">Ready</span>
+      </div>
+    </header>
+
+    <section class="card stack" aria-label="Library filters">
+      <div class="grid">
+        <label>Media type
+          <select id="type-filter"><option value="all">All types</option><option value="post">Posts</option><option value="reel">Reels</option><option value="story">Stories</option><option value="highlight">Highlights</option><option value="video">All videos</option><option value="image">All images</option></select>
+        </label>
+        <label>Username <input id="username-filter" type="search" placeholder="Filter username"></label>
+        <label>From date <input id="date-from" type="date"></label>
+        <label>To date <input id="date-to" type="date"></label>
+      </div>
+      <div class="row wrap">
+        <button id="select-all" class="button" type="button">Select shown</button>
+        <button id="clear-selection" class="button" type="button">Clear selection</button>
+        <button id="clear-library" class="button danger" type="button">Clear library</button>
+      </div>
+    </section>
+
+    <section class="card stack" aria-label="Naming settings">
+      <h2>File naming & sequence</h2>
+      <label>Template <input id="filename-template" type="text" maxlength="160" spellcheck="false"></label>
+      <span class="hint">Tokens: {username}, {type}, {date}, {id}, {sequence}</span>
+      <div class="grid">
+        <label>Sequence starts at <input id="sequence-start" type="number" min="0" max="99999999"></label>
+        <label>Sequence padding <input id="sequence-padding" type="number" min="1" max="8"></label>
+      </div>
+    </section>
+
+    <div id="summary" class="row spread card"><strong>0 items</strong><span class="hint">0 selected</span></div>
+    <section id="media-list" class="media-list" aria-live="polite"></section>
+
+    <section class="card stack" aria-label="Send to UGC{Gen}">
+      <div class="row spread"><h2>Send to UGC{Gen}</h2><a href="options.html" target="_blank">Settings</a></div>
+      <p class="hint">Selected Reels and images become source clips in your local UGC{Gen} library, ready for Research &amp; adapt.</p>
+      <div class="row wrap">
+        <button id="ugcgen-send" class="button primary" type="button" disabled>Send selected to UGC{Gen}</button>
+        <span id="ugcgen-status" class="hint">Checking UGC{Gen}…</span>
+      </div>
+    </section>
+
+    <footer class="queue-bar">
+      <div class="row spread">
+        <div><div class="row"><span id="queue-dot" class="status-dot"></span><strong id="queue-state">Queue idle</strong></div><span id="queue-detail" class="hint">No downloads queued</span></div>
+        <button id="download-selected" class="button primary" type="button" disabled>Download selected</button>
+      </div>
+      <div class="row wrap" style="margin-top:8px">
+        <button id="pause-queue" class="button" type="button">Pause</button>
+        <button id="resume-queue" class="button" type="button">Resume</button>
+        <button id="retry-failed" class="button" type="button">Retry failed</button>
+        <button id="clear-history" class="button" type="button">Clear history</button>
+        <button id="cancel-queue" class="button danger" type="button">Cancel pending</button>
+      </div>
+    </footer>
+  </main>
+  <script src="shared/utils.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
