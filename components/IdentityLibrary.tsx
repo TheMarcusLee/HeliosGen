@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { IdentityTemplates } from "@/components/IdentityTemplates";
+import { TraitBuilder } from "@/components/identity/TraitBuilder";
+import { ReferenceSheetGenerator } from "@/components/identity/ReferenceSheetGenerator";
 import {
   ArrowUpRight,
   Boxes,
@@ -529,6 +531,7 @@ export default function IdentityLibrary() {
                     <Textarea id="identity-prompts" className="min-h-52 resize-y leading-6" value={draft.basePrompts.join("\n")} onChange={(event) => setDraft((current) => ({ ...current, basePrompts: event.target.value.split("\n") }))} placeholder={"One reusable instruction per line\nPreserve facial geometry and natural skin texture\nKeep body proportions consistent across scenes"} />
                     <FieldDescription>Write one instruction per line. Workflows can combine these fragments without duplicating prompt work.</FieldDescription>
                   </Field>
+                  <TraitBuilder onCompose={(prompt, _traits, suggestedName) => setDraft((current) => ({ ...current, name: current.name.trim() || suggestedName || current.name, basePrompts: [...current.basePrompts.filter((p) => p.trim()), prompt] }))} />
                 </FieldGroup>
               </TabsContent>
 
@@ -542,6 +545,7 @@ export default function IdentityLibrary() {
                   </div>
                   <Button variant="outline" disabled={uploading} onClick={() => referenceInput.current?.click()}><Upload />{uploading ? `Uploading ${uploadingCount || "…"}` : "Choose images"}</Button>
                 </div>
+                {selected && <ReferenceSheetGenerator identityId={selected.id} onReference={(reference) => setDraft((current) => ({ ...current, references: [...current.references, reference] }))} />}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group overflow-hidden rounded-xl border border-border bg-card"><div className="relative aspect-3/4 overflow-hidden bg-muted"><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover transition duration-300 group-hover:scale-[1.02]" /><Button variant="destructive" size="icon-xs" className="absolute right-2 top-2" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div><div className="flex flex-col gap-2 p-3"><div className="truncate text-xs text-muted-foreground" title={reference.label}>{reference.label ?? `Reference ${index + 1}`}</div><Field><FieldLabel htmlFor={`identity-reference-${index}`}>Reference role</FieldLabel><Select items={REFERENCE_KINDS} value={reference.kind} onValueChange={(value) => setReferenceKind(index, value === "body" ? "body" : "face")}><SelectTrigger id={`identity-reference-${index}`} aria-label={`Reference ${index + 1} role`} className="w-full"><SelectValue /></SelectTrigger><SelectContent alignItemWithTrigger={false}><SelectGroup><SelectItem value="face">Face reference</SelectItem><SelectItem value="body">Body reference</SelectItem></SelectGroup></SelectContent></Select></Field></div></div>)}</div>
                 {!draft.references.length && <Empty className="min-h-64 border border-dashed border-border"><EmptyHeader><EmptyMedia variant="icon"><Images /></EmptyMedia><EmptyTitle>No reference frames</EmptyTitle><EmptyDescription>Add several images at once, then mark each one as a face or body reference.</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => referenceInput.current?.click()}><Upload />Choose images</Button></EmptyContent></Empty>}
               </TabsContent>
