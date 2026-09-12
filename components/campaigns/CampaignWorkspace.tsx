@@ -89,6 +89,7 @@ function CampaignSession({ id }: { id: string | null }) {
     return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, []);
   const [selectedId, setSelectedId] = useState<string>();
+  // Closed until the user opens it or picks an asset; it never auto-opens on wide screens.
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [references, setReferences] = useState<string[]>([]);
   const [filter, setFilter] = useState("all");
@@ -102,13 +103,6 @@ function CampaignSession({ id }: { id: string | null }) {
     campaignRequest(`/${id}`).then(({ campaign: c }) => { if (!cancelled) setCampaign(c); }).catch(e => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [id, legacy, setCampaign]);
-  useEffect(() => {
-    const media = window.matchMedia("(min-width: 1280px)");
-    const update = () => setGalleryOpen(media.matches);
-    const timer = setTimeout(update, 0);
-    media.addEventListener("change", update);
-    return () => { clearTimeout(timer); media.removeEventListener("change", update); };
-  }, []);
   useEffect(() => {
     fetch("/api/identities").then(r => r.json()).then(data => setIdentities(data.identities ?? [])).catch(() => {});
   }, [campaign?.identity?.id]);
