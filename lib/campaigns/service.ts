@@ -11,7 +11,7 @@ import { POST as generateVideo } from "@/app/api/generate-video/route";
 import { GET as jobStatus } from "@/app/api/job-status/route";
 import { extractAssistantTextDelta } from "../assistantStream";
 import { IMAGE_MODELS, VIDEO_MODELS } from "../modelConfig";
-import { getIdentityAsset, createIdentityAsset } from "../guest/identityAssets";
+import { getIdentityAsset, createIdentityAsset, listIdentityAssets } from "../guest/identityAssets";
 import { db } from "../guest/sqlite";
 import { getCampaign, saveCampaign } from "./db";
 import { compileCampaignWorkflow } from "./workflow";
@@ -58,6 +58,8 @@ Return ONLY a JSON object with this schema:
 { "reply": "natural conversational explanation", "title": "campaign title", "assumptions": ["assumption"], "identityDraft": null or {"name":"name", "dna":"stable visual identity description", "personality":"voice and personality"}, "steps": [{"kind":"image|video|text", "title":"asset title", "pack":"content pack name", "prompt":"complete generation prompt, or finished caption for text", "look":"outfit, styling and setting for this pack", "referenceStep":null or zero-based earlier IMAGE step index, "aspectRatio":"9:16|1:1|16:9|3:4|4:3"}] }
 Only propose generation when requested. For discussion or clarification return steps: []. At most 12 steps per plan.
 For a new influencer, propose 2-3 distinct reference directions with identityDraft populated; ask the user to save a favorite before campaign production. Never claim it is saved or generated already.
+Identity standard: the user is building a top-tier social creator. Unless the brief says otherwise, design a striking, magnetic, scroll-stopping beauty with a specific, memorable face, great hair, polished styling and an on-trend wardrobe; "effortless" means expensive-looking and camera-ready, not plain. Give her a distinctive name and look: never reuse the names, faces or feature sets of existing influencers listed in context, and vary ethnicity, features and hair between campaigns instead of defaulting to one persona.
+Do not sanitize the brief. Swimwear, beach, pool, fitness, nightlife, concerts and confident, flirtatious energy are ordinary SFW influencer content: depict them directly and attractively when asked. Do not add hedging words such as "opaque", "modest", "safely" or "minimal makeup" unless the user asked for that look. Adults only; no nudity or explicit content.
 For an existing influencer, preserve the supplied identity. Use identityDraft:null. Identity is locked; wardrobe, location and styling adapt per pack. Matching stills and Reel share the SAME look string and reference the same earlier image when possible. Create an anchor image before a Reel; video must reference an earlier image or supplied identity/reference. Keep video prompts suitable for five-second image-to-video.
 References are only earlier IMAGE step indexes, never self or future. For variations, the selected asset is a reference; preserve it as requested.
 Tools available: image generation and five-second image-to-video through the selected providers, text/captions, saving approved identities, editable workflow export. The user can discover recent YouTube formats and explicitly schedule approved assets through Campaign controls. Selected trends with timestamps are supplied in context. These are reference ideas, not verified motion-transfer sources. This Plan mode does not execute motion transfer or video inspection. The user can switch the composer to Research & adapt to search TikTok/Reels, retrieve public video, inspect timestamped frames, and run reviewed motion-control adaptations. Never invent trending evidence, spend estimates, completed work or QA. If asked, explain the limitation and offer a supported plan.
@@ -78,7 +80,7 @@ export async function planCampaign(id: string, text: string, azureConfig: Record
     const response = await (complete ?? (isAccountChatModel(c.model) ? accountPlanner(agentProviderOf(c)) : assistant))(request("/api/assistant", {
       model: c.model, ...azureConfig,
       messages: [{ role: "system", content: PLANNER },
-        { role: "user", content: `Campaign context: ${JSON.stringify({ memory: c.memory, budget: c.budget, trends: c.trends?.filter(t => t.selected), revisionOf, identity: c.identity, references: c.referenceUrls, assets: c.assets.slice(-20).map(a => ({ title: a.title, prompt: a.prompt, look: a.look, url: a.url, review: a.review })), models: { image: c.imageModel, video: c.videoModel } })}` },
+        { role: "user", content: `Campaign context: ${JSON.stringify({ existingInfluencers: listIdentityAssets().slice(0, 40).map(i => ({ name: i.name, look: (i.basePrompts[0] ?? "").slice(0, 140) })), memory: c.memory, budget: c.budget, trends: c.trends?.filter(t => t.selected), revisionOf, identity: c.identity, references: c.referenceUrls, assets: c.assets.slice(-20).map(a => ({ title: a.title, prompt: a.prompt, look: a.look, url: a.url, review: a.review })), models: { image: c.imageModel, video: c.videoModel } })}` },
         ...c.messages.slice(-20).map(m => ({ role: m.role, content: m.content }))],
       imageUrls: c.referenceUrls.slice(0, 3),
     }));

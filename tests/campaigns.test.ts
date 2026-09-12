@@ -205,3 +205,13 @@ test("upstream image model override reaches only the account image helper withou
     assert.equal(imageEnv.OPENAI_API_KEY, undefined); assert.equal(imageEnv.CODEX_API_KEY, undefined);
   } finally { keys.forEach((key, index) => { if (before[index] === undefined) delete process.env[key]; else process.env[key] = before[index]; }); }
 });
+
+test("the planner is told which influencers already exist so it does not propose the same persona again", async () => {
+  const { planCampaign } = await services;
+  const { createIdentityAsset } = await import("../lib/guest/identityAssets");
+  createIdentityAsset({ name: "Maya Ellis", triggerWord: "Maya Ellis", basePrompts: ["Adult woman, warm medium-brown skin, dark espresso curls, oval face"], references: [{ url: "/generated/identity.png", kind: "face" }], defaults: { contentClass: "sfw" } });
+  const c = await fixture();
+  let context = "";
+  await planCampaign(c.id, "Build a new influencer", {}, async (req: NextRequest) => { const body = await req.json(); context = body.messages.map((m: { content: string }) => m.content).join("\n"); return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(plan) } }] })}\n\ndata: [DONE]\n\n`); });
+  assert.match(context, /existingInfluencers/); assert.match(context, /Maya Ellis/); assert.match(context, /never reuse the names, faces or feature sets/); assert.match(context, /Do not sanitize the brief/);
+});
