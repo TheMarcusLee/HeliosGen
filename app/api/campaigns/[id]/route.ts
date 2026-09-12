@@ -9,7 +9,7 @@ import { isAccountChatModel } from "@/lib/campaigns/agents";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getCampaign, saveCampaign } from "@/lib/campaigns/db";
-import { advanceCampaign, planCampaign, saveInfluencer, selectIdentity, startCampaignRun, reviseText } from "@/lib/campaigns/service";
+import { advanceCampaign, planCampaign, saveInfluencer, selectIdentity, startCampaignRun, reviseText, retryRun } from "@/lib/campaigns/service";
 import { MODELS } from "@/lib/models";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { MOTION_MODELS } from "@/lib/campaigns/director/motionModels";
@@ -39,7 +39,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("identity"), identityId: z.string().nullable() }),
   z.object({ action: z.literal("save-identity"), assetId: z.string() }),
   z.object({ action: z.literal("review"), assetId: z.string(), review: z.enum(["pending", "approved", "rejected"]) }),
-  z.object({ action: z.literal("run"), runId: z.string(), operation: z.enum(["pause", "resume", "stop"]) }),
+  z.object({ action: z.literal("run"), runId: z.string(), operation: z.enum(["pause", "resume", "stop", "retry"]) }),
   z.object({ action: z.literal("settings"), title: z.string().trim().min(1).max(120).optional(), model: z.string().optional(), imageModel: z.string().optional(), imageProvider: z.enum(["codex", "antigravity", "kie"]).optional(), videoModel: z.string().optional(), motionModel: z.string().optional(), referenceUrls: z.array(z.string().refine(s => /^\/generated\/[\w./%-]+$/.test(s) || /^https:\/\//.test(s), "Use an uploaded image or HTTPS URL.")).max(8).optional() }),
 ]);
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (body.action === "identity") return Response.json({ campaign: selectIdentity(id, body.identityId) });
     if (body.action === "save-identity") return Response.json({ campaign: saveInfluencer(id, body.assetId) });
     if (body.action === "revise-text") return Response.json({ campaign: reviseText(id, body.assetId, body.text) });
+    if (body.action === "run" && body.operation === "retry") return Response.json({ campaign: retryRun(id, body.runId) });
     if (body.action === "discover") return Response.json({ campaign: body.source === "youtube" ? await discoverTrends(id, body.query, body.region) : await discoverTikTokTrends(id, body.query) });
     if (body.action === "draft-post") return Response.json({ campaign: draftPost(id, body.draft) });
     if (body.action === "queue-post") return Response.json({ campaign: queuePost(id, body.postId) });

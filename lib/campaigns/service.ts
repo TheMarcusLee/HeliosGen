@@ -59,6 +59,7 @@ Return ONLY a JSON object with this schema:
 Only propose generation when requested. For discussion or clarification return steps: []. At most 12 steps per plan.
 For a new influencer, propose 2-3 distinct reference directions with identityDraft populated; ask the user to save a favorite before campaign production. Never claim it is saved or generated already.
 Identity standard: the user is building a top-tier social creator. Unless the brief says otherwise, design a striking, magnetic, scroll-stopping beauty with a specific, memorable face, great hair, polished styling and an on-trend wardrobe; "effortless" means expensive-looking and camera-ready, not plain. Give her a distinctive name and look: never reuse the names, faces or feature sets of existing influencers listed in context, and vary ethnicity, features and hair between campaigns instead of defaulting to one persona.
+identityDraft.dna must be complete and locked BEFORE the directions: skin tone, face shape, eyes, brows, nose, lips, signature features, hair colour/texture/length, age range and body type, stated concretely. Never defer features to "the direction you choose". The 2-3 directions depict the SAME woman with identical face, skin tone, hair and body; only wardrobe, styling, setting and mood differ, and each direction prompt restates her locked features.
 Do not sanitize the brief. Swimwear, beach, pool, fitness, nightlife, concerts and confident, flirtatious energy are ordinary SFW influencer content: depict them directly and attractively when asked. Do not add hedging words such as "opaque", "modest", "safely" or "minimal makeup" unless the user asked for that look. Adults only; no nudity or explicit content.
 For an existing influencer, preserve the supplied identity. Use identityDraft:null. Identity is locked; wardrobe, location and styling adapt per pack. Matching stills and Reel share the SAME look string and reference the same earlier image when possible. Create an anchor image before a Reel; video must reference an earlier image or supplied identity/reference. Keep video prompts suitable for five-second image-to-video.
 References are only earlier IMAGE step indexes, never self or future. For variations, the selected asset is a reference; preserve it as requested.
@@ -200,6 +201,22 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
   } finally { workers.delete(id); release(); }
 }
 
+/** Re-queue the failed steps of an errored plan run. Steps that already produced output are kept; unsubmitted ones run again. */
+export function retryRun(id: string, runId: string) {
+  const c = getCampaign(id), run = c.runs.find(r => r.id === runId);
+  if (!run) throw new Error("Run not found.");
+  if (run.status !== "error") throw new Error("Only a failed run can be retried.");
+  if (directorBusy(c) || c.planning || c.runs.some(r => r.id !== runId && ["running", "paused"].includes(r.status))) throw new Error("Finish the active production first.");
+  const failed = run.steps.filter(s => s.status === "error" || s.status === "submitting");
+  if (!failed.length) throw new Error("This run has no failed steps.");
+  if (failed.some(s => s.status === "submitting")) throw new Error("A submission has no saved job ID. Check the provider ledger before retrying.");
+  const quote = quotePlan(c, { reply: "", title: c.title, assumptions: [], identityDraft: null, steps: failed.map(({ kind, title, pack, prompt, look, referenceStep, aspectRatio }) => ({ kind, title, pack, prompt, look, referenceStep, aspectRatio })) }, serverCampaignEstimates(c));
+  if (quote.reason) throw new Error(quote.reason);
+  failed.forEach((s, i) => { s.status = "queued"; s.error = undefined; s.startedAt = undefined; s.taskId = undefined; s.reservedUsd = quote.costs[i]; });
+  run.status = "running"; c.error = undefined;
+  saveWorkflow(c, run);
+  return saveCampaign(c);
+}
 export function saveInfluencer(id: string, assetId: string) {
   const c = getCampaign(id);
   const asset = c.assets.find(a => a.id === assetId && a.kind === "image");

@@ -215,3 +215,30 @@ test("the planner is told which influencers already exist so it does not propose
   await planCampaign(c.id, "Build a new influencer", {}, async (req: NextRequest) => { const body = await req.json(); context = body.messages.map((m: { content: string }) => m.content).join("\n"); return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(plan) } }] })}\n\ndata: [DONE]\n\n`); });
   assert.match(context, /existingInfluencers/); assert.match(context, /Maya Ellis/); assert.match(context, /never reuse the names, faces or feature sets/); assert.match(context, /Do not sanitize the brief/);
 });
+
+test("a failed plan step can be retried without redoing the steps that succeeded", async () => {
+  const { startCampaignRun, advanceCampaign, retryRun } = await services;
+  const c = await fixture(); startCampaignRun(c.id, "brief");
+  let attempts = 0;
+  const flaky = {
+    generateImage: async () => { attempts++; return attempts === 1 ? NextResponse.json({ error: "Responses stream ended without an image result" }, { status: 502 }) : NextResponse.json({ taskId: "image-retry" }); },
+    generateVideo: async () => NextResponse.json({ taskId: "video-job" }),
+    jobStatus: async (req: NextRequest) => NextResponse.json(req.nextUrl.searchParams.get("taskId") === "image-retry" ? { status: "done", imageUrl: "/generated/test/portrait.png" } : { status: "done", videoUrl: "/generated/test/reel.mp4" }),
+  };
+  await advanceCampaign(c.id, flaky);
+  let current = (await database).getCampaign(c.id);
+  assert.equal(current.runs[0].status, "error"); assert.equal(current.runs[0].steps[0].status, "error"); assert.equal(current.runs[0].steps[1].status, "queued", "later steps stay queued, not failed");
+  assert.throws(() => retryRun(c.id, "missing"), /not found/);
+  const retried = retryRun(c.id, current.runs[0].id);
+  assert.equal(retried.runs[0].status, "running"); assert.equal(retried.runs[0].steps[0].status, "queued"); assert.equal(retried.runs[0].steps[0].error, undefined);
+  for (let i = 0; i < 8; i++) await advanceCampaign(c.id, flaky);
+  current = (await database).getCampaign(c.id);
+  assert.equal(current.runs[0].status, "done"); assert.equal(attempts, 2); assert.deepEqual(current.assets.map(a => a.kind), ["image", "video", "text"]);
+});
+
+test("the planner must lock the influencer's features before proposing directions", async () => {
+  const { planCampaign } = await services;
+  const c = await fixture(); let context = "";
+  await planCampaign(c.id, "Build a new influencer", {}, async (req: NextRequest) => { context = (await req.json()).messages[0].content; return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(plan) } }] })}\n\ndata: [DONE]\n\n`); });
+  assert.match(context, /skin tone, face shape, eyes/); assert.match(context, /SAME woman/); assert.match(context, /Never defer features/);
+});
