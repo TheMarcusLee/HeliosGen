@@ -9,7 +9,7 @@ import { isAccountChatModel } from "@/lib/campaigns/agents";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getCampaign, saveCampaign } from "@/lib/campaigns/db";
-import { advanceCampaign, planCampaign, saveInfluencer, selectIdentity, startCampaignRun, reviseText, retryRun } from "@/lib/campaigns/service";
+import { advanceCampaign, planCampaign, saveInfluencer, selectIdentity, startCampaignRun, reviseText, retryRun, editPlan, planEditSchema } from "@/lib/campaigns/service";
 import { MODELS } from "@/lib/models";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { MOTION_MODELS } from "@/lib/campaigns/director/motionModels";
@@ -35,6 +35,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("cancel-post"), postId: z.string() }),
   z.object({ action: z.literal("message"), text: z.string().trim().min(1).max(12000), revisionOf: z.string().optional(), azureConfig: z.object({ azureEndpoint: z.string().optional(), azureDeployment: z.string().optional(), azureModelName: z.string().optional() }).optional() }),
   z.object({ action: z.literal("start"), messageId: z.string() }),
+  planEditSchema.extend({ action: z.literal("edit-plan"), messageId: z.string() }),
   z.object({ action: z.literal("advance") }),
   z.object({ action: z.literal("identity"), identityId: z.string().nullable() }),
   z.object({ action: z.literal("save-identity"), assetId: z.string() }),
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (body.action === "director-identity-proposal") return Response.json({ campaign: updateIdentityProposal(id, body.runId, body) });
     if (body.action === "message") return Response.json({ campaign: await planCampaign(id, body.text, body.azureConfig, undefined, body.revisionOf) });
     if (body.action === "start") return Response.json({ campaign: startCampaignRun(id, body.messageId) });
+    if (body.action === "edit-plan") return Response.json({ campaign: editPlan(id, body.messageId, body) });
     if (body.action === "advance") return Response.json({ campaign: await advanceCampaign(id) });
     if (body.action === "identity") return Response.json({ campaign: selectIdentity(id, body.identityId) });
     if (body.action === "save-identity") return Response.json({ campaign: saveInfluencer(id, body.assetId) });

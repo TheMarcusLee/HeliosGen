@@ -4,6 +4,7 @@ import { serverCampaignEstimates } from "./estimates";
 import { claimLease } from "./lease";
 import { accountPlanner, accountStatus, agentProviderOf, isAccountChatModel, accountLabel } from "./agents";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { NextRequest } from "next/server";
 import { POST as assistant } from "@/app/api/assistant/route";
 import { POST as generateImage } from "@/app/api/generate/route";
@@ -144,6 +145,16 @@ function finishStep(c: Campaign, run: CampaignRun, step: ProductionStep, urls: s
 }
 
 type ProviderHandlers = Record<"generateImage" | "generateVideo" | "jobStatus", (req: NextRequest) => Promise<Response>>;
+/** Media jobs in flight at once per campaign. Submissions are cheap; the providers do the waiting. */
+const MAX_IN_FLIGHT = 4;
+const settledStatuses = new Set(["done", "error"]);
+/**
+ * Advance a plan run one tick. Steps form a dependency graph through
+ * referenceStep: independent steps run in parallel, a failure blocks only the
+ * steps that reference it, and the run settles as done or error only once
+ * every step has finished. Submissions are persisted before any provider call
+ * and an interrupted submission fails closed.
+ */
 export async function advanceCampaign(id: string, providers: ProviderHandlers = { generateImage, generateVideo, jobStatus }): Promise<Campaign> {
   if (workers.has(id)) return getCampaign(id);
   const release = claimLease(`production:${id}`);
@@ -156,37 +167,47 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
     }
     const run = c.runs.find(r => r.status === "running" || r.status === "paused");
     if (!run) return c;
-    const step = run.steps.find(s => s.status !== "done");
-    if (!step) { run.status = "done"; saveWorkflow(c, run); return saveCampaign(c); }
-    if (step.status === "error") { run.status = "error"; return saveCampaign(c); }
-    if (run.status === "paused" && step.status === "queued") return c;
-    try {
-      if (step.status === "submitting") throw new Error("Submission was interrupted before a job ID was saved. Check the provider ledger before retrying; this job may have been charged.");
-      if (step.status === "queued") {
-        if (step.kind === "text") { finishStep(c, run, step, []); saveWorkflow(c, run); return saveCampaign(c); }
-        step.status = "submitting"; step.startedAt = Date.now(); saveCampaign(c);
-        const ref = step.referenceStep === null ? undefined : c.assets.find(a => a.stepId === run.steps[step.referenceStep!].id && a.kind === "image");
-        if (step.referenceStep !== null && !ref?.url) throw new Error("The required reference image is missing.");
-        const refs = ref?.url ? [ref.url] : [...(run.referenceUrls ?? c.referenceUrls), ...(run.identity?.references.map(r => r.url) ?? [])];
-        if (step.kind === "image" && run.imageProvider !== "kie" && run.imageProvider && !(await accountStatus(run.imageProvider)).imageReady) throw new Error(`${accountLabel(run.imageProvider)} image connection unavailable. Check Settings; no fallback provider was charged.`);
-        const body = { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", prompt: effectivePrompt(step, run.identity), model: run.imageModel, videoModel: run.videoModel, aspectRatio: step.aspectRatio, imageUrls: refs.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)!.maxImages), startFrameUrl: refs[0], duration: 5, workflowId: run.workflowId, nodeId: step.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
-        release.assertOwned();
-        const response = await (step.kind === "image" ? providers.generateImage : providers.generateVideo)(request(step.kind === "image" ? "/api/generate" : "/api/generate-video", body));
-        const result = await response.json();
-        if (!response.ok || !result.taskId) throw new Error(result.error || "Provider returned no job ID.");
-        step.taskId = result.taskId; step.status = "running";
-      } else if (step.status === "running") {
+    const fail = (step: ProductionStep, error: unknown) => { step.status = "error"; step.error = error instanceof Error ? error.message : String(error); };
+    // 1. Poll every job in flight, in parallel.
+    await Promise.all(run.steps.filter(s => s.status === "running").map(async step => {
+      try {
         const response = await providers.jobStatus(request(`/api/job-status?taskId=${encodeURIComponent(step.taskId!)}`));
         const result = await response.json();
         if (result.status === "error" || result.status === "not_found") throw new Error(result.error || "Job could not be recovered. Check the provider ledger before retrying.");
         if (result.status === "done") finishStep(c, run, step, result.videoUrl ? [result.videoUrl] : result.imageUrls?.length ? result.imageUrls : result.imageUrl ? [result.imageUrl] : []);
         else if (Date.now() - (step.startedAt ?? Date.now()) > 60 * 60_000) throw new Error("Job has exceeded one hour. Check the provider ledger before continuing.");
+      } catch (error) { fail(step, error); }
+    }));
+    // 2. A submission with no saved job ID cannot be retried automatically.
+    for (const step of run.steps.filter(s => s.status === "submitting")) fail(step, new Error("Submission was interrupted before a job ID was saved. Check the provider ledger before retrying; this job may have been charged."));
+    // 3. A failed reference blocks only the steps that depend on it.
+    const propagate = () => { for (const step of run.steps.filter(s => s.status === "queued" && s.referenceStep !== null)) { const reference = run.steps[step.referenceStep!]; if (reference?.status === "error") fail(step, new Error(`Blocked: its reference "${reference.title}" failed. Retry the failed steps to run both again.`)); } };
+    propagate();
+    // 4. Start everything that is ready, unless paused.
+    if (run.status === "running") {
+      const ready = (s: ProductionStep) => s.status === "queued" && (s.referenceStep === null || run.steps[s.referenceStep].status === "done");
+      for (const step of run.steps.filter(s => ready(s) && s.kind === "text")) { finishStep(c, run, step, []); }
+      let inFlight = run.steps.filter(s => s.status === "running").length;
+      for (const step of run.steps.filter(s => ready(s) && s.kind !== "text")) {
+        if (inFlight >= MAX_IN_FLIGHT) break;
+        try {
+          step.status = "submitting"; step.startedAt = Date.now(); saveCampaign(c);
+          const ref = step.referenceStep === null ? undefined : c.assets.find(a => a.stepId === run.steps[step.referenceStep!].id && a.kind === "image");
+          if (step.referenceStep !== null && !ref?.url) throw new Error("The required reference image is missing.");
+          const refs = ref?.url ? [ref.url] : [...(run.referenceUrls ?? c.referenceUrls), ...(run.identity?.references.map(r => r.url) ?? [])];
+          if (step.kind === "image" && run.imageProvider !== "kie" && run.imageProvider && !(await accountStatus(run.imageProvider)).imageReady) throw new Error(`${accountLabel(run.imageProvider)} image connection unavailable. Check Settings; no fallback provider was charged.`);
+          const body = { codexProvider: run.imageProvider === "codex", antigravityProvider: run.imageProvider === "antigravity", prompt: effectivePrompt(step, run.identity), model: run.imageModel, videoModel: run.videoModel, aspectRatio: step.aspectRatio, imageUrls: refs.slice(0, IMAGE_MODELS.find(m => m.id === run.imageModel)!.maxImages), startFrameUrl: refs[0], duration: 5, workflowId: run.workflowId, nodeId: step.id, identityAssetId: run.identity?.id, workflowMetadata: { contentClass: "sfw", routes: {} } };
+          release.assertOwned();
+          const response = await (step.kind === "image" ? providers.generateImage : providers.generateVideo)(request(step.kind === "image" ? "/api/generate" : "/api/generate-video", body));
+          const result = await response.json();
+          if (!response.ok || !result.taskId) throw new Error(result.error || "Provider returned no job ID.");
+          step.taskId = result.taskId; step.status = "running"; inFlight++;
+        } catch (error) { fail(step, error); }
       }
-    } catch (error) {
-      step.status = "error"; step.error = (error as Error).message; run.status = "error";
     }
+    propagate(); // a submission that failed this tick blocks its dependents now, so the run can settle
     release.assertOwned();
-    // Preserve a pause or review action made while the provider call was in flight.
+    // Preserve a pause or review action made while provider calls were in flight.
     const latest = getCampaign(id);
     const latestRun = latest.runs.find(r => r.id === run.id);
     if (latestRun?.status === "paused" && run.status === "running") run.status = "paused";
@@ -194,13 +215,31 @@ export async function advanceCampaign(id: string, providers: ProviderHandlers = 
     const newAssets = c.assets.filter(a => !latest.assets.some(existing => existing.id === a.id));
     latest.assets.push(...newAssets);
     c = latest;
+    // 5. Settle only when nothing is left to do.
     if (run.steps.every(s => s.status === "done")) run.status = "done";
+    else if (run.steps.every(s => settledStatuses.has(s.status))) run.status = "error";
     // Canvas is a snapshot: only update on completion, before allowing edits.
     if (run.status === "done" || run.status === "error") saveWorkflow(c, run);
     return saveCampaign(c);
   } finally { workers.delete(id); release(); }
 }
 
+export const planEditSchema = z.object({
+  identityDraft: z.object({ name: z.string().trim().min(1).max(120), dna: z.string().trim().min(1).max(4000), personality: z.string().trim().max(2000) }).nullable().optional(),
+  steps: z.array(z.object({ title: z.string().trim().min(1).max(120), prompt: z.string().trim().min(1).max(8000), look: z.string().trim().max(2000) })).max(12),
+});
+/** Edit the brief of the latest plan before any of it is generated. Step count, kinds and references stay as planned. */
+export function editPlan(id: string, messageId: string, input: z.input<typeof planEditSchema>) {
+  const c = getCampaign(id), data = planEditSchema.parse(input);
+  const message = c.messages.find(m => m.id === messageId);
+  if (!message?.plan?.steps.length) throw new Error("This message has no production plan.");
+  if (c.messages.filter(m => m.plan?.steps.length).at(-1)?.id !== messageId) throw new Error("This plan was superseded. Edit the most recent plan.");
+  if (c.runs.some(r => r.messageId === messageId)) throw new Error("This plan has already started generating. Create a variation instead.");
+  if (data.steps.length !== message.plan.steps.length) throw new Error("Edit the existing steps; adding or removing steps needs a new plan.");
+  message.plan.steps = message.plan.steps.map((step, i) => ({ ...step, ...data.steps[i] }));
+  if (data.identityDraft !== undefined && message.plan.identityDraft) message.plan.identityDraft = data.identityDraft ? { ...message.plan.identityDraft, ...data.identityDraft } : message.plan.identityDraft;
+  return saveCampaign(c);
+}
 /** Re-queue the failed steps of an errored plan run. Steps that already produced output are kept; unsubmitted ones run again. */
 export function retryRun(id: string, runId: string) {
   const c = getCampaign(id), run = c.runs.find(r => r.id === runId);

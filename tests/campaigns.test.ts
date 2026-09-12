@@ -68,9 +68,9 @@ test("execution submits once, recovers by job ID, passes the anchor to video, an
   await advanceCampaign(c.id, providers);
   const done = await advanceCampaign(c.id, providers);
   assert.equal(done.runs[0].status, "done");
-  assert.deepEqual(done.assets.map(a => a.kind), ["image", "video", "text"]);
+  assert.deepEqual(done.assets.map(a => a.kind).sort(), ["image", "text", "video"]);
   assert.equal(new Set(done.assets.map(a => a.messageId)).size, 1);
-  assert.equal(done.assets[2].text, plan.steps[2].prompt);
+  assert.equal(done.assets.find(a => a.kind === "text")?.text, plan.steps[2].prompt);
   assert.ok(done.assets.every(a => a.review === "pending"));
   await advanceCampaign(c.id, providers);
   assert.equal(calls.length, 2);
@@ -108,7 +108,9 @@ test("a run freezes reference selection and stops downstream jobs when its ancho
   await advanceCampaign(draft.id, providers);
   assert.equal(failed.runs[0].status, "error");
   assert.equal(calls, 1);
-  assert.equal(failed.assets.length, 0);
+  // The video depended on the failed anchor and is blocked; the independent caption still completed.
+  assert.equal(failed.runs[0].steps[1].status, "error"); assert.match(failed.runs[0].steps[1].error!, /Blocked/); assert.equal(failed.runs[0].steps[2].status, "done");
+  assert.deepEqual(failed.assets.map(a => a.kind), ["text"]);
 });
 
 test("paused run settles the current job but does not start the next step", async () => {
@@ -227,13 +229,13 @@ test("a failed plan step can be retried without redoing the steps that succeeded
   };
   await advanceCampaign(c.id, flaky);
   let current = (await database).getCampaign(c.id);
-  assert.equal(current.runs[0].status, "error"); assert.equal(current.runs[0].steps[0].status, "error"); assert.equal(current.runs[0].steps[1].status, "queued", "later steps stay queued, not failed");
+  assert.equal(current.runs[0].status, "error"); assert.equal(current.runs[0].steps[0].status, "error"); assert.equal(current.runs[0].steps[1].status, "error", "the Reel depends on the failed image and is blocked"); assert.match(current.runs[0].steps[1].error!, /Blocked/); assert.equal(current.runs[0].steps[2].status, "done", "the independent caption still completed");
   assert.throws(() => retryRun(c.id, "missing"), /not found/);
   const retried = retryRun(c.id, current.runs[0].id);
-  assert.equal(retried.runs[0].status, "running"); assert.equal(retried.runs[0].steps[0].status, "queued"); assert.equal(retried.runs[0].steps[0].error, undefined);
+  assert.equal(retried.runs[0].status, "running"); assert.equal(retried.runs[0].steps[0].status, "queued"); assert.equal(retried.runs[0].steps[0].error, undefined); assert.equal(retried.runs[0].steps[1].status, "queued");
   for (let i = 0; i < 8; i++) await advanceCampaign(c.id, flaky);
   current = (await database).getCampaign(c.id);
-  assert.equal(current.runs[0].status, "done"); assert.equal(attempts, 2); assert.deepEqual(current.assets.map(a => a.kind), ["image", "video", "text"]);
+  assert.equal(current.runs[0].status, "done"); assert.equal(attempts, 2); assert.deepEqual(current.assets.map(a => a.kind).sort(), ["image", "text", "video"]);
 });
 
 test("the planner must lock the influencer's features before proposing directions", async () => {
@@ -241,4 +243,42 @@ test("the planner must lock the influencer's features before proposing direction
   const c = await fixture(); let context = "";
   await planCampaign(c.id, "Build a new influencer", {}, async (req: NextRequest) => { context = (await req.json()).messages[0].content; return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(plan) } }] })}\n\ndata: [DONE]\n\n`); });
   assert.match(context, /skin tone, face shape, eyes/); assert.match(context, /SAME woman/); assert.match(context, /Never defer features/);
+});
+
+test("independent steps run in parallel, one failure blocks only its dependents, and the brief can be edited before generating", async () => {
+  const { startCampaignRun, advanceCampaign, retryRun, editPlan } = await services;
+  const { createCampaign, saveCampaign, getCampaign } = await database;
+  const three = { ...plan, steps: [
+    { kind: "image", title: "Concert", pack: "Identity", prompt: "Concert direction", look: "Concert", referenceStep: null, aspectRatio: "9:16" },
+    { kind: "image", title: "Vacation", pack: "Identity", prompt: "Vacation direction", look: "Pool", referenceStep: null, aspectRatio: "9:16" },
+    { kind: "image", title: "Car chat", pack: "Identity", prompt: "Car direction", look: "Car", referenceStep: null, aspectRatio: "9:16" },
+    { kind: "video", title: "Concert Reel", pack: "Identity", prompt: "Reel from the concert image", look: "Concert", referenceStep: 0, aspectRatio: "9:16" },
+  ] };
+  const c = createCampaign();
+  c.messages = [{ id: "brief", role: "assistant", content: three.reply, createdAt: Date.now(), plan: parseCreativePlan(JSON.stringify(three)) }]; saveCampaign(c);
+  // The brief is editable until generation starts; step count and kinds are fixed.
+  const edited = editPlan(c.id, "brief", { identityDraft: { name: "Zaria Vale", dna: "Locked features", personality: "Playful" }, steps: three.steps.map((s, i) => ({ title: s.title, prompt: i === 0 ? "Concert direction, golden hour, crowd behind her" : s.prompt, look: s.look })) });
+  assert.equal(edited.messages[0].plan?.identityDraft?.name, "Zaria Vale"); assert.equal(edited.messages[0].plan?.steps[0].prompt, "Concert direction, golden hour, crowd behind her"); assert.equal(edited.messages[0].plan?.steps[3].referenceStep, 0);
+  assert.throws(() => editPlan(c.id, "brief", { steps: [{ title: "x", prompt: "y", look: "" }] }), /existing steps/);
+  const submitted: string[] = [];
+  const providers = {
+    generateImage: async (req: NextRequest) => { const body = await req.json(); submitted.push(body.prompt); return NextResponse.json({ taskId: `img-${submitted.length}` }); },
+    generateVideo: async () => NextResponse.json({ taskId: "video-1" }),
+    jobStatus: async (req: NextRequest) => { const t = req.nextUrl.searchParams.get("taskId"); return NextResponse.json(t === "img-1" ? { status: "error", error: "Responses stream ended without an image result" } : t === "video-1" ? { status: "done", videoUrl: "/generated/reel.mp4" } : { status: "done", imageUrl: `/generated/${t}.png` }); },
+  };
+  startCampaignRun(c.id, "brief");
+  assert.throws(() => editPlan(c.id, "brief", { steps: three.steps.map(s => ({ title: s.title, prompt: s.prompt, look: s.look })) }), /already started/);
+  await advanceCampaign(c.id, providers);
+  assert.equal(submitted.length, 3, "all three independent images are submitted in one tick");
+  assert.match(submitted[0], /golden hour/);
+  await advanceCampaign(c.id, providers);
+  let current = getCampaign(c.id);
+  assert.deepEqual(current.runs[0].steps.map(s => s.status), ["error", "done", "done", "error"], "the failed concert image blocks only its Reel; the other directions finished");
+  assert.equal(current.runs[0].status, "error"); assert.equal(current.assets.length, 2);
+  // Retrying re-queues the failed image and its blocked Reel, keeping the two finished directions.
+  providers.jobStatus = async (req: NextRequest) => { const t = req.nextUrl.searchParams.get("taskId"); return NextResponse.json(t === "video-1" ? { status: "done", videoUrl: "/generated/reel.mp4" } : { status: "done", imageUrl: `/generated/${t}.png` }); };
+  retryRun(c.id, current.runs[0].id);
+  for (let i = 0; i < 6; i++) await advanceCampaign(c.id, providers);
+  current = getCampaign(c.id);
+  assert.equal(current.runs[0].status, "done"); assert.equal(submitted.length, 4); assert.equal(current.assets.length, 4);
 });
