@@ -1119,6 +1119,8 @@ function ApiKeysPanel({
         )}
       </div>
 
+      <AntigravityCard />
+
     </div>
   );
 }
@@ -2092,5 +2094,50 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
       </div>
     </>
+  );
+}
+
+
+/* ──── Antigravity (Google account) status ────────────────────────────── */
+/**
+ * Mirrors the Codex card. The login lives in the Antigravity CLI's keyring; the
+ * app only reports whether `agy` is installed and signed in. Nothing to enter.
+ */
+function AntigravityCard() {
+  const [status, setStatus] = useState<{ kind: "unknown" } | { kind: "ready"; models: string[] } | { kind: "not_ready"; installed: boolean; note?: string }>({ kind: "unknown" });
+  const [refreshing, setRefreshing] = useState(false);
+  const load = useCallback((refresh = false) => {
+    setRefreshing(refresh);
+    fetch(`/api/settings/antigravity-status${refresh ? "?refresh=1" : ""}`)
+      .then((r) => r.json())
+      .then((d: { chatReady: boolean; installed: boolean; models?: string[]; note?: string }) => setStatus(d.chatReady ? { kind: "ready", models: d.models ?? [] } : { kind: "not_ready", installed: d.installed, note: d.note }))
+      .catch(() => setStatus({ kind: "not_ready", installed: false }))
+      .finally(() => setRefreshing(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const ready = status.kind === "ready";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px", background: "rgba(74,222,128,0.04)", border: "1px solid rgba(74,222,128,0.14)", borderRadius: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <span style={{ width: "28px", height: "28px", borderRadius: "7px", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "#2DD4BF", fontSize: "13px", fontWeight: 700 }}>G</span>
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Antigravity (Google account)</div>
+          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+            Uses the server&apos;s <code style={{ fontFamily: "monospace" }}>agy</code> sign-in for Gemini planning, visual review and Nano Banana images — no key
+          </div>
+        </div>
+        <span style={{ marginLeft: "auto", fontSize: "10px", fontWeight: 600, color: ready ? "rgba(74,222,128,0.8)" : "rgba(251,146,60,0.8)", background: ready ? "rgba(74,222,128,0.08)" : "rgba(251,146,60,0.08)", border: `1px solid ${ready ? "rgba(74,222,128,0.2)" : "rgba(251,146,60,0.2)"}`, borderRadius: "5px", padding: "2px 7px", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
+          {status.kind === "unknown" ? "CHECKING…" : ready ? "READY" : "NOT CONFIGURED"}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5, flex: 1 }}>
+          {status.kind === "ready" ? `${status.models.length} models available on this subscription.` : status.kind === "not_ready" ? (status.installed ? (status.note ?? "Run `agy` once in a terminal and sign in with your Google account.") : "Install the Antigravity CLI: curl -fsSL https://antigravity.google/cli/install.sh | bash, then run `agy` once to sign in.") : ""}
+        </p>
+        <button onClick={() => load(true)} disabled={refreshing} style={{ padding: "7px 14px", borderRadius: "7px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap", opacity: refreshing ? 0.6 : 1 }}>
+          {refreshing ? "Checking…" : "Re-check"}
+        </button>
+      </div>
+    </div>
   );
 }

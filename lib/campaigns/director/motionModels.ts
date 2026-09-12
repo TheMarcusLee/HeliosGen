@@ -9,7 +9,9 @@ import { VIDEO_MODELS, type VideoModel } from "../../modelConfig";
  * Adding a model is a modelConfig entry; nothing here names a vendor.
  */
 export const DEFAULT_MOTION_MODEL = "kling-3.0-motion-control";
-export const MOTION_MODELS: VideoModel[] = VIDEO_MODELS.filter(m => m.handles.includes("videoRef") || m.handles.includes("referenceVideo"));
+export const MOTION_MODELS: VideoModel[] = VIDEO_MODELS.filter(m => m.handles.includes("videoRef") || m.handles.includes("referenceVideo"))
+  // Motion-control models first (the default lives there), then reference-video models in catalog order.
+  .sort((a, b) => Number(!!b.apiInput.useMotionControl) - Number(!!a.apiInput.useMotionControl) || (a.id === DEFAULT_MOTION_MODEL ? -1 : b.id === DEFAULT_MOTION_MODEL ? 1 : 0));
 export function motionModel(id: string | undefined): VideoModel {
   const model = MOTION_MODELS.find(m => m.id === (id ?? DEFAULT_MOTION_MODEL));
   if (!model) throw new Error("Choose a video model that accepts a reference video for motion adaptation.");
