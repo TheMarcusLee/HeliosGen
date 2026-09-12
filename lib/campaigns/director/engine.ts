@@ -105,6 +105,11 @@ export function controlDirector(id: string, runId: string, operation: "pause" | 
   const c = getCampaign(id), run = findRun(c, runId);
   if (operation === "stop") { run.jobs.filter(j => j.status === "submitting").forEach(j => { j.status = "uncertain"; j.error = "Stopped with an unknown submission outcome. Check the provider ledger before another generation."; }); run.status = "stopped"; event(run, "stop", "Stopped. An already submitted provider job will still be collected and counted."); }
   else if (operation === "pause" && run.status === "running") { run.status = "paused"; event(run, "pause", "Paused after the current operation."); }
+  else if (operation === "resume" && run.status === "awaiting_approval" && !run.identity?.references.length && !run.identityProposal) {
+    // A generate proposal reached approval with no influencer (older engine code); hand the decision back so the agent designs one.
+    run.proposal = undefined; run.status = "running"; run.error = undefined;
+    event(run, "identity_needed", "No influencer is saved for this campaign. Designing one to fit the selected footage before any production.");
+  }
   else if (operation === "resume" && ["paused", "blocked"].includes(run.status)) {
     if (run.jobs.some(j => j.status === "submitting")) throw new Error("A submission has no saved job ID. Check the provider ledger; this run cannot safely resubmit it.");
     if (c.planning || c.runs.some(r => ["running", "paused"].includes(r.status))) throw new Error("Finish the other production first.");

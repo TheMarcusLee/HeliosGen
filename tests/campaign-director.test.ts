@@ -303,3 +303,14 @@ test("frame inspection and review use the inspection model tier while decisions 
   await agyPlanner(req(), { spawner }); await agyPlanner(req(), { spawner, tier: "inspection" });
   assert.deepEqual(models, ["gemini-3.8-flash-high", "gemini-3.8-flash-medium"]);
 });
+
+test("a run that reached approval without an influencer can hand the decision back so the agent designs one", async () => {
+  const { c, run } = await ready(), e = await engine, db = await database;
+  c.identity = undefined; run.identity = undefined; db.saveCampaign(c);
+  assert.throws(() => e.approveDirector(c.id, run.id, { maxGenerations: 5, referenceReuseConfirmed: true }), /influencer/);
+  const resumed = e.controlDirector(c.id, run.id, "resume");
+  assert.equal(resumed.directors![0].status, "running"); assert.equal(resumed.directors![0].proposal, undefined); assert.equal(resumed.directors![0].events.at(-1)!.tool, "identity_needed");
+  const tools = fakeTools(); tools.decideNext = async () => ({ tool: "generate", sourceId: run.sources[0].id, kind: "anchor", title: "Anchor", prompt: "Anchor without an influencer", reason: "should be refused" });
+  await e.advanceDirector(c.id, tools);
+  assert.match(db.getCampaign(c.id).directors![0].events.find(ev => ev.tool === "tool_error")!.summary, /propose_identity/);
+});
