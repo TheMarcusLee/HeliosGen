@@ -18,7 +18,7 @@ import seed from "./seed/identity-templates.json";
  * is used, when the image is mirrored into local media and an identity asset
  * is created. Deleting a seed template sticks: it is not re-seeded.
  */
-const SEED_VERSION = 1;
+const SEED_VERSION = 2; // 2: outfit-named lifestyle personas given real names, ethnicity spellings normalised
 export interface IdentityTemplate {
   id: string;
   name: string;

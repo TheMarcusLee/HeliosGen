@@ -2167,7 +2167,7 @@
     "category": "music-artist",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "white",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "slim",
       "bust_volume": "small",
@@ -2237,7 +2237,7 @@
     "category": "music-artist",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "mixed",
+    "ethnicity": "mixed-multiracial",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "small",
@@ -2342,7 +2342,7 @@
     "category": "music-artist",
     "gender": "male",
     "age_range": "28-32",
-    "ethnicity": "white",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "character_style": "social",
@@ -2411,7 +2411,7 @@
     "category": "beauty-makeup",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "white",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "slim",
       "bust_volume": "small",
@@ -2481,7 +2481,7 @@
     "category": "beauty-makeup",
     "gender": "male",
     "age_range": "22-25",
-    "ethnicity": "mixed",
+    "ethnicity": "mixed-multiracial",
     "traits": {
       "body_shape": "slim",
       "character_style": "social",
@@ -2587,7 +2587,7 @@
     "category": "food-cooking",
     "gender": "female",
     "age_range": "35-39",
-    "ethnicity": "Latin American",
+    "ethnicity": "latin-american",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "large",
@@ -2622,7 +2622,7 @@
     "category": "food-cooking",
     "gender": "male",
     "age_range": "28-32",
-    "ethnicity": "African American",
+    "ethnicity": "african-american",
     "traits": {
       "body_shape": "athletic",
       "character_style": "social",
@@ -2656,7 +2656,7 @@
     "category": "food-cooking",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "average",
       "bust_volume": "medium",
@@ -2691,7 +2691,7 @@
     "category": "food-cooking",
     "gender": "male",
     "age_range": "25-27",
-    "ethnicity": "East Asian",
+    "ethnicity": "east-asian",
     "traits": {
       "body_shape": "slim",
       "character_style": "social",
@@ -2725,7 +2725,7 @@
     "category": "food-cooking",
     "gender": "female",
     "age_range": "28-32",
-    "ethnicity": "African American",
+    "ethnicity": "african-american",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "medium",
@@ -2760,7 +2760,7 @@
     "category": "food-cooking",
     "gender": "female",
     "age_range": "48-52",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "medium",
@@ -2790,12 +2790,12 @@
   },
   {
     "id": "cc73faff-f35c-4ca2-a164-15c39a62ceee",
-    "name": "Blonde Casual Chic #1",
+    "name": "Brooke",
     "subtitle": "Lifestyle UGC, casual home content",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "medium",
@@ -2818,7 +2818,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "warm",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: blonde casual chic."
     },
     "prompt": "A gorgeous 26-year-old lifestyle influencer with girl-next-door appeal and effortless style. She has fair skin with warm undertones and a natural, healthy glow. Her body is athletic and curvy with balanced, feminine proportions - toned but approachable. She's 5'6\" tall with confident but relaxed posture.\n\nHer face is beautiful with an oval face shape and friendly, approachable features. She has blue-green almond-shaped eyes that are warm and engaging. Her eyebrows are naturally arched and groomed. She has a small nose and medium-full lips often in a genuine smile. Her jawline is soft but defined. Her long, blonde hair with natural highlights is styled in loose, beachy waves - effortlessly beautiful.\n\nOUTFIT: Wearing casual-chic home style - a fitted white button-down shirt or ribbed long-sleeve top, casually styled. High-waisted light-wash jeans or white pants. Simple but elevated. Minimal jewelry - small hoops, delicate necklaces. Natural makeup with dewy skin, soft eyes, glossy nude lips. Hair flowing naturally in soft waves. Standing in a bright, modern home with natural lighting - very Instagram lifestyle aesthetic.\n\niPhone photo, bright modern home interior, lifestyle UGC energy, effortless and relatable.",
     "imageUrl": "/persona-templates/cc73faff-f35c-4ca2-a164-15c39a62ceee.webp",
@@ -2826,12 +2827,12 @@
   },
   {
     "id": "fda7a505-2b41-4e63-9a72-e2d4b2b35f0d",
-    "name": "Pink Tank Girl",
+    "name": "Kelsey",
     "subtitle": "Casual fashion UGC, tank top content",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "large",
@@ -2853,7 +2854,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "cool",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: pink tank."
     },
     "prompt": "A fresh-faced 24-year-old creating casual, relatable content with summer vibes. She has fair skin with cool undertones and a youthful glow. Her body is curvy and feminine with noticeable curves - full bust, defined waist. She's 5'5\" tall with confident, playful posture.\n\nHer face is pretty with a round-oval face shape and youthful features. She has blue round eyes that are bright and friendly. Her eyebrows are naturally arched. She has a small nose and medium lips with a natural smile. Her jawline is soft. Her long, blonde hair is styled in loose waves - beachy and natural.\n\nOUTFIT: Wearing casual summer style - a fitted pink or coral tank top that shows her figure, paired with high-waisted jeans or shorts. Very simple and relatable. Minimal jewelry - maybe small hoops. Natural makeup - just mascara and lip gloss. Hair in natural waves. Selfie style in home setting with natural lighting.\n\niPhone photo, casual home setting, summer UGC energy, fresh and youthful.",
     "imageUrl": "/persona-templates/fda7a505-2b41-4e63-9a72-e2d4b2b35f0d.webp",
@@ -2861,12 +2863,12 @@
   },
   {
     "id": "4cdd335c-cf5b-460b-8d20-3a594149cc23",
-    "name": "Green Athleisure Girl",
+    "name": "Tessa",
     "subtitle": "Athleisure UGC, casual fitness",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "large",
@@ -2888,7 +2890,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "warm",
-      "waist_definition": "athletic"
+      "waist_definition": "athletic",
+      "appearance_details": "Signature look: green athleisure."
     },
     "prompt": "A fit 26-year-old lifestyle creator focused on casual athleisure and everyday comfort. She has fair skin with warm undertones and a healthy appearance. Her body is athletic and curvy with toned, feminine proportions. She's 5'6\" tall with fit, confident posture.\n\nHer face is beautiful with an oval face shape and girl-next-door features. She has hazel almond-shaped eyes that are warm and approachable. Her eyebrows are naturally shaped and full. She has a small nose and full lips. Her jawline is soft. Her long, blonde hair is styled in soft waves or pulled back casually.\n\nOUTFIT: Wearing trendy athleisure - a fitted sage green or olive long-sleeve top (showing some midriff) paired with white or matching high-waisted leggings or shorts. Casual but put-together. Minimal jewelry. Natural makeup with focus on glowing skin. Hair casually styled. At-home setting with good natural lighting.\n\niPhone photo, home interior, athleisure UGC energy, fit and approachable.",
     "imageUrl": "/persona-templates/4cdd335c-cf5b-460b-8d20-3a594149cc23.webp",
@@ -2896,12 +2899,12 @@
   },
   {
     "id": "0d0875f6-cfd0-4ce9-a80c-39103c1ea32c",
-    "name": "Black Fitted Jacket Girl",
+    "name": "Camille",
     "subtitle": "Lifestyle UGC, chic casual",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "large",
@@ -2923,7 +2926,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "cool",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: black fitted jacket."
     },
     "prompt": "A sophisticated 26-year-old lifestyle creator with polished casual style. She has fair skin with cool undertones and a refined appearance. Her body is athletic and curvy with toned, feminine proportions - defined waist, full bust. She's 5'7\" tall with confident, poised posture.\n\nHer face is striking with an oval face shape and elegant features. She has hazel almond-shaped eyes that are captivating and warm. Her eyebrows are perfectly shaped and arched. She has a small nose and full lips in a subtle smile. Her jawline is soft but defined. Her long, dark brown hair is styled in soft, voluminous waves that cascade past her shoulders - very polished and Instagram-ready.\n\nOUTFIT: Wearing elevated casual style - a fitted black blazer or leather jacket over a white ribbed bodysuit or tank top showing some cleavage. High-waisted white or light-colored pants. The look is sophisticated but sexy. Minimal jewelry - small gold hoops, delicate necklaces. Natural glam makeup - contoured face, defined eyes, nude-pink lip. Hair styled in perfect waves. Standing in a modern, well-lit home interior.\n\niPhone photo, modern home with good lighting, sophisticated UGC energy, polished and chic.",
     "imageUrl": "/persona-templates/0d0875f6-cfd0-4ce9-a80c-39103c1ea32c.webp",
@@ -2931,12 +2935,12 @@
   },
   {
     "id": "ed69e354-a8d9-4cb0-8c1e-0d08432542c8",
-    "name": "Gray Bodycon Dress",
+    "name": "Simone",
     "subtitle": "Fashion UGC, curvy content",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "African American",
+    "ethnicity": "african-american",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "very-large",
@@ -2958,7 +2962,8 @@
       "shoulder_width": "average",
       "skin_tone": "medium",
       "skin_undertone": "warm",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: gray bodycon dress."
     },
     "prompt": "A gorgeous 24-year-old with incredible curves and confident energy. She has rich, medium-brown skin with warm undertones and a natural glow. Her body is voluptuously curvy with an hourglass figure - very large bust, defined waist, full hips. She's 5'6\" tall with confident, sultry posture that owns her curves.\n\nHer face is beautiful with a heart-shaped face and striking features. She has dark brown round eyes that are expressive and warm. Her eyebrows are arched and bold. She has a small nose and full, beautiful lips. Her jawline is soft. Her long, dark brown hair is styled in voluminous curls or waves - big, beautiful hair with incredible body and shine.\n\nOUTFIT: Wearing figure-hugging style - a fitted gray bodycon dress or tight-fitting outfit that shows every curve unapologetically. The dress has a scoop or V-neckline showing décolletage. Simple but sexy. Minimal jewelry - maybe small hoops. Natural glam makeup - soft glam with glossy lips. Hair in big, glamorous curls. Standing at home with natural lighting, showing her confident curves.\n\niPhone photo, home setting, curvy UGC energy, confident and sexy.",
     "imageUrl": "/persona-templates/ed69e354-a8d9-4cb0-8c1e-0d08432542c8.webp",
@@ -2966,12 +2971,12 @@
   },
   {
     "id": "83724498-282c-4ccd-b6a7-78ae63fc4f54",
-    "name": "White Blazer Set",
+    "name": "Vivian",
     "subtitle": "Professional sexy UGC, business casual",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "East Asian",
+    "ethnicity": "east-asian",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "large",
@@ -2993,7 +2998,8 @@
       "shoulder_width": "narrow",
       "skin_tone": "fair",
       "skin_undertone": "cool",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: white blazer set."
     },
     "prompt": "A stunning 26-year-old with sophisticated sensuality and professional polish. She has fair, porcelain skin with cool undertones and flawless appearance. Her body is slim and curvy with elegant proportions - defined waist, full bust, graceful build. She's 5'6\" tall with poised, confident posture.\n\nHer face is absolutely gorgeous with a heart-shaped face and delicate features. She has dark brown almond-shaped eyes that are sultry and captivating. Her eyebrows are perfectly shaped and arched. She has a small nose and full lips. Her jawline is soft and feminine. Her long, black hair is perfectly straight and glossy - sleek and sophisticated, styled to perfection.\n\nOUTFIT: Wearing professional sexy style - a white structured blazer or jacket over a white ribbed bodysuit or bralette showing cleavage. High-waisted pants or skirt in white or neutral. The all-white or monochrome look is crisp and sexy. Gold jewelry - small hoops, delicate necklaces. Polished makeup - defined eyes, perfect skin, nude lip. Hair sleek and straight. In a modern, luxurious home setting.\n\niPhone photo, upscale home interior, professional sexy UGC energy, sophisticated and sultry.",
     "imageUrl": "/persona-templates/83724498-282c-4ccd-b6a7-78ae63fc4f54.webp",
@@ -3001,12 +3007,12 @@
   },
   {
     "id": "1ff0c5a3-1ebe-4aae-a6a6-10f774ecfa76",
-    "name": "Light Blue Zip Dress",
+    "name": "Elise",
     "subtitle": "Casual fashion UGC, everyday style",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "Mixed (White + Asian)",
+    "ethnicity": "mixed-multiracial",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "large",
@@ -3028,7 +3034,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "neutral",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: light blue zip dress."
     },
     "prompt": "A beautiful 24-year-old with elegant casual style and natural appeal. She has fair-tan skin with neutral undertones and a healthy glow. Her body is curvy and feminine with balanced proportions - full bust, defined waist. She's 5'5\" tall with graceful, feminine posture.\n\nHer face is lovely with an oval face shape and soft features. She has dark brown almond-shaped eyes that are warm and inviting. Her eyebrows are naturally arched and groomed. She has a small nose and medium-full lips. Her jawline is soft. Her very long, black hair is sleek and straight, flowing well past her shoulders - lustrous and perfectly maintained.\n\nOUTFIT: Wearing casual chic style - a light blue or baby blue zip-front dress or top with white pants. The outfit is soft, feminine, and approachable. Minimal jewelry - maybe small hoops. Natural makeup with focus on glowing skin and soft features. Hair flowing straight and sleek. In a casual urban or home setting with natural light.\n\niPhone photo, casual setting, everyday fashion UGC energy, soft and feminine.",
     "imageUrl": "/persona-templates/1ff0c5a3-1ebe-4aae-a6a6-10f774ecfa76.webp",
@@ -3036,12 +3043,12 @@
   },
   {
     "id": "602f8d05-b3ed-4af4-bbbe-652213746a5e",
-    "name": "White Athletic Tank",
+    "name": "Paige",
     "subtitle": "Casual athletic UGC, active lifestyle",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "medium",
@@ -3064,7 +3071,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "warm",
-      "waist_definition": "athletic"
+      "waist_definition": "athletic",
+      "appearance_details": "Signature look: white athletic tank."
     },
     "prompt": "A fresh 23-year-old with girl-next-door appeal and natural beauty. She has fair skin with warm undertones and a healthy, active glow. Her body is athletic and toned with defined arms and legs - fit but still feminine and curvy. She's 5'6\" tall with relaxed, confident posture.\n\nHer face is pretty with a round-oval face shape and friendly features. She has hazel-brown round eyes that are bright and genuine. Her eyebrows are naturally shaped and full. She has a small nose and medium lips in a natural smile. Her jawline is soft. Her medium-long, light brown hair with highlights is styled in natural waves or pulled back casually - effortless and active.\n\nOUTFIT: Wearing casual athletic style - a white ribbed tank top or athletic tank showing toned arms. High-waisted denim shorts or athletic shorts. Very casual and approachable. Minimal to no jewelry. Natural makeup - just mascara and lip balm. Hair in natural waves or a casual style. Standing outdoors or in a casual home setting with natural lighting.\n\niPhone photo, outdoor or casual home setting, active lifestyle UGC energy, fresh and relatable.",
     "imageUrl": "/persona-templates/602f8d05-b3ed-4af4-bbbe-652213746a5e.webp",
@@ -3072,12 +3080,12 @@
   },
   {
     "id": "06a4e8c8-99ca-4fc8-bc6a-e85576e83bdb",
-    "name": "Mint Green Jacket",
+    "name": "Noemi",
     "subtitle": "Casual fashion UGC, street style",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "Mixed (White + Latin American)",
+    "ethnicity": "mixed-multiracial",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "medium",
@@ -3100,7 +3108,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "warm",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: mint green jacket."
     },
     "prompt": "A stylish 26-year-old with effortless cool-girl energy and trendy style. She has fair-tan skin with warm undertones and a radiant appearance. Her body is slim and curvy with feminine proportions - toned but soft. She's 5'5\" tall with relaxed, stylish posture.\n\nHer face is beautiful with a heart-shaped face and trendy features. She has brown almond-shaped eyes that are expressive and warm. Her eyebrows are arched and well-groomed. She has a small nose and full lips. Her jawline is soft. Her long, dark brown hair with subtle highlights is styled in loose waves - very current and Instagram-ready.\n\nOUTFIT: Wearing trendy casual style - a mint green or sage green zip-up jacket or hoodie over a simple tank or tee. Paired with high-waisted jeans or leggings. Layered and cute. Minimal jewelry - small hoops or studs. Natural makeup with fresh, dewy skin. Hair in soft waves. Standing in a trendy urban setting or modern home.\n\niPhone photo, trendy setting, street style UGC energy, cool and effortless.",
     "imageUrl": "/persona-templates/06a4e8c8-99ca-4fc8-bc6a-e85576e83bdb.webp",
@@ -3108,12 +3117,12 @@
   },
   {
     "id": "a0f31d91-5463-40fd-bfa9-ab6fe600ce5a",
-    "name": "White Zip Cardigan",
+    "name": "Mika",
     "subtitle": "Cozy chic UGC, loungewear",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "Mixed (Asian + White)",
+    "ethnicity": "mixed-multiracial",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "large",
@@ -3135,7 +3144,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "neutral",
-      "waist_definition": "soft"
+      "waist_definition": "soft",
+      "appearance_details": "Signature look: white zip cardigan."
     },
     "prompt": "A gorgeous 26-year-old with sultry casual style and comfortable confidence. She has fair-tan skin with neutral undertones and a natural beauty. Her body is curvy and feminine with noticeable curves - full bust, soft waist. She's 5'6\" tall with confident, relaxed posture.\n\nHer face is striking with an oval face shape and beautiful features. She has dark brown almond-shaped eyes that are captivating and warm. Her eyebrows are naturally full and arched. She has a small nose and full, sensuous lips. Her jawline is soft. Her long, dark brown hair is styled in soft, romantic waves - voluminous and touchable.\n\nOUTFIT: Wearing cozy chic style - a white zip-up cardigan or hoodie over a white bodysuit or bralette showing cleavage. The cardigan is slightly unzipped for a casual sexy look. Paired with comfortable pants or shorts. Cozy but still put together. Minimal jewelry. Natural glam makeup - soft and pretty. Hair in loose waves. At home in comfortable, well-lit setting.\n\niPhone photo, cozy home setting, comfortable UGC energy, relaxed and sexy.",
     "imageUrl": "/persona-templates/a0f31d91-5463-40fd-bfa9-ab6fe600ce5a.webp",
@@ -3143,12 +3153,12 @@
   },
   {
     "id": "c103ea73-ded0-4cf4-aae2-844966ede4b6",
-    "name": "White Bodysuit Black Jacket",
+    "name": "Harper",
     "subtitle": "Sophisticated casual UGC, elevated everyday",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "large",
@@ -3171,7 +3181,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "cool",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: white bodysuit black jacket."
     },
     "prompt": "A stunning 26-year-old with sophisticated style and polished beauty. She has fair skin with cool undertones and a refined appearance. Her body is athletic and curvy with toned, feminine proportions - defined shoulders, full bust, narrow waist. She's 5'7\" tall with confident, elegant posture.\n\nHer face is beautiful with an oval face shape and refined features. She has blue-green almond-shaped eyes that are striking and confident. Her eyebrows are perfectly shaped and arched. She has a small nose and medium-full lips. Her jawline is soft but defined. Her long, blonde hair with highlights is styled in soft, beachy waves - effortlessly glamorous.\n\nOUTFIT: Wearing sophisticated casual style - a black fitted blazer or leather jacket over a white ribbed bodysuit or tank showing décolletage. High-waisted white or light-colored pants. The contrast is chic and polished. Minimal gold jewelry - small hoops, delicate chains. Polished makeup - defined but natural. Hair in soft waves. In a modern, upscale home setting.\n\niPhone photo, upscale home interior, sophisticated UGC energy, elevated and chic.",
     "imageUrl": "/persona-templates/c103ea73-ded0-4cf4-aae2-844966ede4b6.webp",
@@ -3179,12 +3190,12 @@
   },
   {
     "id": "705d1acd-c85b-4d34-a1fa-552b3e8437bc",
-    "name": "Purple Hoodie Set",
+    "name": "Riley",
     "subtitle": "Athleisure UGC, comfortable fashion",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "medium",
@@ -3207,7 +3218,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "neutral",
-      "waist_definition": "athletic"
+      "waist_definition": "athletic",
+      "appearance_details": "Signature look: purple hoodie set."
     },
     "prompt": "A cute 24-year-old with comfortable casual style and approachable beauty. She has fair skin with neutral undertones and a natural, fresh appearance. Her body is slim and toned with athletic proportions - lean but feminine. She's 5'6\" tall with relaxed, casual posture.\n\nHer face is pretty with a heart-shaped face and sweet features. She has brown round eyes that are warm and friendly. Her eyebrows are naturally arched and full. She has a small nose and medium lips. Her jawline is soft. Her long, brown hair with lighter highlights is styled in soft waves or pulled back casually - low-maintenance but cute.\n\nOUTFIT: Wearing comfortable athleisure - a purple or lavender zip-up hoodie or athletic jacket paired with white high-waisted leggings or joggers. Cozy and cute activewear style. Minimal jewelry - maybe small studs. Natural makeup - just mascara and lip gloss. Hair in casual waves or a ponytail. At home in a bright, clean setting.\n\niPhone photo, bright home setting, athleisure UGC energy, comfortable and cute.",
     "imageUrl": "/persona-templates/705d1acd-c85b-4d34-a1fa-552b3e8437bc.webp",
@@ -3215,12 +3227,12 @@
   },
   {
     "id": "cc854423-fbfa-49f8-8623-a51e361c3572",
-    "name": "Gray Zip Jacket",
+    "name": "Jordan",
     "subtitle": "Athletic casual UGC, sporty style",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "medium",
@@ -3242,7 +3254,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "warm",
-      "waist_definition": "athletic"
+      "waist_definition": "athletic",
+      "appearance_details": "Signature look: gray zip jacket."
     },
     "prompt": "A fit 26-year-old with athletic casual style and healthy beauty. She has fair skin with warm undertones and a natural, active glow. Her body is athletic and toned with defined arms, shoulders, and core - fitness-focused but still feminine and curvy. She's 5'7\" tall with strong, confident posture.\n\nHer face is beautiful with an oval face shape and striking features. She has hazel almond-shaped eyes that are warm and determined. Her eyebrows are full and naturally shaped. She has a small nose and medium lips. Her jawline is soft but defined. Her long, brown hair is styled in loose waves or pulled back in a sleek style - active but polished.\n\nOUTFIT: Wearing sporty casual style - a gray zip-up athletic jacket or hoodie showing athletic shoulders. Paired with fitted leggings or athletic wear. Sporty but sexy. Minimal jewelry - maybe just earrings. Natural makeup with focus on healthy glow. Hair styled casually but intentionally. In a home gym setting or bright home interior.\n\niPhone photo, athletic home setting, sporty UGC energy, fit and confident.",
     "imageUrl": "/persona-templates/cc854423-fbfa-49f8-8623-a51e361c3572.webp",
@@ -3250,12 +3263,12 @@
   },
   {
     "id": "599ae3eb-89a2-4410-af29-c9d97328b9a7",
-    "name": "Red Fitted Tank",
+    "name": "Scarlett",
     "subtitle": "Bold casual UGC, colorful content",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "athletic",
       "bust_volume": "large",
@@ -3277,7 +3290,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "warm",
-      "waist_definition": "athletic"
+      "waist_definition": "athletic",
+      "appearance_details": "Signature look: red fitted tank."
     },
     "prompt": "A vibrant 24-year-old with bold style and confident energy. She has fair skin with warm undertones and a healthy, radiant appearance. Her body is athletic and curvy with toned, feminine proportions - strong shoulders, defined waist, full bust. She's 5'6\" tall with confident, playful posture.\n\nHer face is gorgeous with an oval face shape and striking features. She has blue almond-shaped eyes that are bright and engaging. Her eyebrows are arched and well-defined. She has a small nose and full lips often in a confident smile. Her jawline is soft but defined. Her long, blonde hair is styled in beachy waves - sun-kissed and effortless.\n\nOUTFIT: Wearing bold casual style - a fitted red tank top or athletic top showing her toned figure. Paired with high-waisted denim shorts or neutral bottoms to let the red pop. Bold but casual. Minimal jewelry - maybe small hoops. Natural glam makeup - bronzed skin, defined eyes. Hair in loose waves. In a bright, modern home or outdoor setting.\n\niPhone photo, bright setting, bold UGC energy, confident and vibrant.",
     "imageUrl": "/persona-templates/599ae3eb-89a2-4410-af29-c9d97328b9a7.webp",
@@ -3285,12 +3299,12 @@
   },
   {
     "id": "60c9cb40-d14a-4b13-a774-73cdbd50369c",
-    "name": "Beige Bodycon Dress",
+    "name": "Margot",
     "subtitle": "Neutral fashion UGC, elegant casual",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "25-27",
-    "ethnicity": "White/Caucasian",
+    "ethnicity": "white-caucasian",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "medium",
@@ -3313,7 +3327,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "neutral",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: beige bodycon dress."
     },
     "prompt": "A sophisticated 26-year-old with elegant casual style and natural beauty. She has fair skin with neutral undertones and a refined appearance. Her body is slim and curvy with balanced, feminine proportions - graceful build with curves. She's 5'7\" tall with elegant, poised posture.\n\nHer face is beautiful with an oval face shape and refined features. She has blue-green almond-shaped eyes that are captivating and warm. Her eyebrows are perfectly shaped and arched. She has a small nose and medium-full lips. Her jawline is soft and feminine. Her long, blonde hair with highlights is styled in soft, elegant waves - polished and pretty.\n\nOUTFIT: Wearing neutral elegant style - a beige, tan, or neutral-toned bodycon dress or fitted midi dress that hugs her curves elegantly. The neutral color is sophisticated and timeless. Minimal jewelry - delicate gold pieces. Polished makeup - natural glam with focus on glowing skin. Hair in soft, romantic waves. In an upscale home setting with good natural light.\n\niPhone photo, upscale home interior, elegant UGC energy, sophisticated and timeless.",
     "imageUrl": "/persona-templates/60c9cb40-d14a-4b13-a774-73cdbd50369c.webp",
@@ -3321,12 +3336,12 @@
   },
   {
     "id": "285ab85c-dcb3-42c6-b7e1-92088107cffc",
-    "name": "White Zip Dress",
+    "name": "Lena",
     "subtitle": "Casual sexy UGC, feminine style",
     "category": "lifestyle",
     "gender": "female",
     "age_range": "22-25",
-    "ethnicity": "Mixed (White + Asian)",
+    "ethnicity": "mixed-multiracial",
     "traits": {
       "body_shape": "curvy",
       "bust_volume": "very-large",
@@ -3348,7 +3363,8 @@
       "shoulder_width": "average",
       "skin_tone": "fair",
       "skin_undertone": "neutral",
-      "waist_definition": "defined"
+      "waist_definition": "defined",
+      "appearance_details": "Signature look: white zip dress."
     },
     "prompt": "A gorgeous 24-year-old with feminine casual style and sultry appeal. She has fair-tan skin with neutral undertones and a natural, beautiful appearance. Her body is curvy and feminine with voluptuous proportions - full bust, defined waist, feminine curves. She's 5'5\" tall with confident, feminine posture.\n\nHer face is striking with a heart-shaped face and beautiful features. She has dark brown almond-shaped eyes that are sultry and warm. Her eyebrows are arched and defined. She has a small nose and full lips. Her jawline is soft. Her very long, dark brown hair is styled in soft waves or sleek and straight - glamorous and touchable.\n\nOUTFIT: Wearing casual sexy style - a white zip-front dress or romper showing cleavage with the zipper partially down. The white is fresh and sexy. Paired with minimal accessories. The look is simple but attention-grabbing. Minimal jewelry - small hoops. Natural glam makeup - soft and pretty with glossy lips. Hair flowing in waves or straight. In a modern home setting.\n\niPhone photo, modern home interior, casual sexy UGC energy, feminine and alluring.",
     "imageUrl": "/persona-templates/285ab85c-dcb3-42c6-b7e1-92088107cffc.webp",
