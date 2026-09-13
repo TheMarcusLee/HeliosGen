@@ -32,6 +32,7 @@ import {
   UserRoundSearch,
   WandSparkles,
   X,
+  ChevronDown,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -431,8 +432,6 @@ export default function IdentityLibrary() {
                       <DropdownMenu>
                         <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${identity.name}`} />}><MoreHorizontal /></DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52">
-                          {IDENTITY_TEMPLATES.map((template, index) => <DropdownMenuItem key={template.id} onClick={() => void createWorkflow(identity, template.id)}>{index === 0 ? <WandSparkles /> : <Boxes />}Workflow: {template.menuLabel}</DropdownMenuItem>)}
-                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => void duplicate(identity)}><Copy />Duplicate</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => exportIdentity(identity)}><Download />Export JSON</DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -445,9 +444,17 @@ export default function IdentityLibrary() {
                     <div className="flex flex-wrap gap-1.5"><Badge variant={identity.defaults.contentClass === "adult" ? "destructive" : "secondary"}>{identity.defaults.contentClass.toUpperCase()}</Badge><Badge variant="outline">{identity.references.length} refs</Badge>{identity.defaults.provider && <Badge variant="outline">{identity.defaults.provider}</Badge>}</div>
                     <div className="min-h-10 text-xs leading-5 text-muted-foreground">{identity.triggerWord ? <><span className="font-mono text-foreground">{identity.triggerWord}</span> · </> : null}{identity.basePrompts[0] ?? "No reusable base prompt yet."}</div>
                   </CardContent>
-                  <CardFooter className="grid grid-cols-2 gap-0 p-0">
-                    <div className="border-r border-border px-4 py-3"><div className="font-mono text-sm">{linked}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Workflows</div></div>
-                    <div className="px-4 py-3"><div className="font-mono text-sm">{runs.length}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Runs logged</div></div>
+                  <CardFooter className="flex flex-col gap-0 p-0">
+                    <div className="grid w-full grid-cols-2">
+                      <div className="border-r border-border px-4 py-3"><div className="font-mono text-sm">{linked}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Workflows</div></div>
+                      <div className="px-4 py-3"><div className="font-mono text-sm">{runs.length}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Runs logged</div></div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger render={<Button variant="secondary" className="w-full rounded-t-none border-t border-border" />}><WandSparkles />Launch workflow<ChevronDown className="ml-auto size-4 opacity-60" /></DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-80">
+                        {IDENTITY_TEMPLATES.map((template) => <DropdownMenuItem key={template.id} className="flex flex-col items-start gap-0.5 py-2" onClick={() => void createWorkflow(identity, template.id)}><span className="text-sm">{template.menuLabel}</span><span className="text-xs leading-4 text-muted-foreground">{template.description}</span></DropdownMenuItem>)}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </CardFooter>
                 </Card>
               );
