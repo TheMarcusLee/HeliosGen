@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
@@ -31,6 +32,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -156,6 +158,8 @@ export default function IdentityLibrary() {
   const [uploadingCount, setUploadingCount] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false);
   const [selected, setSelected] = useState<IdentityAsset | null>(null);
+  // A reference opened at full size from the editor grid.
+  const [previewReference, setPreviewReference] = useState<IdentityReference | null>(null);
   const [draft, setDraft] = useState<IdentityDraft>(emptyDraft);
   const [deleteTarget, setDeleteTarget] = useState<IdentityAsset | null>(null);
   const referenceInput = useRef<HTMLInputElement>(null);
@@ -231,6 +235,9 @@ export default function IdentityLibrary() {
       if (response.ok) setVersions(body.versions ?? []);
     } catch { setVersions([]); }
   };
+
+  // Edits live in the draft until saved; saving writes the next immutable version of the same identity, never a copy.
+  const dirty = JSON.stringify(draft) !== JSON.stringify(selected ? toDraft(selected) : emptyDraft());
 
   const save = async () => {
     if (!draft.name.trim()) { addToast("Give this identity a name.", "error"); return; }
@@ -546,7 +553,7 @@ export default function IdentityLibrary() {
                   <Button variant="outline" disabled={uploading} onClick={() => referenceInput.current?.click()}><Upload />{uploading ? `Uploading ${uploadingCount || "…"}` : "Choose images"}</Button>
                 </div>
                 {selected && <ReferenceSheetGenerator identityId={selected.id} onReference={(reference) => setDraft((current) => ({ ...current, references: [...current.references, reference] }))} />}
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group overflow-hidden rounded-xl border border-border bg-card"><div className="relative aspect-3/4 overflow-hidden bg-muted"><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover transition duration-300 group-hover:scale-[1.02]" /><Button variant="destructive" size="icon-xs" className="absolute right-2 top-2" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div><div className="flex flex-col gap-2 p-3"><div className="truncate text-xs text-muted-foreground" title={reference.label}>{reference.label ?? `Reference ${index + 1}`}</div><Field><FieldLabel htmlFor={`identity-reference-${index}`}>Reference role</FieldLabel><Select items={REFERENCE_KINDS} value={reference.kind} onValueChange={(value) => setReferenceKind(index, value === "body" ? "body" : "face")}><SelectTrigger id={`identity-reference-${index}`} aria-label={`Reference ${index + 1} role`} className="w-full"><SelectValue /></SelectTrigger><SelectContent alignItemWithTrigger={false}><SelectGroup><SelectItem value="face">Face reference</SelectItem><SelectItem value="body">Body reference</SelectItem></SelectGroup></SelectContent></Select></Field></div></div>)}</div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.references.map((reference, index) => <div key={`${reference.url}-${index}`} className="group overflow-hidden rounded-xl border border-border bg-card"><div className="relative aspect-3/4 overflow-hidden bg-muted"><button type="button" className="absolute inset-0 cursor-zoom-in" aria-label={`View ${reference.label ?? `reference ${index + 1}`} at full size`} onClick={() => setPreviewReference(reference)}><Image src={reference.url} alt={reference.label ?? `${reference.kind} reference`} fill sizes="240px" unoptimized className="object-cover transition duration-300 group-hover:scale-[1.02]" /></button><Button variant="destructive" size="icon-xs" className="absolute right-2 top-2" aria-label={`Remove reference ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, candidate) => candidate !== index) }))}><X /></Button></div><div className="flex flex-col gap-2 p-3"><div className="truncate text-xs text-muted-foreground" title={reference.label}>{reference.label ?? `Reference ${index + 1}`}</div><Field><FieldLabel htmlFor={`identity-reference-${index}`}>Reference role</FieldLabel><Select items={REFERENCE_KINDS} value={reference.kind} onValueChange={(value) => setReferenceKind(index, value === "body" ? "body" : "face")}><SelectTrigger id={`identity-reference-${index}`} aria-label={`Reference ${index + 1} role`} className="w-full"><SelectValue /></SelectTrigger><SelectContent alignItemWithTrigger={false}><SelectGroup><SelectItem value="face">Face reference</SelectItem><SelectItem value="body">Body reference</SelectItem></SelectGroup></SelectContent></Select></Field></div></div>)}</div>
                 {!draft.references.length && <Empty className="min-h-64 border border-dashed border-border"><EmptyHeader><EmptyMedia variant="icon"><Images /></EmptyMedia><EmptyTitle>No reference frames</EmptyTitle><EmptyDescription>Add several images at once, then mark each one as a face or body reference.</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => referenceInput.current?.click()}><Upload />Choose images</Button></EmptyContent></Empty>}
               </TabsContent>
 
@@ -592,10 +599,16 @@ export default function IdentityLibrary() {
               {selected && <TabsContent value="versions" className="mx-auto flex w-full max-w-3xl flex-col gap-3 p-5 sm:p-7"><EditorSectionHeading eyebrow="05 / Version history" title="Immutable identity snapshots" description="Every saved revision stays available for provenance while existing workflows keep the version they embedded." />{versions.map((version) => <div key={version.version} className="grid grid-cols-[72px_1fr] items-center gap-4 border-b border-border py-3 sm:grid-cols-[72px_1fr_auto]"><ReferenceMosaic identity={version} compact /><div className="min-w-0"><div className="text-sm font-medium">Version {version.version}</div><div className="mt-1 truncate text-xs text-muted-foreground">{version.triggerWord || "No trigger"} · {version.references.length} references · {version.basePrompts.length} prompts</div></div><time className="col-start-2 font-mono text-[9px] uppercase tracking-wider text-muted-foreground sm:col-auto">{formatDate(version.updatedAt)}</time></div>)}</TabsContent>}
             </Tabs>
           </ScrollArea>
-          <SheetFooter className="flex-row items-center justify-between gap-3 border-t border-border bg-popover px-5 py-4 sm:px-7"><div>{selected && <Button type="button" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(selected)}><Trash2 />Delete</Button>}</div><div className="ml-auto flex gap-2"><Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button><Button type="button" disabled={saving || uploading || !draft.name.trim()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void save(); }}>{saving ? "Saving…" : selected ? "Save new version" : "Create identity"}</Button></div></SheetFooter>
+          <SheetFooter className="flex-row items-center justify-between gap-3 border-t border-border bg-popover px-5 py-4 sm:px-7"><div className="flex items-center gap-3">{selected && <Button type="button" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(selected)}><Trash2 />Delete</Button>}{selected && <span className="text-xs text-muted-foreground">{dirty ? "Unsaved changes. Saving writes the next version of this identity; earlier versions stay under Versions." : `Version ${selected.version} is saved.`}</span>}</div><div className="ml-auto flex gap-2"><Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button><Button type="button" disabled={saving || uploading || !draft.name.trim() || (!!selected && !dirty)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void save(); }}>{saving ? "Saving…" : selected ? dirty ? `Save changes as v${selected.version + 1}` : "Saved" : "Create identity"}</Button></div></SheetFooter>
         </SheetContent>
       </Sheet>
 
+      <Dialog open={!!previewReference} onOpenChange={(open) => { if (!open) setPreviewReference(null); }}>
+        <DialogContent className="max-w-[min(92vw,1100px)] p-4 sm:p-5">
+          <DialogHeader><DialogTitle>{previewReference?.label ?? "Reference"}</DialogTitle><DialogDescription>{previewReference?.kind === "body" ? "Body reference" : "Face reference"} · <a href={previewReference?.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">Open original</a></DialogDescription></DialogHeader>
+          {previewReference && <img src={previewReference.url} alt={previewReference.label ?? "Reference at full size"} className="max-h-[78vh] w-full rounded-lg bg-muted object-contain" />}
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>Delete {deleteTarget?.name}?</AlertDialogTitle><AlertDialogDescription>This permanently removes the identity and version history. Existing workflows keep their embedded snapshot, but cannot refresh from this identity.</AlertDialogDescription></AlertDialogHeader>
