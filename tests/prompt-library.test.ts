@@ -21,14 +21,15 @@ test("imports the Supabase export shape and plain prompts, deduplicating bodies"
   assert.deepEqual(first, { added: 2, updated: 0, skipped: 0 });
   const again = importPrompts([{ prompt: "Subject: A young woman in her mid-20s in cream ribbed cotton pajamas on a beige sofa, warm 2700K lamp light, 26mm selfie." }, { prompt: "Golden hour rooftop portrait, 85mm, backlit hair." }]);
   assert.deepEqual(again, { added: 1, updated: 0, skipped: 1 });
+  const seeded = libraryStats().total - 3; // whatever the shipped starter set contributes
   const stats = libraryStats();
-  assert.equal(stats.total, 3); assert.equal(stats.favorites, 1);
+  assert.equal(stats.total - seeded, 3); assert.equal(stats.favorites, 1);
   assert.ok(stats.categories.some(c => c.name === "interior setting"), "categories are normalised to lowercase tags");
   assert.deepEqual(importPrompts({ prompts: [{ id: "a1", prompt: "Updated body", categories: ["female"], is_favorite: true }] }), { added: 0, updated: 1, skipped: 0 });
-  assert.equal(libraryStats().total, 3, "an update by id does not add a row");
+  assert.equal(libraryStats().total - seeded, 3, "an update by id does not add a row");
   assert.equal(normalizeImport("nonsense").length, 0);
-  assert.equal(listPrompts({ query: "bikini" }).total, 1);
-  assert.equal(listPrompts({ category: "Female" }).total, 2);
+  assert.equal(listPrompts({ query: "cobalt bikini" }).total, 1);
+  const female = listPrompts({ category: "Female", limit: 500 }).items.map(i => i.id); assert.ok(female.includes("a1") && female.includes("a2"), "category filter is case-insensitive");
 });
 
 test("relevance scoring prefers keyword and category overlap, and style references are truncated", async () => {
@@ -68,4 +69,13 @@ test("the builder pipeline runs analysis, structured and prose passes through on
   assert.equal(promptFormatFor("grok-imagine-image-2"), "prose");
   assert.equal(flattenStructured({ subject: "a", environment: "b", junk: "c" }), "Subject: a\n\nEnvironment: b");
   assert.match(negativesOf(null), /plastic skin/);
+});
+
+test("the shipped starter prompts seed once and a removed one stays removed", async () => {
+  const { listPrompts, deletePrompt, ensureSeeded, getPrompt } = await library;
+  const seeds = listPrompts({ limit: 500 }).items.filter(p => p.origin === "seed");
+  assert.ok(seeds.length >= 18, `starter set present (${seeds.length})`);
+  assert.ok(seeds.every(p => p.prose && p.structured && p.categories.includes("photorealism") && !p.source), "every seed is a full builder output with no third-party source");
+  deletePrompt(seeds[0].id); ensureSeeded();
+  assert.equal(getPrompt(seeds[0].id), undefined);
 });

@@ -14,7 +14,7 @@ import seed from "./seed/prompt-library.json";
  * never leaves the machine. The planner and the prompt builder pull the closest
  * matches as style references, the way prompt-palette-pro's build-prompt did.
  */
-const SEED_VERSION = 1;
+const SEED_VERSION = 2;
 export interface LibraryPrompt {
   id: string;
   title: string | null;
