@@ -604,9 +604,9 @@ export default function IdentityLibrary() {
       </Sheet>
 
       <Dialog open={!!previewReference} onOpenChange={(open) => { if (!open) setPreviewReference(null); }}>
-        <DialogContent className="max-w-[min(92vw,1100px)] p-4 sm:p-5">
+        <DialogContent className="w-[92vw] max-w-[92vw] p-4 sm:max-w-[92vw] sm:p-5">
           <DialogHeader><DialogTitle>{previewReference?.label ?? "Reference"}</DialogTitle><DialogDescription>{previewReference?.kind === "body" ? "Body reference" : "Face reference"} · <a href={previewReference?.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">Open original</a></DialogDescription></DialogHeader>
-          {previewReference && <img src={previewReference.url} alt={previewReference.label ?? "Reference at full size"} className="max-h-[78vh] w-full rounded-lg bg-muted object-contain" />}
+          {previewReference && <img src={previewReference.url} alt={previewReference.label ?? "Reference at full size"} className="h-[82vh] w-full rounded-lg bg-muted object-contain" />}
         </DialogContent>
       </Dialog>
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
