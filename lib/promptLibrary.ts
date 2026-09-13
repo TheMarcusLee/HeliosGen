@@ -1,14 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./guest/sqlite";
+import seed from "./seed/prompt-library.json";
 
 /**
  * A local library of proven image prompts.
  *
- * Prompts live in the app's SQLite database, never in the repo: the seed
- * library is personal, and another user brings their own through the JSON
- * upload. The planner and the prompt builder pull the closest matches as
- * style references, the way prompt-palette-pro's build-prompt function did.
+ * Prompts live in the app's SQLite database. The repo ships a small starter
+ * set (lib/seed/prompt-library.json) written by this app's own Reality-First
+ * builder, so a fresh install has style references from day one without
+ * redistributing anyone else's work; it is seeded once per seed version and a
+ * removed seed prompt stays removed. Everything else, including third-party
+ * prompts a user collects, is local: it arrives through the JSON upload and
+ * never leaves the machine. The planner and the prompt builder pull the closest
+ * matches as style references, the way prompt-palette-pro's build-prompt did.
  */
+const SEED_VERSION = 1;
 export interface LibraryPrompt {
   id: string;
   title: string | null;
@@ -26,7 +32,7 @@ export interface LibraryPrompt {
   /** Narrative prose version (for GPT Image / Grok) when one was built. */
   prose: string | null;
   negatives: string | null;
-  origin: "import" | "user" | "built";
+  origin: "import" | "user" | "built" | "seed";
   createdAt: number;
   updatedAt: number;
 }
@@ -35,7 +41,18 @@ type Row = { id: string; title: string | null; prompt: string; categories: strin
 function table() {
   const d = db();
   d.exec("CREATE TABLE IF NOT EXISTS prompt_library (id TEXT PRIMARY KEY, title TEXT, prompt TEXT NOT NULL, categories TEXT NOT NULL, folders TEXT NOT NULL, source TEXT, attribution TEXT, image_urls TEXT NOT NULL, favorite INTEGER NOT NULL DEFAULT 0, analysis TEXT, structured TEXT, prose TEXT, negatives TEXT, origin TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
+  d.exec("CREATE TABLE IF NOT EXISTS prompt_library_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  d.exec("CREATE TABLE IF NOT EXISTS prompt_library_removed (id TEXT PRIMARY KEY)");
   return d;
+}
+/** Load the shipped starter prompts once per seed version, skipping any the user removed. */
+export function ensureSeeded() {
+  const d = table();
+  const row = d.prepare("SELECT value FROM prompt_library_meta WHERE key = 'seed_version'").get() as { value: string } | undefined;
+  if (Number(row?.value ?? 0) >= SEED_VERSION) return;
+  const removed = new Set((d.prepare("SELECT id FROM prompt_library_removed").all() as { id: string }[]).map(r => r.id));
+  for (const item of normalizeImport((seed as unknown[]).filter(t => !removed.has(String((t as { id?: unknown }).id))))) savePrompt({ ...item, origin: "seed" });
+  d.prepare("INSERT INTO prompt_library_meta (key, value) VALUES ('seed_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(SEED_VERSION));
 }
 const json = <T,>(text: string | null, fallback: T): T => { if (!text) return fallback; try { return JSON.parse(text) as T; } catch { return fallback; } };
 const fromRow = (r: Row): LibraryPrompt => ({ id: r.id, title: r.title, prompt: r.prompt, categories: json(r.categories, []), folders: json(r.folders, []), source: r.source, attribution: r.attribution, imageUrls: json(r.image_urls, []), favorite: !!r.favorite, analysis: json(r.analysis, null), structured: json(r.structured, null), prose: r.prose, negatives: r.negatives, origin: r.origin, createdAt: r.created_at, updatedAt: r.updated_at });
@@ -113,10 +130,11 @@ export function getPrompt(id: string): LibraryPrompt | undefined {
   const row = table().prepare("SELECT * FROM prompt_library WHERE id = ?").get(id) as Row | undefined;
   return row ? fromRow(row) : undefined;
 }
-export function deletePrompt(id: string) { table().prepare("DELETE FROM prompt_library WHERE id = ?").run(id); }
+export function deletePrompt(id: string) { table().prepare("DELETE FROM prompt_library WHERE id = ?").run(id); table().prepare("INSERT OR IGNORE INTO prompt_library_removed (id) VALUES (?)").run(id); }
 export function setFavorite(id: string, favorite: boolean) { table().prepare("UPDATE prompt_library SET favorite = ?, updated_at = ? WHERE id = ?").run(favorite ? 1 : 0, Date.now(), id); }
 
 export function listPrompts(options: { query?: string; category?: string; favorites?: boolean; limit?: number; offset?: number } = {}): { items: LibraryPrompt[]; total: number } {
+  ensureSeeded();
   const where: string[] = [], params: (string | number)[] = [];
   if (options.query?.trim()) { where.push("(prompt LIKE ? OR title LIKE ? OR categories LIKE ?)"); const q = `%${options.query.trim()}%`; params.push(q, q, q); }
   if (options.category) { where.push("categories LIKE ?"); params.push(`%${JSON.stringify(tag(options.category))}%`); }
@@ -128,6 +146,7 @@ export function listPrompts(options: { query?: string; category?: string; favori
 }
 
 export function libraryStats(): { total: number; favorites: number; categories: { name: string; count: number }[] } {
+  ensureSeeded();
   const rows = table().prepare("SELECT categories, favorite FROM prompt_library").all() as { categories: string; favorite: number }[];
   const counts = new Map<string, number>();
   for (const r of rows) for (const c of json<string[]>(r.categories, [])) counts.set(c, (counts.get(c) ?? 0) + 1);
@@ -143,6 +162,7 @@ export const keywords = (text: string) => [...new Set(text.toLowerCase().split(/
  * scoring prompt-palette-pro used to choose few-shot examples.
  */
 export function relevantPrompts(text: string, k = 5, categories: string[] = []): LibraryPrompt[] {
+  ensureSeeded();
   const words = keywords(text), wanted = new Set(categories.map(tag));
   const rows = (table().prepare("SELECT * FROM prompt_library").all() as Row[]).map(fromRow);
   const scored = rows.map(p => {

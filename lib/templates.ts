@@ -330,3 +330,130 @@ export function makePoseOutfitBatchTemplate(): {
     metadata: { contentClass: "sfw", routingRequired: true, routes: {} },
   };
 }
+
+// ── Identity-driven templates ────────────────────────────────────────────────
+// Every template below starts from the same IDENTITY node (id "clone-identity"),
+// so /api/clone-templates can pre-fill it with a saved identity and the
+// identity library can launch any of them for a person. Prompts are template
+// nodes that splice the identity's prompt DNA in with @identity; generators
+// receive the identity's reference images through the referencesOut handle.
+import { REFERENCE_STYLES, referenceStyle } from "./referenceSheets";
+
+export interface IdentityTemplateInfo { id: string; name: string; description: string; menuLabel: string }
+export const IDENTITY_TEMPLATES: IdentityTemplateInfo[] = [
+  { id: "scene-replacement", name: "Identity Scene Replacement", description: "Target scene → vision analysis → identity prompt → generation → gallery", menuLabel: "Scene replacement" },
+  { id: "pose-outfit-batch", name: "Identity Pose × Outfit Batch", description: "Analyze once, then generate every selected pose/outfit combination", menuLabel: "Pose × outfit batch" },
+  { id: "reference-sheet-pack", name: "Identity Reference Sheet Pack", description: "Comp card, beauty headshot and full-body turnaround from the identity's DNA and references", menuLabel: "Reference sheet pack" },
+  { id: "content-pack", name: "Identity Daily Content Pack", description: "Four platform-native stills: iPhone selfie, mirror selfie, lifestyle candid, golden hour", menuLabel: "Daily content pack" },
+  { id: "selfie-to-reel", name: "Identity Selfie → Reel", description: "One identity selfie, then a 5-second image-to-video Reel from it", menuLabel: "Selfie → Reel" },
+  { id: "product-in-hand", name: "Identity Product in Hand", description: "Product image → product analysis → the identity holding it naturally → gallery", menuLabel: "Product in hand" },
+];
+export type IdentityTemplateId = typeof IDENTITY_TEMPLATES[number]["id"];
+
+const REALISM_LINE = "Photorealistic, no CGI, no 3D render, no cartoon/anime, no plastic skin, natural skin texture with pores visible, realistic lighting, subtle film grain, lifelike detail. No text, no watermarks, no logos.";
+const IDENTITY_OPENER = "Create a photo of the same person from the reference images, keeping their exact face, features and proportions:\n@identity";
+type TemplateShape = { nodes: Node<NodeData>[]; edges: Edge[]; nodeCounters: Record<string, number>; metadata: WorkflowMetadata };
+const identityNode = (): Node<NodeData> => ({ id: "clone-identity", type: "identityMatrixNode", position: { x: 0, y: 0 }, style: { width: 400, height: 620 }, data: { label: "IDENTITY", status: "idle", variableName: "identity" } });
+const link = (id: string, source: string, target: string, targetHandle: string, sourceHandle?: string): Edge => ({ id, source, target, sourceHandle, targetHandle, animated: false, style: edgeStyle(targetHandle) });
+const sfwKie = (modelId: string): WorkflowMetadata => ({ contentClass: "sfw", routingRequired: true, routes: { sfw: { provider: "kie", modelId } } });
+
+/** A column per style: identity → template prompt → generator, stacked to the right of the identity node. */
+function styleColumns(styleIds: string[], model: string, prefix: string): { nodes: Node<NodeData>[]; edges: Edge[] } {
+  const nodes: Node<NodeData>[] = [], edges: Edge[] = [];
+  styleIds.forEach((styleId, i) => {
+    const style = referenceStyle(styleId)!;
+    const x = 520 + i * 420;
+    nodes.push({ id: `${prefix}-prompt-${i}`, type: "templateNode", position: { x, y: 0 }, style: { width: 380, height: 330 }, data: { label: style.label.toUpperCase(), status: "idle", template: `${IDENTITY_OPENER}\n\n${style.scene}\n\n${REALISM_LINE} ${style.tokens}.` } });
+    nodes.push({ id: `${prefix}-generate-${i}`, type: "generateNode", position: { x, y: 400 }, style: { width: 380, height: 460 }, data: { label: style.label.toUpperCase(), status: "idle", model, aspectRatio: style.aspectRatio, quality: "2k" } });
+    edges.push(link(`${prefix}-e-identity-prompt-${i}`, "clone-identity", `${prefix}-prompt-${i}`, "text", "promptOut"));
+    edges.push(link(`${prefix}-e-prompt-generate-${i}`, `${prefix}-prompt-${i}`, `${prefix}-generate-${i}`, "prompt", "textOut"));
+    edges.push(link(`${prefix}-e-identity-refs-${i}`, "clone-identity", `${prefix}-generate-${i}`, "image", "referencesOut"));
+  });
+  return { nodes, edges };
+}
+
+/** Comp card, beauty headshot and turnaround: the three consistency references worth saving back onto the identity. */
+export function makeReferenceSheetPackTemplate(): TemplateShape {
+  const cols = styleColumns(["comp-card", "headshots", "turnaround"], "nano-banana-pro", "sheet");
+  return {
+    nodes: [identityNode(), ...cols.nodes, { id: "sheet-note", type: "commentNode", position: { x: 0, y: 700 }, style: { width: 400, height: 170 }, data: { label: "NEXT", status: "idle", comment: "Run all three, then open the identity in the library and add the results as references: comp card and turnaround as Body, headshot as Face. Later generations will hold the likeness better." } }],
+    edges: cols.edges,
+    nodeCounters: { identityMatrixNode: 1, templateNode: 3, generateNode: 3, commentNode: 1 },
+    metadata: sfwKie("nano-banana-pro"),
+  };
+}
+
+/** Four platform-native stills for one day of posting. */
+export function makeContentPackTemplate(): TemplateShape {
+  const cols = styleColumns(["iphone-selfie", "mirror-selfie", "lifestyle-candid", "golden-hour"], "nano-banana-pro", "pack");
+  return {
+    nodes: [identityNode(), ...cols.nodes, { id: "pack-note", type: "commentNode", position: { x: 0, y: 700 }, style: { width: 400, height: 170 }, data: { label: "TIP", status: "idle", comment: "Edit any prompt's scene line (outfit, setting, mood) before running; the identity line and realism tokens stay. Each output lands in the Gallery with the identity attached." } }],
+    edges: cols.edges,
+    nodeCounters: { identityMatrixNode: 1, templateNode: 4, generateNode: 4, commentNode: 1 },
+    metadata: sfwKie("nano-banana-pro"),
+  };
+}
+
+/** One selfie, then a 5-second image-to-video Reel from it. */
+export function makeSelfieToReelTemplate(): TemplateShape {
+  const selfie = REFERENCE_STYLES.find((s) => s.id === "iphone-selfie")!;
+  const nodes: Node<NodeData>[] = [
+    identityNode(),
+    { id: "reel-prompt", type: "templateNode", position: { x: 520, y: 0 }, style: { width: 380, height: 330 }, data: { label: "SELFIE PROMPT", status: "idle", template: `${IDENTITY_OPENER}\n\n${selfie.scene}\n\n${REALISM_LINE} ${selfie.tokens}.` } },
+    { id: "reel-generate", type: "generateNode", position: { x: 520, y: 400 }, style: { width: 380, height: 460 }, data: { label: "SELFIE", status: "idle", model: "nano-banana-pro", aspectRatio: "9:16", quality: "2k" } },
+    { id: "reel-motion", type: "promptNode", position: { x: 960, y: 0 }, style: { width: 360, height: 260 }, data: { label: "MOTION", status: "idle", prompt: "She lowers the phone slightly, laughs, tucks a strand of hair behind her ear and looks back into the lens. Handheld phone motion, natural micro-expressions, the room and light stay exactly as in the frame. No text, no captions." } },
+    { id: "reel-video", type: "videoGeneratorNode", position: { x: 960, y: 400 }, style: { width: 360, height: 300 }, data: { label: "REEL", status: "idle", videoModel: "kling-3.0", aspectRatio: "9:16", duration: 5, sound: false } },
+    { id: "reel-note", type: "commentNode", position: { x: 0, y: 700 }, style: { width: 400, height: 150 }, data: { label: "FLOW", status: "idle", comment: "Generate the selfie first; it becomes the Reel's start frame. Swap the motion text for any beat (talking to camera, a turn, a walk-off)." } },
+  ];
+  return {
+    nodes,
+    edges: [
+      link("reel-e-identity-prompt", "clone-identity", "reel-prompt", "text", "promptOut"),
+      link("reel-e-prompt-generate", "reel-prompt", "reel-generate", "prompt", "textOut"),
+      link("reel-e-identity-refs", "clone-identity", "reel-generate", "image", "referencesOut"),
+      link("reel-e-selfie-video", "reel-generate", "reel-video", "startFrame"),
+      link("reel-e-motion-video", "reel-motion", "reel-video", "prompt"),
+    ],
+    nodeCounters: { identityMatrixNode: 1, templateNode: 1, generateNode: 1, promptNode: 1, videoGeneratorNode: 1, commentNode: 1 },
+    metadata: sfwKie("nano-banana-pro"),
+  };
+}
+
+/** A product image is analysed once, then the identity holds it naturally in a UGC-style scene. */
+export function makeProductInHandTemplate(): TemplateShape {
+  const nodes: Node<NodeData>[] = [
+    identityNode(),
+    { id: "product-image", type: "imageInputNode", position: { x: 0, y: 700 }, style: { width: 260 }, data: { label: "PRODUCT", status: "idle" } },
+    { id: "product-instruction", type: "promptNode", position: { x: 470, y: 700 }, style: { width: 360, height: 220 }, data: { label: "PRODUCT INSTRUCTION", status: "idle", prompt: "Describe this product exactly as it appears: type, shape, size relative to a hand, colors, materials, label or logo text and where it sits, cap or closure, finish. Facts only, so an image model can reproduce it faithfully." } },
+    { id: "product-analysis", type: "assistantNode", position: { x: 900, y: 620 }, style: { width: 320, height: 300 }, data: { label: "PRODUCT ANALYSIS", status: "idle", variableName: "product", model: "claude-opus-5", systemPrompt: "You are a precise product photographer's assistant. Describe only what is visible on the product in the image. Return compact production notes, no marketing language." } },
+    { id: "product-template", type: "templateNode", position: { x: 900, y: 180 }, style: { width: 380, height: 330 }, data: { label: "UGC PRODUCT PROMPT", status: "idle", template: `${IDENTITY_OPENER}\n\nUGC-style product moment: she holds the product from the reference image up near her face at a natural angle, label facing the camera and readable, in a bright everyday setting (bathroom counter or kitchen) with soft window light, genuine unposed expression, phone-camera framing, waist-up.\n\nThe product must match the reference exactly:\n@product\n\n${REALISM_LINE} iPhone14.Pro.front.cam, natural_grain.fx, casual_lighting.fx.` } },
+    { id: "product-generate", type: "generateNode", position: { x: 1380, y: 250 }, style: { width: 320, height: 420 }, data: { label: "GALLERY OUTPUT", status: "idle", model: "nano-banana-pro", aspectRatio: "9:16", quality: "2k" } },
+    { id: "product-note", type: "commentNode", position: { x: 1380, y: 720 }, style: { width: 320, height: 150 }, data: { label: "OUTPUT", status: "idle", comment: "The identity references and the product image both feed the generator, so the face and the product stay faithful. Change the setting line in the prompt for other placements." } },
+  ];
+  return {
+    nodes,
+    edges: [
+      link("product-e-instruction", "product-instruction", "product-analysis", "prompt"),
+      link("product-e-image-vision", "product-image", "product-analysis", "image"),
+      link("product-e-identity-prompt", "clone-identity", "product-template", "text", "promptOut"),
+      link("product-e-analysis-template", "product-analysis", "product-template", "text"),
+      link("product-e-template-generate", "product-template", "product-generate", "prompt", "textOut"),
+      link("product-e-identity-refs", "clone-identity", "product-generate", "image", "referencesOut"),
+      link("product-e-product-generate", "product-image", "product-generate", "image"),
+    ],
+    nodeCounters: { identityMatrixNode: 1, imageInputNode: 1, promptNode: 1, assistantNode: 1, templateNode: 1, generateNode: 1, commentNode: 1 },
+    metadata: sfwKie("nano-banana-pro"),
+  };
+}
+
+export function makeIdentityTemplate(id: string): TemplateShape | null {
+  switch (id) {
+    case "scene-replacement": return makeSceneReplacementTemplate();
+    case "pose-outfit-batch": return makePoseOutfitBatchTemplate();
+    case "reference-sheet-pack": return makeReferenceSheetPackTemplate();
+    case "content-pack": return makeContentPackTemplate();
+    case "selfie-to-reel": return makeSelfieToReelTemplate();
+    case "product-in-hand": return makeProductInHandTemplate();
+    default: return null;
+  }
+}

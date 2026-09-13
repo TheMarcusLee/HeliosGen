@@ -95,6 +95,8 @@ The **prompt builder** on the same page ports prompt-palette-pro's edge function
 
 Results can be saved back into the library with their analysis, structured form, prose and negative list.
 
+The library ships with a starter set of about twenty prompts across the common categories (selfie, mirror selfie, gym, beach, café, street style, luxury travel, product in hand, unboxing, night out, cozy home, cooking, tech desk, car talk, park, studio beauty, running, dog walk, plus-size fashion, male streetwear), all written by this app's own builder so nothing third-party is redistributed. They seed once; a removed one stays removed. Prompts you collect from elsewhere stay local.
+
 ### Content formats and starter identities
 
 The composer's **format** picker (Plan & create mode) applies a structural content format from the playbook brought over from App Promo Factory: a hook pattern, ordered beats, a slide count and the channels it suits, plus a five-slide Gen Z creator carousel recipe. The planner maps beats to steps in order, adds one caption step for the sequence, shapes the first caption on the hook pattern, and is held to the playbook's truthfulness rules (no invented metrics, testimonials or capabilities).
@@ -102,6 +104,10 @@ The composer's **format** picker (Plan & create mode) applies a structural conte
 The identity library has a **Starter templates** section that ships with 96 personas across 19 categories (`lib/seed/identity-templates.json`, images in `public/persona-templates`), so a fresh install does not start empty; removing a seed persona sticks. More arrive as JSON (an array of `{ name, prompt, imageUrl?, category? }`, or an App Promo Factory / Viral Reel Creator `influencer_templates` export unchanged). "Use as identity" mirrors the image into local media and creates an identity whose base prompt is the persona description with its locked trait list. Uploaded templates stay in the local database.
 
 The identity editor gained two tools from the same lineage. **Build locked features** composes a base prompt from a trait vocabulary (ethnicity, face, skin, hair, body), or parses a paragraph or pasted JSON prompt into those fields through the connected account. **Generate a reference sheet** places a saved identity into a consistency format (model comp card, beauty headshot, full-body turnaround, expression sheet, iPhone or mirror selfie, lifestyle candid, golden hour) through Kie.ai or a connected account and files the result as a face or body reference.
+
+### Identity workflow templates
+
+Six canvas templates start from a saved identity and can be launched for a person from the identity library's card menu, or empty from the Workflow dashboard: **Scene replacement**, **Pose × outfit batch**, **Reference sheet pack** (comp card, headshot, turnaround to save back as references), **Daily content pack** (iPhone selfie, mirror selfie, lifestyle candid, golden hour), **Selfie → Reel** (one selfie, then a 5-second image-to-video Reel from it), and **Product in hand** (a product image analysed once, then held naturally by the identity). Prompts are template nodes that splice the identity's prompt DNA in with `@identity`; generators receive the identity's reference images.
 
 ### Production workflows
 

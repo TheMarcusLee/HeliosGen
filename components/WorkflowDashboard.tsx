@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import NextImage from "next/image";
 import { useRouter } from "next/navigation";
 import { useWorkflowStore, Space } from "@/lib/store";
-import { makePoseOutfitBatchTemplate, makeSceneReplacementTemplate, makeUGCTemplate } from "@/lib/templates";
+import { IDENTITY_TEMPLATES, makeIdentityTemplate, makeUGCTemplate } from "@/lib/templates";
 import { timeAgo } from "@/lib/useSpaceSync";
 import { WorkflowHero } from "@/components/WorkflowHero";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
@@ -702,9 +702,10 @@ export default function WorkflowDashboard() {
     spawnFreshTemplate();
   };
 
-  const spawnCloneMeTemplate = (kind: "scene" | "batch") => {
-    const name = kind === "scene" ? "Identity Scene Replacement" : "Identity Pose × Outfit Batch";
-    createSpace(name, kind === "scene" ? makeSceneReplacementTemplate() : makePoseOutfitBatchTemplate());
+  const spawnIdentityTemplate = (id: string) => {
+    const info = IDENTITY_TEMPLATES.find((t) => t.id === id), template = makeIdentityTemplate(id);
+    if (!info || !template) return;
+    createSpace(info.name, template);
     router.push(`/workflow/${useWorkflowStore.getState().activeSpaceId}`);
   };
 
@@ -756,8 +757,7 @@ export default function WorkflowDashboard() {
           </div>
 
           <div style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "10px" }}>
-            <button className="wsd-import-btn" onClick={() => spawnCloneMeTemplate("scene")}>Scene replacement</button>
-            <button className="wsd-import-btn" onClick={() => spawnCloneMeTemplate("batch")}>Pose × outfit batch</button>
+            <select className="wsd-import-btn" aria-label="Identity workflow templates" value="" onChange={(e) => { if (e.target.value) spawnIdentityTemplate(e.target.value); }}><option value="">Identity templates…</option>{IDENTITY_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.menuLabel}</option>)}</select>
             <button className="wsd-import-btn" onClick={() => setCommunityOpen(true)}>
               Community library
             </button>

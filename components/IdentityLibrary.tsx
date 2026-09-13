@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { IdentityTemplates } from "@/components/IdentityTemplates";
+import { IDENTITY_TEMPLATES } from "@/lib/templates";
 import { TraitBuilder } from "@/components/identity/TraitBuilder";
 import { ReferenceSheetGenerator } from "@/components/identity/ReferenceSheetGenerator";
 import {
@@ -343,9 +344,9 @@ export default function IdentityLibrary() {
     } catch (error) { addToast(`Import failed: ${(error as Error).message}`, "error"); }
   };
 
-  const createWorkflow = async (identity: IdentityAsset, templateId: "scene-replacement" | "pose-outfit-batch") => {
+  const createWorkflow = async (identity: IdentityAsset, templateId: string) => {
     try {
-      const suffix = templateId === "scene-replacement" ? "Scene Replacement" : "Pose × Outfit Batch";
+      const suffix = IDENTITY_TEMPLATES.find((t) => t.id === templateId)?.menuLabel ?? templateId;
       const response = await fetch("/api/clone-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ templateId, identityAssetId: identity.id, name: `${identity.name} — ${suffix}` }) });
       const body = await response.json() as { workflow?: Space; error?: string };
       if (!response.ok || !body.workflow) throw new Error(body.error ?? "Unable to create workflow.");
@@ -430,8 +431,7 @@ export default function IdentityLibrary() {
                       <DropdownMenu>
                         <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${identity.name}`} />}><MoreHorizontal /></DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52">
-                          <DropdownMenuItem onClick={() => void createWorkflow(identity, "scene-replacement")}><WandSparkles />Create scene workflow</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => void createWorkflow(identity, "pose-outfit-batch")}><Boxes />Create batch workflow</DropdownMenuItem>
+                          {IDENTITY_TEMPLATES.map((template, index) => <DropdownMenuItem key={template.id} onClick={() => void createWorkflow(identity, template.id)}>{index === 0 ? <WandSparkles /> : <Boxes />}Workflow: {template.menuLabel}</DropdownMenuItem>)}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => void duplicate(identity)}><Copy />Duplicate</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => exportIdentity(identity)}><Download />Export JSON</DropdownMenuItem>
