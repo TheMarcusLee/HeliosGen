@@ -449,12 +449,14 @@ export default function IdentityLibrary() {
                       <div className="border-r border-border px-4 py-3"><div className="font-mono text-sm">{linked}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Workflows</div></div>
                       <div className="px-4 py-3"><div className="font-mono text-sm">{runs.length}</div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Runs logged</div></div>
                     </div>
+                    <div className="w-full" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger render={<Button variant="secondary" className="w-full rounded-t-none border-t border-border" />}><WandSparkles />Launch workflow<ChevronDown className="ml-auto size-4 opacity-60" /></DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="w-80">
                         {IDENTITY_TEMPLATES.map((template) => <DropdownMenuItem key={template.id} className="flex flex-col items-start gap-0.5 py-2" onClick={() => void createWorkflow(identity, template.id)}><span className="text-sm">{template.menuLabel}</span><span className="text-xs leading-4 text-muted-foreground">{template.description}</span></DropdownMenuItem>)}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    </div>
                   </CardFooter>
                 </Card>
               );
